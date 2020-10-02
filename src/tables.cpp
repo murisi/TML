@@ -931,6 +931,10 @@ bool tables::to_pnf(form *&froot) {
 
 }
 
+/* Adds the given raw rule to the flat program after first converting it
+ * into a term vector.
+ * */
+
 void tables::add_rule(flat_prog &m, const raw_rule& r) {
 	vector<term> v;
 	term t;
@@ -985,6 +989,10 @@ void tables::add_rule(flat_prog &m, const raw_rule& r) {
 			m.insert({t}), get_nums(x);
 	}
 }
+
+/* Creates a flat program containing the same rules as the raw program after
+ * they have been converted to term vectors.
+ */
 
 flat_prog tables::to_terms(const raw_prog& p) {
 	flat_prog m;
@@ -2314,50 +2322,77 @@ inputs tmpii;
  */
 
 void tables::transform_evals(flat_prog& m, raw_prog &rp) {
-	for(const std::vector<term> &outer_rule : m) {
-		// Iterate through the body of the current rule looking for uses of the
+	for(raw_rule &outer_rule : rp.r) {
+		// Iterate through the bodies of the current rule looking for uses of the
 		// "eval" relation.
-		for(int i = 1; i < outer_rule.size(); i++) {
-			raw_term rhs_term = to_raw_term(outer_rule[i]);
-			if(rhs_term.e[0].type == elem::SYM && to_string_t("eval") == lexeme2str(rhs_term.e[0].e)) {
-				//elem& inner_rule = rhs_term.e[1];
-				// The first parenthesis marks the beginning of eval's arguments, the
-				// second marks the beginning of the rule being supplied to eval.
-				if(rhs_term.e.size() > 2 && rhs_term.e[1].type == elem::OPENP && rhs_term.e[2].type == elem::OPENP) {
-					ofstream eval_tmp;
-					eval_tmp.open("evaltmpfile.tmp", ios::trunc);
-					int nest_level = 1;
-					// Capture the rule argument to eval by adding all lexemes until
-					// closing parenthesis of rule to a string.
-					for(int term_idx = 3; term_idx < rhs_term.e.size() && nest_level; term_idx ++) {
-						if(rhs_term.e[term_idx].type == elem::OPENP) nest_level++;
-						else if(rhs_term.e[term_idx].type == elem::CLOSEP) nest_level--;
-						// Make sure this lexeme is not the closing parenthesis that wraps
-						// the entire rule.
-						if(nest_level) {
-							// Lexer does not allow the turnstile operator ":-" inside rules,
-							// so we'll look for the lexeme "ts" for now.
-							if(rhs_term.e[term_idx].type == elem::SYM && to_string_t("ts") == lexeme2str(rhs_term.e[term_idx].e)) {
-								eval_tmp << ":- ";
+		for(std::vector<raw_term> &bodie : outer_rule.b) {
+			for(raw_term &rhs_term : bodie) {
+				if(rhs_term.e[0].type == elem::SYM && to_string_t("eval") == lexeme2str(rhs_term.e[0].e)) {
+					//elem& inner_rule = rhs_term.e[1];
+					// The first parenthesis marks the beginning of eval's arguments, the
+					// second marks the beginning of the rule being supplied to eval.
+					if(rhs_term.e.size() > 2 && rhs_term.e[1].type == elem::OPENP && rhs_term.e[2].type == elem::OPENP) {
+						ofstream eval_tmp;
+						eval_tmp.open("evaltmpfile.tmp", ios::trunc);
+						// Number of nested parentheses we're in.
+						int nest_level = 1;
+						// The term index of the first term after the closing parenthesis of the quoted rule
+						int input_start;
+						// Capture the rule argument to eval by adding all lexemes until
+						// closing parenthesis of rule to a string.
+						for(int elem_idx = 3; elem_idx < rhs_term.e.size() && nest_level; elem_idx ++) {
+							if(rhs_term.e[elem_idx].type == elem::OPENP) nest_level++;
+							else if(rhs_term.e[elem_idx].type == elem::CLOSEP) nest_level--;
+							// Make sure this lexeme is not the closing parenthesis that wraps
+							// the entire rule.
+							if(nest_level) {
+								// Lexer does not allow the turnstile operator ":-" inside rules,
+								// so we'll look for the lexeme "ts" for now.
+								if(rhs_term.e[elem_idx].type == elem::SYM && to_string_t("ts") == lexeme2str(rhs_term.e[elem_idx].e)) {
+									eval_tmp << ":- ";
+								} else {
+									eval_tmp << rhs_term.e[elem_idx] << " ";
+								}
 							} else {
-								eval_tmp << rhs_term.e[term_idx] << " ";
+								input_start = elem_idx + 1;
 							}
 						}
-					}
-					// Terminate the rule string.
-					eval_tmp << "." << endl;
-					eval_tmp.close();
-					// If we managed to reach the parenthesis that encloses the entire
-					// rule being supplied to eval, then we can start parsing.
-					if(!nest_level) {
-						input *in = tmpii.add_file(std::string("evaltmpfile.tmp"));
-						in->prog_lex();
-						raw_rule rr;
-						if(rr.parse(in, rp)) {
-							// We want to keep both the raw and flat program abreast of the
-							// new rule we have created.
-							rp.r.push_back(rr);
-							add_rule(m, rr);
+						// Terminate the rule string.
+						eval_tmp << "." << endl;
+						eval_tmp.close();
+						// If we managed to reach the parenthesis that encloses the entire
+						// rule being supplied to eval, then we can start parsing.
+						if(!nest_level) {
+							input *prog_in = tmpii.add_file(std::string("evaltmpfile.tmp"));
+							prog_in->prog_lex();
+							raw_rule rr;
+							if(rr.parse(prog_in, rp)) {
+								// We want to keep both the raw and flat program abreast of the
+								// new rule we have created.
+								rp.r.push_back(rr);
+								add_rule(m, rr);
+								// Now that we have added a rule corresponding to the program supplied
+								// to eval, make the term that the eval relation would actually evaluate to.
+								// I.e. eval((<name>(<a>) :- <b>) <c>) -> <name>(<c>).
+								ofstream input_tmp;
+								input_tmp.open("inputtmpfile.tmp", ios::trunc);
+								input_tmp << rr.h[0].e[0] << "(";
+								for(int elem_idx = input_start; elem_idx < rhs_term.e.size(); elem_idx ++) {
+									input_tmp << rhs_term.e[elem_idx] << " ";
+								}
+								input_tmp << ".";
+								input_tmp.close();
+								input *input_in = tmpii.add_file(std::string("inputtmpfile.tmp"));
+								input_in->prog_lex();
+								raw_term repl_rt;
+								if(repl_rt.parse(input_in, rp)) {
+									// Now replace the eval relation with the relation it would actually
+									// evaluate to.
+									rhs_term = repl_rt;
+									// Make sure that our transformation is reflected in the flat program.
+									add_rule(m, outer_rule);
+								}
+							}
 						}
 					}
 				}

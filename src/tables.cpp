@@ -931,61 +931,66 @@ bool tables::to_pnf(form *&froot) {
 
 }
 
-flat_prog tables::to_terms(const raw_prog& p) {
-	flat_prog m;
+void tables::add_rule(flat_prog &m, const raw_rule& r) {
 	vector<term> v;
 	term t;
 
-	for (const raw_rule& r : p.r)
-		if (r.type == raw_rule::NONE && !r.b.empty()) {
-			for (const raw_term& x : r.h) {
-				get_nums(x), t = from_raw_term(x, true),
-				v.push_back(t);
-				for (const vector<raw_term>& y : r.b) {
-					int i = 0;
-					for (const raw_term& z : y) // term_set(
-						v.push_back(from_raw_term(z, false, i++)),
-						get_nums(z);
-					align_vars(v), m.insert(move(v));
-				}
-			}
-		}
-		else if(r.prft != NULL) {
-
-			const raw_term& x = r.h.front();
-			get_nums(x), t = from_raw_term(x, true), v.push_back(t);
-
-			bool is_sol = false;
-			form* froot = NULL;
-
-			from_raw_form(r.prft.get(), froot, is_sol);
-
-			DBG(COUT << "\n ........... \n";)
-			DBG(r.prft.get()->printTree();)
-			DBG(COUT << "\n ........... \n";)
-			DBG(froot->printnode(0, this);)
-
-			term::textype extype = term::FORM1;
-			if(is_sol) {
-				DBG(COUT << "\n SOL parsed \n";)
-				//to_pnf(froot);
-				extype = term::FORM2;
-			}
-			//if(froot->is_sol()) to_pnf(froot), extype = term::FORM2;
-			//else froot->implic_rmoval(), froot->printnode(); //forcing implic removal for FOL here
-			//assert(froot);
-
-			t = term(extype, move(froot));
+	if (r.type == raw_rule::NONE && !r.b.empty()) {
+		for (const raw_term& x : r.h) {
+			get_nums(x), t = from_raw_term(x, true),
 			v.push_back(t);
-			//align_vars(v);
-			m.insert(move(v));
-			//delete froot;
-		} else  {
-			for (const raw_term& x : r.h)
-				t = from_raw_term(x, true),
-				t.goal = r.type == raw_rule::GOAL,
-				m.insert({t}), get_nums(x);
+			for (const vector<raw_term>& y : r.b) {
+				int i = 0;
+				for (const raw_term& z : y) // term_set(
+					v.push_back(from_raw_term(z, false, i++)),
+					get_nums(z);
+				align_vars(v), m.insert(move(v));
+			}
 		}
+	}
+	else if(r.prft != NULL) {
+
+		const raw_term& x = r.h.front();
+		get_nums(x), t = from_raw_term(x, true), v.push_back(t);
+
+		bool is_sol = false;
+		form* froot = NULL;
+
+		from_raw_form(r.prft.get(), froot, is_sol);
+
+		DBG(COUT << "\n ........... \n";)
+		DBG(r.prft.get()->printTree();)
+		DBG(COUT << "\n ........... \n";)
+		DBG(froot->printnode(0, this);)
+
+		term::textype extype = term::FORM1;
+		if(is_sol) {
+			DBG(COUT << "\n SOL parsed \n";)
+			//to_pnf(froot);
+			extype = term::FORM2;
+		}
+		//if(froot->is_sol()) to_pnf(froot), extype = term::FORM2;
+		//else froot->implic_rmoval(), froot->printnode(); //forcing implic removal for FOL here
+		//assert(froot);
+
+		t = term(extype, move(froot));
+		v.push_back(t);
+		//align_vars(v);
+		m.insert(move(v));
+		//delete froot;
+	} else  {
+		for (const raw_term& x : r.h)
+			t = from_raw_term(x, true),
+			t.goal = r.type == raw_rule::GOAL,
+			m.insert({t}), get_nums(x);
+	}
+}
+
+flat_prog tables::to_terms(const raw_prog& p) {
+	flat_prog m;
+
+	for (const raw_rule& r : p.r)
+		add_rule(m, r);
 
 	return m;
 }
@@ -1041,13 +1046,13 @@ flat_prog& get_canonical_db(vector<vector<term>>& x, flat_prog& p) {
 	return p;
 }
 
-void tables::run_internal_prog(flat_prog p, set<term>& r, size_t nsteps) {
+/*void tables::run_internal_prog(flat_prog p, raw_prog &rp, set<term>& r, size_t nsteps) {
 	dict_t tmpdict(dict); // copy ctor, only here, if this's needed at all?
 	tables t(move(tmpdict), false, false, true);
 	//t.dict = dict;
 	t.bcqc = false, t.chars = chars, t.nums = nums;
-	if (!t.run_nums(move(p), r, nsteps)) throw 0;
-}
+	if (!t.run_nums(move(p), rp, r, nsteps)) throw 0;
+}*/
 
 void getvars(const term& t, set<int_t>& v) {
 	for (int_t i : t) if (i < 0) v.insert(i);
@@ -2212,7 +2217,7 @@ void tables::transform_grammar(vector<production> g, flat_prog& p, form *&r ) {
 		<< endl;
 }
 
-void tables::add_prog(const raw_prog& p, const strs_t& strs_) {
+void tables::add_prog(raw_prog& p, const strs_t& strs_) {
 	strs = strs_;
 	if (!strs.empty())
 		chars = 255,
@@ -2223,10 +2228,10 @@ void tables::add_prog(const raw_prog& p, const strs_t& strs_) {
 		dict.get_sym(dict.get_lexeme("printable"));
 	for (auto x : strs) nums = max(nums, (int_t)x.second.size()+1);
 
-	add_prog(to_terms(p), p.g);
+	add_prog(to_terms(p), p, p.g);
 }
 
-bool tables::run_nums(flat_prog m, set<term>& r, size_t nsteps) {
+/*bool tables::run_nums(flat_prog m, raw_prog &rp, set<term>& r, size_t nsteps) {
 	map<ntable, ntable> m1, m2;
 	auto f = [&m1, &m2](ntable *x) {
 		auto it = m1.find(*x);
@@ -2258,11 +2263,11 @@ bool tables::run_nums(flat_prog m, set<term>& r, size_t nsteps) {
 		x.insert(x.begin() + 1, s.begin(), s.end()), p.insert(x);
 	}
 //	DBG(print(o::out()<<"run_nums for:"<<endl, p)<<endl<<"returned:"<<endl;)
-	add_prog(move(p), {});
+	add_prog(move(p), rp, {});
 	if (!pfp(nsteps)) return false;
 	r = g(decompress());
 	return true;
-}
+}*/
 
 void tables::add_tml_update(const term& t, bool neg) {
 	// TODO: decompose nstep if too big for the current universe
@@ -2294,7 +2299,74 @@ void tables::init_tml_update() {
 	sym_del = dict.get_sym(dict.get_lexeme("delete"));
 }
 
-void tables::add_prog(flat_prog m, const vector<production>& g, bool mknums) {
+/* Holds the ever-growing program text. This object cannot be isolated to the
+ * code where command line arguments are parsed, because the "eval" relation
+ * constantly creates more program text that needs to be parsed and kept alive
+ * till the program's termination.
+ */
+
+inputs tmpii;
+
+/* Loop through the rules of the given program checking if they use a relation
+ * called "eval" in their bodies. If eval is used, take the first argument,
+ * parse it as a rule, and add the rule just created to the flat and raw
+ * programs.
+ */
+
+void tables::transform_evals(flat_prog& m, raw_prog &rp) {
+	for(const std::vector<term> &outer_rule : m) {
+		// Iterate through the body of the current rule looking for uses of the
+		// "eval" relation.
+		for(int i = 1; i < outer_rule.size(); i++) {
+			raw_term rhs_term = to_raw_term(outer_rule[i]);
+			if(rhs_term.e[0].type == elem::SYM && to_string_t("eval") == lexeme2str(rhs_term.e[0].e)) {
+				//elem& inner_rule = rhs_term.e[1];
+				// The first parenthesis marks the beginning of eval's arguments, the
+				// second marks the beginning of the rule being supplied to eval.
+				if(rhs_term.e.size() > 2 && rhs_term.e[1].type == elem::OPENP && rhs_term.e[2].type == elem::OPENP) {
+					ofstream eval_tmp;
+					eval_tmp.open("evaltmpfile.tmp", ios::trunc);
+					int nest_level = 1;
+					// Capture the rule argument to eval by adding all lexemes until
+					// closing parenthesis of rule to a string.
+					for(int term_idx = 3; term_idx < rhs_term.e.size() && nest_level; term_idx ++) {
+						if(rhs_term.e[term_idx].type == elem::OPENP) nest_level++;
+						else if(rhs_term.e[term_idx].type == elem::CLOSEP) nest_level--;
+						// Make sure this lexeme is not the closing parenthesis that wraps
+						// the entire rule.
+						if(nest_level) {
+							// Lexer does not allow the turnstile operator ":-" inside rules,
+							// so we'll look for the lexeme "ts" for now.
+							if(rhs_term.e[term_idx].type == elem::SYM && to_string_t("ts") == lexeme2str(rhs_term.e[term_idx].e)) {
+								eval_tmp << ":- ";
+							} else {
+								eval_tmp << rhs_term.e[term_idx] << " ";
+							}
+						}
+					}
+					// Terminate the rule string.
+					eval_tmp << "." << endl;
+					eval_tmp.close();
+					// If we managed to reach the parenthesis that encloses the entire
+					// rule being supplied to eval, then we can start parsing.
+					if(!nest_level) {
+						input *in = tmpii.add_file(std::string("evaltmpfile.tmp"));
+						in->prog_lex();
+						raw_rule rr;
+						if(rr.parse(in, rp)) {
+							// We want to keep both the raw and flat program abreast of the
+							// new rule we have created.
+							rp.r.push_back(rr);
+							add_rule(m, rr);
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+void tables::add_prog(flat_prog m, raw_prog &rp, const vector<production>& g, bool mknums) {
 	smemo.clear(), ememo.clear(), leqmemo.clear();
 	if (mknums) to_nums(m);
 	if (populate_tml_update) init_tml_update();
@@ -2303,6 +2375,7 @@ void tables::add_prog(flat_prog m, const vector<production>& g, bool mknums) {
 	while (max(max(nums, chars), syms) >= (1 << (bits - 2))) add_bit();
 	for (auto x : strs) load_string(x.first, x.second);
 	form *froot;
+	transform_evals(m, rp);
 	transform_grammar(g, m, froot);
 	get_rules(move(m));
 //	clock_t start, end;
@@ -2596,6 +2669,9 @@ bool tables::pfp(size_t nsteps, size_t break_on_step) {
 	if (bproof) levels.emplace_back(get_front());
 	level l;
 	for (;;) {
+		for (ntable tab = 0; (size_t)tab != tbls.size(); ++tab)
+			/*decompress(tbls.at(tab).t, tab, [this](const term& r) {
+				});*/
 		if (print_steps || optimize)
 			o::inf() << "# step: " << nstep << endl;
 		++nstep;
@@ -2611,7 +2687,7 @@ bool tables::pfp(size_t nsteps, size_t break_on_step) {
 	throw 0;
 }
 
-bool tables::run_prog(const raw_prog& p, const strs_t& strs, size_t steps,
+bool tables::run_prog(raw_prog& p, const strs_t& strs, size_t steps,
 	size_t break_on_step)
 {
 	clock_t start{}, end;
@@ -2625,7 +2701,7 @@ bool tables::run_prog(const raw_prog& p, const strs_t& strs, size_t steps,
 	}
 	bool r = pfp(steps ? nstep + steps : 0, break_on_step);
 	if (r && prog_after_fp.size())
-		add_prog(move(prog_after_fp), {}, false), r = pfp();
+		add_prog(move(prog_after_fp), p, {}, false), r = pfp();
 	if (optimize)
 		(o::ms() <<"add_prog: "<<t << " pfp: "),
 		measure_time_end();

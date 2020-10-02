@@ -36,10 +36,15 @@ struct raw_form_tree;
 class tables;
 //class dict_t;
 
+// The signature of a fact/rule is a pair comprising the relation id
+// and a list of the ids of each place in the relation.
 typedef std::pair<rel_t, ints> sig;
 //typedef std::map<int_t, size_t> varmap;
 typedef std::map<int_t, int_t> env;
 typedef bdd_handles level;
+// Each vector in a flat_prog represents a fact or a rule
+// The first term in a fact/rule is its head, that occurs on the LHS of :-
+// The remaining terms represent its body, that occurs on the RHS of :-
 typedef std::set<std::vector<term>> flat_prog;
 
 template<typename T>
@@ -142,6 +147,7 @@ struct rule : public std::vector<alt*> {
 
 struct table {
 	sig s;
+	// The arity of the associated rule/fact
 	size_t len, priority = 0;
 	spbdd_handle t = hfalse;
 	bdd_handles add, del;
@@ -300,7 +306,7 @@ private:
 	void term_get_grounds(const term& t, size_t level, cb_ground f);
 	std::set<witness> get_witnesses(const term& t, size_t l);
 	size_t get_proof(const term& q, proof& p, size_t level, size_t dep=-1);
-	void run_internal_prog(flat_prog p, std::set<term>& r, size_t nsteps=0);
+	//void run_internal_prog(flat_prog p, raw_prog &rp, std::set<term>& r, size_t nsteps=0);
 	ntable create_tmp_rel(size_t len);
 	void create_tmp_head(std::vector<term>& x);
 	void print_env(const env& e, const rule& r) const;
@@ -312,6 +318,7 @@ private:
 	void out(spbdd_handle, ntable, const rt_printer&) const;
 	void get_nums(const raw_term& t);
 	flat_prog to_terms(const raw_prog& p);
+	void add_rule(flat_prog &m, const raw_rule& r);
 
 	void get_facts(const flat_prog& m);
 	void get_alt(const term_set& al, const term& h, std::set<alt>& as);
@@ -325,12 +332,13 @@ private:
 	lexeme get_new_rel();
 	void load_string(lexeme rel, const string_t& s);
 	lexeme get_var_lexeme(int_t i);
-	void add_prog(flat_prog m, const std::vector<struct production>&,
+	void add_prog(flat_prog m, raw_prog &rp, const std::vector<struct production>&,
 		bool mknums = false);
 	char fwd() noexcept;
 	level get_front() const;
 	std::vector<term> interpolate(std::vector<term> x, std::set<int_t> v);
 	void transform_bin(flat_prog& p);
+	void transform_evals(flat_prog& m, raw_prog &rp);
 	int_t get_factor(raw_term &rt, size_t &n, std::map<size_t, term> &ref, 
 					std::vector<term> &v, std::set<term> &done);
 	
@@ -422,10 +430,10 @@ public:
 		bool bin_transform = false, bool print_transformed = false);
 	~tables();
 	size_t step() { return nstep; }
-	void add_prog(const raw_prog& p, const strs_t& strs);
-	bool run_prog(const raw_prog& p, const strs_t& strs, size_t steps = 0,
+	void add_prog(raw_prog& p, const strs_t& strs);
+	bool run_prog(raw_prog& p, const strs_t& strs, size_t steps = 0,
 		size_t break_on_step = 0);
-	bool run_nums(flat_prog m, std::set<term>& r, size_t nsteps);
+	//bool run_nums(flat_prog m, raw_prog &rp, std::set<term>& r, size_t nsteps);
 	bool pfp(size_t nsteps = 0, size_t break_on_step = 0);
 	template <typename T>
 	void out(std::basic_ostream<T>&) const;

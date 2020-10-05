@@ -2328,12 +2328,10 @@ void tables::transform_evals(flat_prog& m, raw_prog &rp) {
 		for(std::vector<raw_term> &bodie : outer_rule.b) {
 			for(raw_term &rhs_term : bodie) {
 				if(rhs_term.e[0].type == elem::SYM && to_string_t("eval") == lexeme2str(rhs_term.e[0].e)) {
-					//elem& inner_rule = rhs_term.e[1];
 					// The first parenthesis marks the beginning of eval's arguments, the
 					// second marks the beginning of the rule being supplied to eval.
 					if(rhs_term.e.size() > 2 && rhs_term.e[1].type == elem::OPENP && rhs_term.e[2].type == elem::OPENP) {
-						ofstream eval_tmp;
-						eval_tmp.open("evaltmpfile.tmp", ios::trunc);
+						stringstream eval_tmp;
 						// Number of nested parentheses we're in.
 						int nest_level = 1;
 						// The term index of the first term after the closing parenthesis of the quoted rule
@@ -2359,11 +2357,10 @@ void tables::transform_evals(flat_prog& m, raw_prog &rp) {
 						}
 						// Terminate the rule string.
 						eval_tmp << "." << endl;
-						eval_tmp.close();
 						// If we managed to reach the parenthesis that encloses the entire
 						// rule being supplied to eval, then we can start parsing.
 						if(!nest_level) {
-							input *prog_in = tmpii.add_file(std::string("evaltmpfile.tmp"));
+							input *prog_in = tmpii.add_string(eval_tmp.str());
 							prog_in->prog_lex();
 							raw_rule rr;
 							if(rr.parse(prog_in, rp)) {
@@ -2374,15 +2371,13 @@ void tables::transform_evals(flat_prog& m, raw_prog &rp) {
 								// Now that we have added a rule corresponding to the program supplied
 								// to eval, make the term that the eval relation would actually evaluate to.
 								// I.e. eval((<name>(<a>) :- <b>) <c>) -> <name>(<c>).
-								ofstream input_tmp;
-								input_tmp.open("inputtmpfile.tmp", ios::trunc);
+								stringstream input_tmp;
 								input_tmp << rr.h[0].e[0] << "(";
 								for(int elem_idx = input_start; elem_idx < rhs_term.e.size(); elem_idx ++) {
 									input_tmp << rhs_term.e[elem_idx] << " ";
 								}
 								input_tmp << ".";
-								input_tmp.close();
-								input *input_in = tmpii.add_file(std::string("inputtmpfile.tmp"));
+								input *input_in = tmpii.add_string(input_tmp.str());
 								input_in->prog_lex();
 								raw_term repl_rt;
 								if(repl_rt.parse(input_in, rp)) {

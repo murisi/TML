@@ -2399,11 +2399,15 @@ raw_rule tables::read_rule(std::vector<elem>::const_iterator iter, std::vector<e
 	}
 }
 
-/* Loop through the rules of the given program checking if they use a relation
- * called "eval" in their bodies. If eval is used, take the first argument,
- * parse it as a rule, and add the rule just created to the flat and raw
- * programs.
- */
+/* Loop through the rules of the given program checking if they use a function
+ * called "quote" in their bodies. Quote's first argument is the relation into
+ * which it should put the quotation it creates, and it's second argument is the
+ * rule to quote. Say that the output relation name is s, quote will populate it
+ * according to the following schema:
+ * For each context, each N-ary term is stored as:
+ * s(t <rule #> <disjunct #> <goal #> <relname> <input0> <input1> ... <inputN>)
+ * The locations of the variables in the above schema are stored as:
+ * s(v <rule #> <disjunct #> <goal #> <input #>) */
 
 void tables::transform_quotes(flat_prog& m, raw_prog &rp) {
 	for(raw_rule &outer_rule : rp.r) {

@@ -990,16 +990,21 @@ void tables::add_rule(flat_prog &m, const raw_rule& r) {
 	}
 }
 
+/* Adds the given raw rule to the given flat and raw programs. */
+
+void tables::add_rule(flat_prog &m, raw_prog& rp, const raw_rule& r) {
+	add_rule(m, r);
+	rp.r.push_back(r);
+}
+
 /* Creates a flat program containing the same rules as the raw program after
  * they have been converted to term vectors.
  */
 
 flat_prog tables::to_terms(const raw_prog& p) {
 	flat_prog m;
-
 	for (const raw_rule& r : p.r)
 		add_rule(m, r);
-
 	return m;
 }
 
@@ -2179,7 +2184,7 @@ void tables::transform_grammar(vector<production> g, flat_prog& p, form *&r ) {
 				else er(" Only simple binary operation allowed." );
 			}
 			else if( n < rt.e.size() && 
-				   (rt.e[n].type == elem::EQ || rt.e[n].type == elem::LEQ)) {
+					 (rt.e[n].type == elem::EQ || rt.e[n].type == elem::LEQ)) {
 				//format: lopd = ropd
 				term equalt;
 				equalt.resize(2);
@@ -2315,6 +2320,127 @@ void tables::init_tml_update() {
 
 inputs tmpii;
 
+/* Takes a raw term and its position in the program to be quoted and returns
+ * its quotation within a relation of the given name. The locations of variable
+ * elements within the raw term are added to the variables vector. */
+
+raw_term tables::quote_term(const raw_term &head, const elem &rel_name, int rule_idx, int disjunct_idx, int goal_idx, std::vector<std::tuple<int, int, int, int>> &variables) {
+	std::vector<elem> quoted_term_e;
+	// Add metadata to quoted term: term signature, rule #, disjunct #, goal #, relation sym
+	quoted_term_e.insert(quoted_term_e.end(),
+		{rel_name, elem(elem::OPENP, dict.op), elem((char_t) 't'), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), head.e[0] });
+	for(int param_idx = 2; param_idx < head.e.size() - 1; param_idx ++) {
+		if(head.e[param_idx].type == elem::VAR) {
+			// Convert the variable to a symbol and add it to quouted term
+			lexeme var_lexeme {head.e[param_idx].e[0]+1, head.e[param_idx].e[1]};
+			elem var_sym_elem(elem::SYM, var_lexeme);
+			quoted_term_e.push_back(var_sym_elem);
+			// Log the fact that a variable occurs at this location
+			variables.emplace_back(rule_idx, disjunct_idx, goal_idx, param_idx-2);
+		} else {
+			quoted_term_e.push_back(head.e[param_idx]);
+		}
+	}
+	// Terminate term elements and make raw_term object
+	quoted_term_e.push_back(elem(elem::CLOSEP, dict.cl));
+	raw_term quoted_term;
+	quoted_term.e = quoted_term_e;
+	// We can call calc_arity with nullptr because no validation error will
+	// occur because we've already done validation here.
+	quoted_term.calc_arity(nullptr);
+	return quoted_term;
+}
+
+/* Loop through the rules of the given program checking if they use a relation
+ * called "eval" in their bodies. If eval is used, take the first argument,
+ * parse it as a rule, and add the rule just created to the flat and raw
+ * programs.
+ */
+
+void tables::transform_quotes(flat_prog& m, raw_prog &rp) {
+	for(raw_rule &outer_rule : rp.r) {
+		// Iterate through the bodies of the current rule looking for uses of the
+		// "quote" relation.
+		for(std::vector<raw_term> &bodie : outer_rule.b) {
+			for(raw_term &rhs_term : bodie) {
+				if(rhs_term.e[0].type == elem::SYM && to_string_t("quote") == lexeme2str(rhs_term.e[0].e)) {
+					// The parenthesis marks the beginning of quote's arguments.
+					if(rhs_term.e.size() > 1 && rhs_term.e[1].type == elem::OPENP) {
+						elem rel_name = rhs_term.e[2];
+						stringstream quote_tmp;
+						// Number of nested parentheses we're in.
+						int nest_level = 1;
+						// Capture the rule argument to quote by adding all lexemes until
+						// closing parenthesis of rule to a string.
+						for(int elem_idx = 3; elem_idx < rhs_term.e.size() && nest_level; elem_idx ++) {
+							if(rhs_term.e[elem_idx].type == elem::OPENP) nest_level++;
+							else if(rhs_term.e[elem_idx].type == elem::CLOSEP) nest_level--;
+							// Make sure this lexeme is not the closing parenthesis that wraps
+							// the entire rule.
+							if(nest_level) {
+								// Lexer does not allow the turnstile operator ":-" and comma
+								// operator "," inside rules, so we'll look for the lexemes "ts"
+								// and "cm" for now.
+								string_t elem_str = lexeme2str(rhs_term.e[elem_idx].e);
+								if(rhs_term.e[elem_idx].type == elem::SYM && to_string_t("ts") == elem_str) {
+									quote_tmp << ":- ";
+								} else if(rhs_term.e[elem_idx].type == elem::SYM && to_string_t("cm") == elem_str) {
+									quote_tmp << ", ";
+								} else {
+									quote_tmp << rhs_term.e[elem_idx] << " ";
+								}
+							}
+						}
+						// Terminate the rule string.
+						quote_tmp << "." << endl;
+						// If we managed to reach the parenthesis that encloses the entire
+						// rule being supplied to quote, then we can start parsing.
+						if(!nest_level) {
+							input *prog_in = tmpii.add_string(quote_tmp.str());
+							prog_in->prog_lex();
+							raw_rule rr;
+							if(rr.parse(prog_in, rp)) {
+								// Maintain a list of locations where variables occur:
+								// (rule #, disjunction #, goal #, elem #)
+								std::vector<std::tuple<int, int, int, int>> variables;
+								// Maintain the current rule index of rules being quoted
+								int rule_idx = 0;
+								// We are going to make a separate quoted rule with identical body
+								// for each head of the supplied rule.
+								for(const raw_term &head : rr.h) {
+									add_rule(m, rp, raw_rule(quote_term(head, rel_name, rule_idx, 0, 0, variables)));
+									// Maintain the current disjunction index being quoted
+									int disjunct_idx = 1;
+									for(const std::vector<raw_term> &bodie : rr.b) {
+										// Maintain the current goal index of the disjunction being quoted
+										int goal_idx = 0;
+										for(const raw_term &goal : bodie) {
+											add_rule(m, rp, raw_rule(quote_term(goal, rel_name, rule_idx, disjunct_idx, goal_idx, variables)));
+											goal_idx ++;
+										}
+										disjunct_idx ++;
+									}
+									rule_idx ++;
+								}
+								
+								// Now create sub-relation to store the location of variables in the quoted relation
+								for(auto const& [rule_idx, disjunct_idx, goal_idx, arg_idx] : variables) {
+									std::vector<elem> var_e =
+										{ rel_name, elem(elem::OPENP, dict.op), elem((char_t) 'v'), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), elem(arg_idx), elem(elem::CLOSEP, dict.cl) };
+									raw_term var_t;
+									var_t.e = var_e;
+									var_t.calc_arity(nullptr);
+									add_rule(m, rp, raw_rule(var_t));
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 /* Loop through the rules of the given program checking if they use a relation
  * called "eval" in their bodies. If eval is used, take the first argument,
  * parse it as a rule, and add the rule just created to the flat and raw
@@ -2405,6 +2531,7 @@ void tables::add_prog(flat_prog m, raw_prog &rp, const vector<production>& g, bo
 	while (max(max(nums, chars), syms) >= (1 << (bits - 2))) add_bit();
 	for (auto x : strs) load_string(x.first, x.second);
 	form *froot;
+	transform_quotes(m, rp);
 	transform_evals(m, rp);
 	transform_grammar(g, m, froot);
 	get_rules(move(m));

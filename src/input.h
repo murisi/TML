@@ -244,6 +244,7 @@ struct elem {
 	} type;
 	t_arith_op arith_op = NOP;
 	int_t num = 0;
+	// The string that represents variants of this element.
 	lexeme e{ 0, 0 };
 	char32_t ch;
 	elem() {}
@@ -271,6 +272,13 @@ struct elem {
 	bool operator!=(const elem& t) const { return !(*this == t); }
 };
 
+/* A raw term is produced from the parsing stage. In TML source code, it
+ * takes the following form: <rel>(<arg1> <arg2> ... <argN>). A raw term can
+ * occur in both heads and bodies. For example, rel(a(b(c)d e)f) is a raw
+ * term with the following elements: 'rel', '(', 'a', '(', 'b', '(', 'c', 'd',
+ * 'e', ')', 'f', ')'. Interpreting terms in this way keeps the universe's
+ * size finite which in turn guarantees that TML programs terminate. */
+
 struct raw_term {
 	// TODO: enum 'is...' stuff
 	bool neg = false;
@@ -280,8 +288,11 @@ struct raw_term {
 	//XXX we can add FORM1, FORM2 etc to rtextype
 	// and replace t_arith_op by a form (once we do parse for compound arithmetic formulas)
 	t_arith_op arith_op = NOP;
-
+	// Elements of the raw term as described above.
 	std::vector<elem> e;
+	// A list formed from the raw-term's string by replacing opening parentheses
+	// with -1s, closing parentheses with -2s, and contiguous sequences of elements
+	// with their cardinality.
 	ints arity;
 	bool parse(input* in, const raw_prog& prog, bool is_form = false,
 		rtextype pref_type = raw_term::REL);

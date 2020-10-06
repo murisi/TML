@@ -319,6 +319,7 @@ private:
 	void get_nums(const raw_term& t);
 	flat_prog to_terms(const raw_prog& p);
 	void add_rule(flat_prog &m, const raw_rule& r);
+	void add_rule(flat_prog &m, raw_prog& rp, const raw_rule& r);
 
 	void get_facts(const flat_prog& m);
 	void get_alt(const term_set& al, const term& h, std::set<alt>& as);
@@ -339,6 +340,8 @@ private:
 	std::vector<term> interpolate(std::vector<term> x, std::set<int_t> v);
 	void transform_bin(flat_prog& p);
 	void transform_evals(flat_prog& m, raw_prog &rp);
+	void transform_quotes(flat_prog& m, raw_prog &rp);
+	raw_term quote_term(const raw_term &head, const elem &rel_name, int rule_idx, int disjunct_idx, int goal_idx, std::vector<std::tuple<int, int, int, int>> &variables);
 	int_t get_factor(raw_term &rt, size_t &n, std::map<size_t, term> &ref, 
 					std::vector<term> &v, std::set<term> &done);
 	

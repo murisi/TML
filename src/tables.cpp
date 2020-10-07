@@ -2475,64 +2475,70 @@ void tables::transform_evals(flat_prog& m, raw_prog &rp) {
 				if(rhs_term.e[0].type == elem::SYM && to_string_t("eval") == lexeme2str(rhs_term.e[0].e)) {
 					// The first parenthesis marks the beginning of eval's arguments, the
 					// second marks the beginning of the rule being supplied to eval.
-					if(rhs_term.e.size() > 2 && rhs_term.e[1].type == elem::OPENP && rhs_term.e[2].type == elem::OPENP) {
-						stringstream eval_tmp;
-						// Number of nested parentheses we're in.
-						int nest_level = 1;
-						// The term index of the first term after the closing parenthesis of the quoted rule
-						int input_start;
-						// Capture the rule argument to eval by adding all lexemes until
-						// closing parenthesis of rule to a string.
-						for(int elem_idx = 3; elem_idx < rhs_term.e.size() && nest_level; elem_idx ++) {
-							if(rhs_term.e[elem_idx].type == elem::OPENP) nest_level++;
-							else if(rhs_term.e[elem_idx].type == elem::CLOSEP) nest_level--;
-							// Make sure this lexeme is not the closing parenthesis that wraps
-							// the entire rule.
-							if(nest_level) {
-								// Lexer does not allow the turnstile operator ":-" inside rules,
-								// so we'll look for the lexeme "ts" for now.
-								if(rhs_term.e[elem_idx].type == elem::SYM && to_string_t("ts") == lexeme2str(rhs_term.e[elem_idx].e)) {
-									eval_tmp << ":- ";
-								} else {
-									eval_tmp << rhs_term.e[elem_idx] << " ";
+					if(rhs_term.e.size() == 4 && rhs_term.e[1].type == elem::OPENP && rhs_term.e[3].type == elem::CLOSEP) {
+						// The relation containing the quotation is in between the parentheses
+						elem quote_rel = rhs_term.e[2];
+						// Ultimately we want to recreate raw_rules from the unordered facts in the
+						// given relation. So let's first look for the entries of the given relation
+						// and store them in an ordered map. Also store the variable locations.
+						std::map<std::tuple<int, int, int>, raw_term> quote_map;
+						std::vector<std::tuple<int, int, int, int>> var_locs;
+						for(raw_rule &rr : rp.r) {
+							if(lexeme2str(rr.h[0].e[0].e) == lexeme2str(quote_rel.e)) {
+								if(rr.h[0].e[2].num == 't') {
+									quote_map[std::make_tuple(rr.h[0].e[3].num, rr.h[0].e[4].num, rr.h[0].e[5].num)] = rr.h[0];
+								} else if(rr.h[0].e[2].num == 'v') {
+									var_locs.push_back(std::make_tuple(rr.h[0].e[3].num, rr.h[0].e[4].num, rr.h[0].e[5].num, rr.h[0].e[6].num));
 								}
-							} else {
-								input_start = elem_idx + 1;
 							}
 						}
-						// Terminate the rule string.
-						eval_tmp << "." << endl;
-						// If we managed to reach the parenthesis that encloses the entire
-						// rule being supplied to eval, then we can start parsing.
-						if(!nest_level) {
-							input *prog_in = tmpii.add_string(eval_tmp.str());
-							prog_in->prog_lex();
-							raw_rule rr;
-							if(rr.parse(prog_in, rp)) {
-								// We want to keep both the raw and flat program abreast of the
-								// new rule we have created.
-								rp.r.push_back(rr);
-								add_rule(m, rr);
-								// Now that we have added a rule corresponding to the program supplied
-								// to eval, make the term that the eval relation would actually evaluate to.
-								// I.e. eval((<name>(<a>) :- <b>) <c>) -> <name>(<c>).
-								stringstream input_tmp;
-								input_tmp << rr.h[0].e[0] << "(";
-								for(int elem_idx = input_start; elem_idx < rhs_term.e.size(); elem_idx ++) {
-									input_tmp << rhs_term.e[elem_idx] << " ";
-								}
-								input_tmp << ".";
-								input *input_in = tmpii.add_string(input_tmp.str());
-								input_in->prog_lex();
-								raw_term repl_rt;
-								if(repl_rt.parse(input_in, rp)) {
-									// Now replace the eval relation with the relation it would actually
-									// evaluate to.
-									rhs_term = repl_rt;
-									// Make sure that our transformation is reflected in the flat program.
-									add_rule(m, outer_rule);
+						std::tuple<int, int, int> prev_pos { -1, -1, -1 };
+						std::vector<raw_rule> reconstr_rules;
+						// Reconstruct the quoted rules.
+						for(auto const& [pos, rt] : quote_map) {
+							// Each fact in the quote map corresponds to a term. Reconstruct this term.
+							raw_term reconstr_term;
+							reconstr_term.e.push_back(rt.e[6]);
+							reconstr_term.e.push_back(elem(elem::OPENP, dict.op));
+							reconstr_term.e.insert(reconstr_term.e.end(), rt.e.begin() + 7, rt.e.end() - 1);
+							reconstr_term.e.push_back(elem(elem::CLOSEP, dict.cl));
+							reconstr_term.calc_arity(nullptr);
+							// Now figure out which rule and where in the rule to put this term.
+							if(get<0>(pos) != get<0>(prev_pos)) {
+								// Case where we have encountered new rule in map
+								raw_rule rr;
+								rr.h.push_back(reconstr_term);
+								reconstr_rules.push_back(rr);
+							} else if(get<1>(pos) != get<1>(prev_pos)) {
+								// Case where we have encountered new disjunct in map
+								std::vector<raw_term> disjunct;
+								disjunct.push_back(reconstr_term);
+								reconstr_rules.back().b.push_back(disjunct);
+							} else if(get<2>(pos) != get<2>(prev_pos)) {
+								// Case where we have encountered new goal in map
+								// If the body is empty, we must still be constructing the head terms
+								if(reconstr_rules.back().b.empty()) {
+									reconstr_rules.back().h.push_back(reconstr_term);
+								} else {
+									reconstr_rules.back().b.back().push_back(reconstr_term);
 								}
 							}
+							prev_pos = pos;
+						}
+						// During quotation, variables in the program being quoted were turned to
+						// symbols. So now let's use the variable markers to turn the symbols back
+						// to variables.
+						for(auto const& [rule_idx, disjunct_idx, goal_idx, elem_idx] : var_locs) {
+							// The zeroth disjunct index is special as it refers to the rule head
+							if(disjunct_idx == 0) {
+								reconstr_rules[rule_idx].h[goal_idx].e[elem_idx + 2].type = elem::VAR;
+							} else {
+								reconstr_rules[rule_idx].b[disjunct_idx - 1][goal_idx].e[elem_idx + 2].type = elem::VAR;
+							}
+						}
+						// Now add the reconstructed rules to the program.
+						for(const raw_rule &rr : reconstr_rules) {
+							add_rule(m, rr);
 						}
 					}
 				}

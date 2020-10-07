@@ -2332,8 +2332,7 @@ raw_term tables::quote_term(const raw_term &head, const elem &rel_name, int rule
 	for(int param_idx = 2; param_idx < head.e.size() - 1; param_idx ++) {
 		if(head.e[param_idx].type == elem::VAR) {
 			// Convert the variable to a symbol and add it to quouted term
-			lexeme var_lexeme {head.e[param_idx].e[0]+1, head.e[param_idx].e[1]};
-			elem var_sym_elem(elem::SYM, var_lexeme);
+			elem var_sym_elem(elem::SYM, head.e[param_idx].e);
 			quoted_term_e.push_back(var_sym_elem);
 			// Log the fact that a variable occurs at this location
 			variables.emplace_back(rule_idx, disjunct_idx, goal_idx, param_idx-2);
@@ -2492,7 +2491,7 @@ void tables::transform_evals(flat_prog& m, raw_prog &rp) {
 								}
 							}
 						}
-						std::tuple<int, int, int> prev_pos { -1, -1, -1 };
+						std::tuple<int, int, int> prev_pos { -1, 0, 0 };
 						std::vector<raw_rule> reconstr_rules;
 						// Reconstruct the quoted rules.
 						for(auto const& [pos, rt] : quote_map) {

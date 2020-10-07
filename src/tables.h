@@ -341,7 +341,7 @@ private:
 	void transform_bin(flat_prog& p);
 	void transform_evals(flat_prog& m, raw_prog &rp);
 	void transform_quotes(flat_prog& m, raw_prog &rp);
-	raw_rule read_rule(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp);
+	raw_rule read_rule(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp, std::vector<elem>::const_iterator &rule_end);
 	raw_term quote_term(const raw_term &head, const elem &rel_name, int rule_idx, int disjunct_idx, int goal_idx, std::vector<std::tuple<int, int, int, int>> &variables);
 	int_t get_factor(raw_term &rt, size_t &n, std::map<size_t, term> &ref, 
 					std::vector<term> &v, std::set<term> &done);

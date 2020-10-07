@@ -2353,7 +2353,7 @@ raw_term tables::quote_term(const raw_term &head, const elem &rel_name, int rule
 /* Read a vector of elements up until an unmatched closing parenthesis and
  * parse what was read into a raw_rule. */
 
-raw_rule tables::read_rule(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp) {
+raw_rule tables::read_rule(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp, std::vector<elem>::const_iterator &rule_end) {
 	stringstream quote_tmp;
 	// Number of nested parentheses we're in.
 	int nest_level = 1;
@@ -2391,6 +2391,7 @@ raw_rule tables::read_rule(std::vector<elem>::const_iterator iter, std::vector<e
 		raw_rule rr;
 		// Try to parse the string that we have been building using elems.
 		if(rr.parse(prog_in, rp)) {
+			rule_end = iter - 1;
 			return rr;
 		} else {
 			exit(1);
@@ -2414,43 +2415,51 @@ void tables::transform_quotes(flat_prog& m, raw_prog &rp) {
 		// "quote" relation.
 		for(std::vector<raw_term> &bodie : outer_rule.b) {
 			for(raw_term &rhs_term : bodie) {
-				if(rhs_term.e[0].type == elem::SYM && to_string_t("quote") == lexeme2str(rhs_term.e[0].e)) {
-					// The parenthesis marks the beginning of quote's arguments.
-					if(rhs_term.e.size() > 1 && rhs_term.e[1].type == elem::OPENP) {
-						raw_rule rr = read_rule(rhs_term.e.begin() + 3, rhs_term.e.end(), rp);
-						// Maintain a list of locations where variables occur:
-						// (rule #, disjunction #, goal #, elem #)
-						std::vector<std::tuple<int, int, int, int>> variables;
-						// Maintain the current rule index of rules being quoted
-						int rule_idx = 0;
-						// The relation under which the quotation we build will be stored.
-						elem rel_name = rhs_term.e[2];
-						// We are going to make a separate quoted rule with identical body
-						// for each head of the supplied rule.
-						for(const raw_term &head : rr.h) {
-							add_rule(m, rp, raw_rule(quote_term(head, rel_name, rule_idx, 0, 0, variables)));
-							// Maintain the current disjunction index of the bodies being quoted
-							int disjunct_idx = 1;
-							for(const std::vector<raw_term> &bodie : rr.b) {
-								// Maintain the current goal index of the disjunction being quoted
-								int goal_idx = 0;
-								for(const raw_term &goal : bodie) {
-									add_rule(m, rp, raw_rule(quote_term(goal, rel_name, rule_idx, disjunct_idx, goal_idx, variables)));
-									goal_idx ++;
+				// Search for uses of quote within a relation.
+				for(int offset = 2; offset < rhs_term.e.size(); offset ++) {
+					if(rhs_term.e[offset].type == elem::SYM && to_string_t("quote") == lexeme2str(rhs_term.e[offset].e)) {
+						// The parenthesis marks the beginning of quote's arguments.
+						if(rhs_term.e.size() > offset + 1 && rhs_term.e[offset + 1].type == elem::OPENP) {
+							std::vector<elem>::const_iterator rule_end;
+							raw_rule rr = read_rule(rhs_term.e.begin() + offset + 3, rhs_term.e.end(), rp, rule_end);
+							// The relation under which the quotation we build will be stored.
+							elem rel_name = rhs_term.e[offset + 2];
+							// Replace the whole quotation with the relation it will create.
+							rhs_term.e.erase(rhs_term.e.begin() + offset, rule_end + 1);
+							rhs_term.e.insert(rhs_term.e.begin() + offset, rel_name);
+							rhs_term.calc_arity(nullptr);
+							// Maintain a list of locations where variables occur:
+							// (rule #, disjunction #, goal #, elem #)
+							std::vector<std::tuple<int, int, int, int>> variables;
+							// Maintain the current rule index of rules being quoted
+							int rule_idx = 0;
+							// We are going to make a separate quoted rule with identical body
+							// for each head of the supplied rule.
+							for(const raw_term &head : rr.h) {
+								add_rule(m, rp, raw_rule(quote_term(head, rel_name, rule_idx, 0, 0, variables)));
+								// Maintain the current disjunction index of the bodies being quoted
+								int disjunct_idx = 1;
+								for(const std::vector<raw_term> &bodie : rr.b) {
+									// Maintain the current goal index of the disjunction being quoted
+									int goal_idx = 0;
+									for(const raw_term &goal : bodie) {
+										add_rule(m, rp, raw_rule(quote_term(goal, rel_name, rule_idx, disjunct_idx, goal_idx, variables)));
+										goal_idx ++;
+									}
+									disjunct_idx ++;
 								}
-								disjunct_idx ++;
+								rule_idx ++;
 							}
-							rule_idx ++;
-						}
-						
-						// Now create sub-relation to store the location of variables in the quoted relation
-						for(auto const& [rule_idx, disjunct_idx, goal_idx, arg_idx] : variables) {
-							std::vector<elem> var_e =
-								{ rel_name, elem(elem::OPENP, dict.op), elem((char_t) 'v'), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), elem(arg_idx), elem(elem::CLOSEP, dict.cl) };
-							raw_term var_t;
-							var_t.e = var_e;
-							var_t.calc_arity(nullptr);
-							add_rule(m, rp, raw_rule(var_t));
+							
+							// Now create sub-relation to store the location of variables in the quoted relation
+							for(auto const& [rule_idx, disjunct_idx, goal_idx, arg_idx] : variables) {
+								std::vector<elem> var_e =
+									{ rel_name, elem(elem::OPENP, dict.op), elem((char_t) 'v'), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), elem(arg_idx), elem(elem::CLOSEP, dict.cl) };
+								raw_term var_t;
+								var_t.e = var_e;
+								var_t.calc_arity(nullptr);
+								add_rule(m, rp, raw_rule(var_t));
+							}
 						}
 					}
 				}

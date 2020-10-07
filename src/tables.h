@@ -332,7 +332,7 @@ private:
 	lexeme get_new_rel();
 	void load_string(lexeme rel, const string_t& s);
 	lexeme get_var_lexeme(int_t i);
-	void add_prog(flat_prog m, raw_prog &rp, const std::vector<struct production>&,
+	void add_prog(flat_prog m, const std::vector<struct production>&,
 		bool mknums = false);
 	char fwd() noexcept;
 	level get_front() const;

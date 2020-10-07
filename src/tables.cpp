@@ -2234,7 +2234,7 @@ void tables::add_prog(raw_prog& p, const strs_t& strs_) {
 		dict.get_sym(dict.get_lexeme("printable"));
 	for (auto x : strs) nums = max(nums, (int_t)x.second.size()+1);
 
-	add_prog(to_terms(p), p, p.g);
+	add_prog(to_terms(p), p.g);
 }
 
 /*bool tables::run_nums(flat_prog m, raw_prog &rp, set<term>& r, size_t nsteps) {
@@ -2305,7 +2305,7 @@ void tables::init_tml_update() {
 	sym_del = dict.get_sym(dict.get_lexeme("delete"));
 }
 
-void tables::add_prog(flat_prog m, raw_prog &rp, const vector<production>& g, bool mknums) {
+void tables::add_prog(flat_prog m, const vector<production>& g, bool mknums) {
 	smemo.clear(), ememo.clear(), leqmemo.clear();
 	if (mknums) to_nums(m);
 	if (populate_tml_update) init_tml_update();
@@ -2639,7 +2639,7 @@ bool tables::run_prog(raw_prog& p, const strs_t& strs, size_t steps,
 	}
 	bool r = pfp(steps ? nstep + steps : 0, break_on_step);
 	if (r && prog_after_fp.size())
-		add_prog(move(prog_after_fp), p, {}, false), r = pfp();
+		add_prog(move(prog_after_fp), {}, false), r = pfp();
 	if (optimize)
 		(o::ms() <<"add_prog: "<<t << " pfp: "),
 		measure_time_end();

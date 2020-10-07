@@ -2546,7 +2546,7 @@ void tables::transform_evals(flat_prog& m, raw_prog &rp) {
 						}
 						// Now add the reconstructed rules to the program.
 						for(const raw_rule &rr : reconstr_rules) {
-							add_rule(m, rr);
+							add_rule(m, rp, rr);
 						}
 					}
 				}

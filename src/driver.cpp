@@ -114,7 +114,7 @@ raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int rule
 	// Add metadata to quoted term: term signature, rule #, disjunct #, goal #, relation sym
 	quoted_term_e.insert(quoted_term_e.end(),
 		{rel_name, elem(elem::OPENP, dict.op), elem(0), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), head.e[0] });
-	for(int param_idx = 2; param_idx < head.e.size() - 1; param_idx ++) {
+	for(std::vector<elem>::size_type param_idx = 2; param_idx < head.e.size() - 1; param_idx ++) {
 		if(head.e[param_idx].type == elem::VAR) {
 			// Convert the variable to a symbol and add it to quouted term
 			elem var_sym_elem(elem::SYM, head.e[param_idx].e);
@@ -201,7 +201,7 @@ void driver::transform_quotes(raw_prog &rp) {
 		for(std::vector<raw_term> &bodie : outer_rule.b) {
 			for(raw_term &rhs_term : bodie) {
 				// Search for uses of quote within a relation.
-				for(int offset = 2; offset < rhs_term.e.size(); offset ++) {
+				for(std::vector<elem>::size_type offset = 2; offset < rhs_term.e.size(); offset ++) {
 					if(rhs_term.e[offset].type == elem::SYM && to_string_t("quote") == lexeme2str(rhs_term.e[offset].e)) {
 						// The parenthesis marks the beginning of quote's arguments.
 						if(rhs_term.e.size() > offset + 1 && rhs_term.e[offset + 1].type == elem::OPENP) {

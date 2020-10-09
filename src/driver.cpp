@@ -113,7 +113,7 @@ raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int rule
 	std::vector<elem> quoted_term_e;
 	// Add metadata to quoted term: term signature, rule #, disjunct #, goal #, relation sym
 	quoted_term_e.insert(quoted_term_e.end(),
-		{rel_name, elem(elem::OPENP, dict.op), elem((char_t) 't'), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), head.e[0] });
+		{rel_name, elem(elem::OPENP, dict.op), elem(0), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), head.e[0] });
 	for(int param_idx = 2; param_idx < head.e.size() - 1; param_idx ++) {
 		if(head.e[param_idx].type == elem::VAR) {
 			// Convert the variable to a symbol and add it to quouted term
@@ -188,9 +188,9 @@ raw_prog driver::read_prog(std::vector<elem>::const_iterator iter, std::vector<e
  * rule to quote. Say that the output relation name is s, quote will populate it
  * according to the following schema:
  * For each context, each N-ary term is stored as:
- * s(t <rule #> <disjunct #> <goal #> <relname> <input0> <input1> ... <inputN>)
+ * s(0 <rule #> <disjunct #> <goal #> <relname> <input0> <input1> ... <inputN>)
  * The locations of the variables in the above schema are stored as:
- * s(v <rule #> <disjunct #> <goal #> <input #>) */
+ * s(1 <rule #> <disjunct #> <goal #> <input #>) */
 
 void driver::transform_quotes(raw_prog &rp) {
 	// We'll need the dict when we're creating terms with parentheses
@@ -241,7 +241,7 @@ void driver::transform_quotes(raw_prog &rp) {
 							// Now create sub-relation to store the location of variables in the quoted relation
 							for(auto const& [rule_idx, disjunct_idx, goal_idx, arg_idx] : variables) {
 								std::vector<elem> var_e =
-									{ rel_name, elem(elem::OPENP, dict.op), elem((char_t) 'v'), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), elem(arg_idx), elem(elem::CLOSEP, dict.cl) };
+									{ rel_name, elem(elem::OPENP, dict.op), elem(1), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), elem(arg_idx), elem(elem::CLOSEP, dict.cl) };
 								raw_term var_t;
 								var_t.e = var_e;
 								var_t.calc_arity(nullptr);
@@ -258,7 +258,8 @@ void driver::transform_quotes(raw_prog &rp) {
 /* Loop through the rules of the given program checking if they use a relation
  * called "eval" in their bodies. If eval is used, take its single argument,
  * the name of a relation containing a representation of a TML program, and
- * append to the current program the program represented by the relation. */
+ * append to the current program the program represented by the relation.
+ * See driver::transform_quotes for the schema of the relation. */
 
 void driver::transform_evals(raw_prog &rp) {
 	// We'll need the dict when we're creating terms with parentheses
@@ -281,9 +282,9 @@ void driver::transform_evals(raw_prog &rp) {
 						std::vector<std::tuple<int, int, int, int>> var_locs;
 						for(raw_rule &rr : rp.r) {
 							if(lexeme2str(rr.h[0].e[0].e) == lexeme2str(quote_rel.e)) {
-								if(rr.h[0].e[2].num == 't') {
+								if(rr.h[0].e[2].num == 0) {
 									quote_map[std::make_tuple(rr.h[0].e[3].num, rr.h[0].e[4].num, rr.h[0].e[5].num)] = rr.h[0];
-								} else if(rr.h[0].e[2].num == 'v') {
+								} else if(rr.h[0].e[2].num == 1) {
 									var_locs.push_back(std::make_tuple(rr.h[0].e[3].num, rr.h[0].e[4].num, rr.h[0].e[5].num, rr.h[0].e[6].num));
 								}
 							}

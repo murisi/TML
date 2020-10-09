@@ -92,7 +92,7 @@ class driver {
 	void transform_grammar(raw_prog& r, lexeme rel, size_t len);
   void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
-	raw_rule read_rule(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp, std::vector<elem>::const_iterator &rule_end);
+	raw_prog read_prog(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp, std::vector<elem>::const_iterator &prog_end);
 	raw_term quote_term(const raw_term &head, const elem &rel_name, int rule_idx, int disjunct_idx, int goal_idx, std::vector<std::tuple<int, int, int, int>> &variables);
 	raw_prog reify(const raw_prog& p);
 	raw_term from_grammar_elem(const elem& v, int_t v1, int_t v2);

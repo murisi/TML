@@ -107,9 +107,9 @@ inputs tmpii;
  * elements within the raw term are added to the variables vector. */
 
 raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int rule_idx, int disjunct_idx, int goal_idx, std::vector<std::tuple<int, int, int, int>> &variables) {
-  // We'll need the dict when we're creating terms with parentheses
-  dict_t &dict = tbl->get_dict();
-  // The elements of the term that we're building up
+	// We'll need the dict when we're creating terms with parentheses
+	dict_t &dict = tbl->get_dict();
+	// The elements of the term that we're building up
 	std::vector<elem> quoted_term_e;
 	// Add metadata to quoted term: term signature, rule #, disjunct #, goal #, relation sym
 	quoted_term_e.insert(quoted_term_e.end(),
@@ -136,9 +136,9 @@ raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int rule
 }
 
 /* Read a vector of elements up until an unmatched closing parenthesis and
- * parse what was read into a raw_rule. */
+ * parse what was read into a raw_prog. */
 
-raw_rule driver::read_rule(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp, std::vector<elem>::const_iterator &rule_end) {
+raw_prog driver::read_prog(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp, std::vector<elem>::const_iterator &prog_end) {
 	stringstream quote_tmp;
 	// Number of nested parentheses we're in.
 	int nest_level = 1;
@@ -158,13 +158,13 @@ raw_rule driver::read_rule(std::vector<elem>::const_iterator iter, std::vector<e
 				quote_tmp << ":- ";
 			} else if(iter->type == elem::SYM && to_string_t("cm") == elem_str) {
 				quote_tmp << ", ";
+			} else if(iter->type == elem::SYM && to_string_t("dt") == elem_str) {
+				quote_tmp << ". ";
 			} else {
 				quote_tmp << *iter << " ";
 			}
 		}
 	}
-	// Terminate the rule string.
-	quote_tmp << "." << endl;
 	// If we have not managed to reach the parenthesis that encloses the entire
 	// rule being supplied to quote, then the supplied vector could not have
 	// been a representation of a rule.
@@ -173,14 +173,12 @@ raw_rule driver::read_rule(std::vector<elem>::const_iterator iter, std::vector<e
 	} else {
 		input *prog_in = tmpii.add_string(quote_tmp.str());
 		prog_in->prog_lex();
-		raw_rule rr;
+		raw_prog nrp;
+		nrp.builtins = rp.builtins;
 		// Try to parse the string that we have been building using elems.
-		if(rr.parse(prog_in, rp)) {
-			rule_end = iter - 1;
-			return rr;
-		} else {
-			exit(1);
-		}
+		nrp.parse(prog_in);
+		prog_end = iter - 1;
+		return nrp;
 	}
 }
 
@@ -195,8 +193,8 @@ raw_rule driver::read_rule(std::vector<elem>::const_iterator iter, std::vector<e
  * s(v <rule #> <disjunct #> <goal #> <input #>) */
 
 void driver::transform_quotes(raw_prog &rp) {
-  // We'll need the dict when we're creating terms with parentheses
-  dict_t &dict = tbl->get_dict();
+	// We'll need the dict when we're creating terms with parentheses
+	dict_t &dict = tbl->get_dict();
 	for(raw_rule &outer_rule : rp.r) {
 		// Iterate through the bodies of the current rule looking for uses of the
 		// "quote" relation.
@@ -207,12 +205,12 @@ void driver::transform_quotes(raw_prog &rp) {
 					if(rhs_term.e[offset].type == elem::SYM && to_string_t("quote") == lexeme2str(rhs_term.e[offset].e)) {
 						// The parenthesis marks the beginning of quote's arguments.
 						if(rhs_term.e.size() > offset + 1 && rhs_term.e[offset + 1].type == elem::OPENP) {
-							std::vector<elem>::const_iterator rule_end;
-							raw_rule rr = read_rule(rhs_term.e.begin() + offset + 3, rhs_term.e.end(), rp, rule_end);
+							std::vector<elem>::const_iterator prog_end;
+							raw_prog nrp = read_prog(rhs_term.e.begin() + offset + 3, rhs_term.e.end(), rp, prog_end);
 							// The relation under which the quotation we build will be stored.
 							elem rel_name = rhs_term.e[offset + 2];
 							// Replace the whole quotation with the relation it will create.
-							rhs_term.e.erase(rhs_term.e.begin() + offset, rule_end + 1);
+							rhs_term.e.erase(rhs_term.e.begin() + offset, prog_end + 1);
 							rhs_term.e.insert(rhs_term.e.begin() + offset, rel_name);
 							rhs_term.calc_arity(nullptr);
 							// Maintain a list of locations where variables occur:
@@ -220,22 +218,24 @@ void driver::transform_quotes(raw_prog &rp) {
 							std::vector<std::tuple<int, int, int, int>> variables;
 							// Maintain the current rule index of rules being quoted
 							int rule_idx = 0;
-							// We are going to make a separate quoted rule with identical body
-							// for each head of the supplied rule.
-							for(const raw_term &head : rr.h) {
-								rp.r.push_back(raw_rule(quote_term(head, rel_name, rule_idx, 0, 0, variables)));
-								// Maintain the current disjunction index of the bodies being quoted
-								int disjunct_idx = 1;
-								for(const std::vector<raw_term> &bodie : rr.b) {
-									// Maintain the current goal index of the disjunction being quoted
-									int goal_idx = 0;
-									for(const raw_term &goal : bodie) {
-										rp.r.push_back(raw_rule(quote_term(goal, rel_name, rule_idx, disjunct_idx, goal_idx, variables)));
-										goal_idx ++;
+							for(const raw_rule &rr : nrp.r) {
+								// We are going to make a separate quoted rule with identical body
+								// for each head of the supplied rule.
+								for(const raw_term &head : rr.h) {
+									rp.r.push_back(raw_rule(quote_term(head, rel_name, rule_idx, 0, 0, variables)));
+									// Maintain the current disjunction index of the bodies being quoted
+									int disjunct_idx = 1;
+									for(const std::vector<raw_term> &bodie : rr.b) {
+										// Maintain the current goal index of the disjunction being quoted
+										int goal_idx = 0;
+										for(const raw_term &goal : bodie) {
+											rp.r.push_back(raw_rule(quote_term(goal, rel_name, rule_idx, disjunct_idx, goal_idx, variables)));
+											goal_idx ++;
+										}
+										disjunct_idx ++;
 									}
-									disjunct_idx ++;
+									rule_idx ++;
 								}
-								rule_idx ++;
 							}
 							
 							// Now create sub-relation to store the location of variables in the quoted relation
@@ -256,14 +256,13 @@ void driver::transform_quotes(raw_prog &rp) {
 }
 
 /* Loop through the rules of the given program checking if they use a relation
- * called "eval" in their bodies. If eval is used, take the first argument,
- * parse it as a rule, and add the rule just created to the flat and raw
- * programs.
- */
+ * called "eval" in their bodies. If eval is used, take its single argument,
+ * the name of a relation containing a representation of a TML program, and
+ * append to the current program the program represented by the relation. */
 
 void driver::transform_evals(raw_prog &rp) {
-  // We'll need the dict when we're creating terms with parentheses
-  dict_t &dict = tbl->get_dict();
+	// We'll need the dict when we're creating terms with parentheses
+	dict_t &dict = tbl->get_dict();
 	for(raw_rule &outer_rule : rp.r) {
 		// Iterate through the bodies of the current rule looking for uses of the
 		// "eval" relation.
@@ -291,7 +290,9 @@ void driver::transform_evals(raw_prog &rp) {
 						}
 						std::tuple<int, int, int> prev_pos { -1, 0, 0 };
 						std::vector<raw_rule> reconstr_rules;
-						// Reconstruct the quoted rules.
+						// Reconstruct the quoted rules. Since the body of this loop is doing the
+						// reconstructions in-order, it is important that the terms are iterated in
+						// lexicographic order.
 						for(auto const& [pos, rt] : quote_map) {
 							// Each fact in the quote map corresponds to a term. Reconstruct this term.
 							raw_term reconstr_term;
@@ -378,10 +379,10 @@ void driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 //	if (opts.enabled("sdt"))
 //		for (raw_prog& p : rp.p)
 //			p = transform_sdt(move(p));
-  for (raw_prog& p : rp.p) {
-    transform_quotes(p);
-    transform_evals(p);
-  }
+	for (raw_prog& p : rp.p) {
+		transform_quotes(p);
+		transform_evals(p);
+	}
 #ifdef TRANSFORM_BIN_DRIVER
 	if (opts.enabled("bin"))
 		for (raw_prog& p : rp.p)

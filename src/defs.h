@@ -45,11 +45,12 @@ typedef size_t nlevel;
 #ifdef DEBUG
 #define DBG(x) x
 #define NDBG(x)
+#define DBGFAIL assert(0)
 #else
 #define DBG(x)
 #define NDBG(x) x
+#define DBGFAIL
 #endif
-#define er(x) o::err() << x << endl, throw std::runtime_error(ws2s(x))
 #define msb(x) ((sizeof(unsigned long long)<<3) - \
 	__builtin_clzll((unsigned long long)(x)))
 #define has(x, y) ((x).find(y) != (x).end())
@@ -81,11 +82,9 @@ typedef enum  {
 struct alt;
 struct form;
 struct body;
-
 struct pnf_t;
-typedef enum {EX, UN, FA} quant_t;
+typedef enum {EX, UN, FA, EXH, UNH, FAH} quant_t;
 typedef std::map<int_t, size_t> varmap;
-
 typedef std::shared_ptr<class bdd_handle> spbdd_handle;
 
 //#define TRANSFORM_BIN_DRIVER

@@ -42,6 +42,7 @@ struct input {
 	size_t offset = 0;   // offset of this input from the beginning
 	size_t pos = 0;      // position of the currently parsed lexeme
 	lexemes l = {};      // lexemes scanned from the input data
+	bool error = false;  // parse error in the input's data
 	/**
 	 * STDIN input constructor
 	 * @param ns - if true this input would be added as a new sequence ({})
@@ -131,13 +132,13 @@ struct input {
 	 * @param o offset
 	 **/
 	void set_offset(size_t o) { offset = o; }
-	static int_t get_int_t(ccs from, ccs to);
+	int_t get_int_t(ccs from, ccs to);
 	void count_pos(ccs o, long& l, long& ch);
-	void parse_error(ccs offset, const char* err) {
+	bool parse_error(ccs offset, const char* err) {
 		return parse_error(offset, err, offset);
 	}
-	void parse_error(ccs offset, const char* err, ccs close_to);
-	void parse_error(ccs offset, const char* err, lexeme close_to);
+	bool parse_error(ccs offset, const char* err, ccs close_to);
+	bool parse_error(ccs offset, const char* err, lexeme close_to);
 
 	static std::string file_read(std::string fname);
 	static std::string file_read_text(::FILE *f);
@@ -280,12 +281,11 @@ struct elem {
  * size finite which in turn guarantees that TML programs terminate. */
 
 struct raw_term {
-	// TODO: enum 'is...' stuff
+
 	bool neg = false;
-	//bool iseq = false, isleq = false, islt = false, isbltin = false;
 	enum rtextype { REL, EQ, LEQ, BLTIN, ARITH, CONSTRAINT } extype = raw_term::REL;
 
-	//XXX we can add FORM1, FORM2 etc to rtextype
+	//NOTE: we can add FORM1, FORM2 etc to rtextype
 	// and replace t_arith_op by a form (once we do parse for compound arithmetic formulas)
 	t_arith_op arith_op = NOP;
 	// Elements of the raw term as described above.
@@ -296,7 +296,7 @@ struct raw_term {
 	ints arity;
 	bool parse(input* in, const raw_prog& prog, bool is_form = false,
 		rtextype pref_type = raw_term::REL);
-	void calc_arity(input* in);
+	bool calc_arity(input* in);
 	void insert_parens(lexeme op, lexeme cl);
 	void clear() { e.clear(), arity.clear(); }
 	bool operator==(const raw_term& t) const {
@@ -410,24 +410,27 @@ struct raw_prog {
 	std::vector<raw_rule> r;
 
 	std::set<lexeme, lexcmp> builtins;
+	std::vector<raw_prog> nps; // nested progs
 //	int_t delrel = -1;
-	bool parse(input* in);
+	bool parse(input* in, dict_t &dict);
+	bool macro_expand(input *in , macro mm, const size_t i, const size_t j, 
+					std::vector<raw_term> &vrt, dict_t &dict);
 };
 
 struct raw_progs {
 	std::vector<raw_prog> p;
 	raw_progs();
-	void parse(input* in, dict_t& dict, bool newseq = true);
+	bool parse(input* in, dict_t& dict, bool newseq = true);
 };
 
-void throw_runtime_error(std::string err, std::string details = "");
+bool throw_runtime_error(std::string err, std::string details = "");
 
-void parse_error(const char* o, const char* e, ccs s);
-void parse_error(const char* o, const char* e, lexeme l);
-void parse_error(ccs o, const char* e, std::string s);
-void parse_error(ccs o, const char* e);
-void parse_error(const char* e, lexeme l);
-void parse_error(const char* e);
+bool parse_error(const char* o, const char* e, ccs s);
+bool parse_error(const char* o, const char* e, lexeme l);
+bool parse_error(ccs o, const char* e, std::string s);
+bool parse_error(ccs o, const char* e);
+bool parse_error(const char* e, lexeme l);
+bool parse_error(const char* e);
 
 template <typename T>
 std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const directive& d);

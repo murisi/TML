@@ -67,7 +67,7 @@ string_t driver::directive_load(const directive& d) {
 		case directive::STDIN: return move(pd.std_input);
 		default: return unquote(str), str;
 	}
-	throw 0; // unreachable
+	DBGFAIL;
 }
 
 void driver::directives_load(raw_prog& p, lexeme& trel) {
@@ -176,7 +176,7 @@ raw_prog driver::read_prog(std::vector<elem>::const_iterator iter, std::vector<e
 		raw_prog nrp;
 		nrp.builtins = rp.builtins;
 		// Try to parse the string that we have been building using elems.
-		nrp.parse(prog_in);
+		nrp.parse(prog_in, tbl->get_dict());
 		prog_end = iter - 1;
 		return nrp;
 	}
@@ -327,12 +327,15 @@ void driver::transform_evals(raw_prog &rp) {
             std::cout << "]" << std::endl;
             
             // Make lexemes for connectives
-            input *andi = tmpii.add_string(std::string("&& = -> ~"));
+            input *andi = tmpii.add_string(std::string("&& = -> ~ exists { }"));
             andi->prog_lex();
             lexeme andl = andi->l[0];
             lexeme eql = andi->l[1];
             lexeme impliesl = andi->l[2];
             lexeme notl = andi->l[3];
+            lexeme existsl = andi->l[4];
+            lexeme openbl = andi->l[5];
+            lexeme closebl = andi->l[6];
             
             // We want to generate a lot of unique variables. We do this by maintaining
             // a counter. At any point in time, its string representation will be the
@@ -354,7 +357,7 @@ void driver::transform_evals(raw_prog &rp) {
                 // 2) Make the quoted term declaration section
                 // 2a) Declare the quoted term corresponding to the rule head
                 std::vector<elem> rrb_elems;
-                rrb_elems.insert(rrb_elems.end(), { quote_rel, elem(elem::OPENP, dict.op), elem(0), elem(ridx), elem(0), elem(hidx),
+                rrb_elems.insert(rrb_elems.end(), { elem(elem::EXISTS, existsl), generate_var(var_counter), elem(elem::OPENB, openbl), quote_rel, elem(elem::OPENP, dict.op), elem(0), elem(ridx), elem(0), elem(hidx),
                   quote_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) });
                 for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
                   rrb_elems.push_back(quote_map[{ridx, 0, hidx, inidx}] = generate_var(var_counter));
@@ -401,11 +404,11 @@ void driver::transform_evals(raw_prog &rp) {
                         for(int gidx2 = gidx1; gidx2 < prog_tree[ridx][didx2].size(); gidx2++) {
                           if(didx2 == 0 && gidx2 != hidx) continue;
                           for(int inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
-                            rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENP, dict.op),
+                            rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENB, openbl),
                               quote_rel, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx1), elem(gidx1), elem(inidx1), elem(elem::CLOSEP, dict.cl),
                               elem(elem::AND, andl), quote_rel, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx2), elem(gidx2), elem(inidx2), elem(elem::CLOSEP, dict.cl),
                               elem(elem::AND, andl), quote_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), quote_map[{ridx, didx2, gidx2, inidx2}],
-                              elem(elem::IMPLIES, impliesl), real_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), real_map[{ridx, didx2, gidx2, inidx2}], elem(elem::CLOSEP, dict.cl)});
+                              elem(elem::IMPLIES, impliesl), real_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), real_map[{ridx, didx2, gidx2, inidx2}], elem(elem::CLOSEB, closebl)});
                           }
                         }
                       }
@@ -415,98 +418,41 @@ void driver::transform_evals(raw_prog &rp) {
                 // 6) Make the symbol fixing section
                 // 6a) Fix the symbols in the rule head
                 for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
-                  rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENP, dict.op), elem(elem::NOT, notl), quote_rel, elem(elem::OPENP, dict.op),
+                  rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENB, openbl), elem(elem::NOT, notl), quote_rel, elem(elem::OPENP, dict.op),
                     elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem(elem::CLOSEP, dict.cl), elem(elem::IMPLIES, impliesl), quote_map[{ridx, 0, hidx, inidx}],
-                    elem(elem::EQ, eql), real_map[{ridx, 0, hidx, inidx}], elem(elem::CLOSEP, dict.cl) });
+                    elem(elem::EQ, eql), real_map[{ridx, 0, hidx, inidx}], elem(elem::CLOSEB, closebl) });
                 }
                 // 6b) Fix the symbols in the rule body
                 for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
                   for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
                     for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-                      rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENP, dict.op), elem(elem::NOT, notl), quote_rel, elem(elem::OPENP, dict.op),
+                      rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENB, openbl), elem(elem::NOT, notl), quote_rel, elem(elem::OPENP, dict.op),
                         elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem(elem::CLOSEP, dict.cl), elem(elem::IMPLIES, impliesl), quote_map[{ridx, didx, gidx, inidx}],
-                        elem(elem::EQ, eql), real_map[{ridx, didx, gidx, inidx}], elem(elem::CLOSEP, dict.cl) });
+                        elem(elem::EQ, eql), real_map[{ridx, didx, gidx, inidx}], elem(elem::CLOSEB, closebl) });
                     }
                   }
                 }
-                // Now let's put together the head and body of we have constructed to make a rule
-                raw_term rrh;
-                rrh.e = rrh_elems;
-                rrh.calc_arity(nullptr);
-                std::cout << rrh << " ";
-                std::cout << ":- ";
-                raw_term rrb;
-                rrb.e = rrb_elems;
-                rrb.calc_arity(nullptr);
-                std::cout << rrb << " ";
-                std::cout << std::endl;
                 
+                // Close the formula
+                rrb_elems.push_back(elem(elem::CLOSEB, closebl));
+                std::stringstream ss;
+                for(const elem &e : rrh_elems) {
+                  ss << e << " ";
+                }
+                ss << ":- ";
+                for(const elem &e : rrb_elems) {
+                  ss << e << " ";
+                }
+                ss << ". ";
+                std::cout << std::endl << ss.str() << std::endl;
+                /*input *nr = tmpii.add_string(ss.str());
+                nr->prog_lex();
+                raw_rule rr;
+                rr.parse(nr, rp);
+                std::cout << std::endl << "ans:" << std::endl << rr << std::endl;
+                rp.r.push_back(rr);*/
               }
             }
-						/*// Ultimately we want to recreate raw_rules from the unordered facts in the
-						// given relation. So let's first look for the entries of the given relation
-						// and store them in an ordered map. Also store the variable locations.
-						std::map<std::tuple<int, int, int>, raw_term> quote_map;
-						std::vector<std::tuple<int, int, int, int>> var_locs;
-						for(raw_rule &rr : rp.r) {
-							if(lexeme2str(rr.h[0].e[0].e) == lexeme2str(quote_rel.e)) {
-								if(rr.h[0].e[2].num == 0) {
-									quote_map[std::make_tuple(rr.h[0].e[3].num, rr.h[0].e[4].num, rr.h[0].e[5].num)] = rr.h[0];
-								} else if(rr.h[0].e[2].num == 1) {
-									var_locs.push_back(std::make_tuple(rr.h[0].e[3].num, rr.h[0].e[4].num, rr.h[0].e[5].num, rr.h[0].e[6].num));
-								}
-							}
-						}
-						std::tuple<int, int, int> prev_pos { -1, 0, 0 };
-						std::vector<raw_rule> reconstr_rules;
-						// Reconstruct the quoted rules. Since the body of this loop is doing the
-						// reconstructions in-order, it is important that the terms are iterated in
-						// lexicographic order.
-						for(auto const& [pos, rt] : quote_map) {
-							// Each fact in the quote map corresponds to a term. Reconstruct this term.
-							raw_term reconstr_term;
-							reconstr_term.e.push_back(rt.e[6]);
-							reconstr_term.e.push_back(elem(elem::OPENP, dict.op));
-							reconstr_term.e.insert(reconstr_term.e.end(), rt.e.begin() + 7, rt.e.end() - 1);
-							reconstr_term.e.push_back(elem(elem::CLOSEP, dict.cl));
-							reconstr_term.calc_arity(nullptr);
-							// Now figure out which rule and where in the rule to put this term.
-							if(get<0>(pos) != get<0>(prev_pos)) {
-								// Case where we have encountered new rule in map
-								raw_rule rr;
-								rr.h.push_back(reconstr_term);
-								reconstr_rules.push_back(rr);
-							} else if(get<1>(pos) != get<1>(prev_pos)) {
-								// Case where we have encountered new disjunct in map
-								std::vector<raw_term> disjunct;
-								disjunct.push_back(reconstr_term);
-								reconstr_rules.back().b.push_back(disjunct);
-							} else if(get<2>(pos) != get<2>(prev_pos)) {
-								// Case where we have encountered new goal in map
-								// If the body is empty, we must still be constructing the head terms
-								if(reconstr_rules.back().b.empty()) {
-									reconstr_rules.back().h.push_back(reconstr_term);
-								} else {
-									reconstr_rules.back().b.back().push_back(reconstr_term);
-								}
-							}
-							prev_pos = pos;
-						}
-						// During quotation, variables in the program being quoted were turned to
-						// symbols. So now let's use the variable markers to turn the symbols back
-						// to variables.
-						for(auto const& [rule_idx, disjunct_idx, goal_idx, elem_idx] : var_locs) {
-							// The zeroth disjunct index is special as it refers to the rule head
-							if(disjunct_idx == 0) {
-								reconstr_rules[rule_idx].h[goal_idx].e[elem_idx + 2].type = elem::VAR;
-							} else {
-								reconstr_rules[rule_idx].b[disjunct_idx - 1][goal_idx].e[elem_idx + 2].type = elem::VAR;
-							}
-						}
-						// Now add the reconstructed rules to the program.
-						for(const raw_rule &rr : reconstr_rules) {
-							rp.r.push_back(rr);
-						}*/
 					}
 				}
 			}
@@ -514,8 +460,8 @@ void driver::transform_evals(raw_prog &rp) {
 	}
 }
 
-void driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
-	if (!rp.p.size()) return;
+bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
+	if (!rp.p.size()) return true;
 	lexeme trel = { 0, 0 };
 	directives_load(rp.p[n], trel);
 	auto get_vars = [this](const raw_term& t) {
@@ -541,7 +487,8 @@ void driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 //			transform_string(x.second, rp.p[n], x.first),
 //			transformed_strings.insert(x.first);
 	if (!rp.p[n].g.empty()) //{
-		if (pd.strs.size() > 1) er(err_one_input);
+		if (pd.strs.size() > 1)
+			return throw_runtime_error(err_one_input);
 //		else transform_grammar(rp.p[n], pd.strs.begin()->first,
 //			pd.strs.begin()->second.size());
 //	}
@@ -560,11 +507,12 @@ void driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 //	if (trel[0]) transform_proofs(rp.p[n], trel);
 	//o::out()<<rp.p[n]<<endl;
 //	if (pd.bwd) rp.p.push_back(transform_bwd(rp.p[n]));
+	return true;
 }
 
 void driver::output_pl(const raw_prog& p) const {
 	if (opts.enabled("xsb"))     print_xsb(o::to("xsb"), p);
-	if (opts.enabled("swipl"))   print_swipl(o::to("swipl"),   p);
+	if (opts.enabled("swipl"))   print_swipl(o::to("swipl"), p);
 	if (opts.enabled("souffle")) print_souffle(o::to("souffle"), p);
 }
 
@@ -578,19 +526,20 @@ bool driver::prog_run(raw_progs& rp, size_t n, size_t steps,
 	size_t step = nsteps();
 	measure_time_start();
 	bool fp = tbl->run_prog(rp.p[n], pd.strs, steps, break_on_step);
+	if (tbl->error) error = true;
 	o::ms() << "# elapsed: ";
 	measure_time_end();
 	pd.elapsed_steps = nsteps() - step;
-	//if (pd.elapsed_steps > 0 && steps && pd.elapsed_steps > steps) throw 0;
 //	for (auto x : prog->strtrees_out)
 //		strtrees.emplace(x.first, get_trees(prog->pd.strtrees[x.first],
 //					x.second, prog->rng.bits));
 	return fp;
 }
 
-void driver::add(input* in) {
-	rp.parse(in, tbl->get_dict(), in->newseq);
+bool driver::add(input* in) {
+	if (!rp.parse(in, tbl->get_dict(), in->newseq)) return error=true,false;
 	if (!in->newseq) transform(rp, pd.n, pd.strs);
+	return true;
 }
 
 template <typename T>
@@ -610,9 +559,6 @@ void driver::new_sequence() {
 	raw_prog &p = rp.p[pd.n];
 	for (const string& s : str_bltins) p.builtins.insert(get_lexeme(s));
 	output_pl(p);
-	//if (opts.enabled("t")) o::to("transformed")
-	//	<< "# Transformed program " << pd.n + 1 << ":" << endl
-	//	<< '{' << endl << p << '}' << endl;
 }
 
 void driver::restart() {
@@ -622,29 +568,24 @@ void driver::restart() {
 }
 
 bool driver::run(size_t steps, size_t break_on_step, bool break_on_fp) {
-	try {
-		if (!rp.p.size()) return true;
-		if (!running) restart();
+	if (!rp.p.size()) return result = true;
+	if (!running) restart();
 next_sequence:
-		if (nsteps() == pd.start_step) new_sequence();
-		if (opts.disabled("run") && opts.disabled("repl"))
-			return true;
-		bool fp = prog_run(rp, pd.n, steps, break_on_step);
-		if (fp) {
-			//DBG(if (opts.enabled("dump")) out(o::dump());)
-			if (pd.n == rp.p.size()-1) // all progs fp
-				return result = true, true;
-			++pd.n;
-			pd.start_step = nsteps();
-			if (steps && steps >= pd.elapsed_steps)
-				if (!(steps -= pd.elapsed_steps)) return false;
-			if ((break_on_step && nsteps() == break_on_step)
-				|| break_on_fp) return false;
-			goto next_sequence;
-		}
-	} catch (unsat_exception& e) {
-		o::out() << e.what() << endl;
-		result = false;
+	if (nsteps() == pd.start_step) new_sequence();
+	if (opts.disabled("run") && opts.disabled("repl"))
+		return true;
+	bool fp = prog_run(rp, pd.n, steps, break_on_step);
+	if (fp) {
+		//DBG(if (opts.enabled("dump")) out(o::dump());)
+		if (pd.n == rp.p.size()-1) // all progs fp
+			return result = true, true;
+		++pd.n;
+		pd.start_step = nsteps();
+		if (steps && steps >= pd.elapsed_steps)
+			if (!(steps -= pd.elapsed_steps)) return false;
+		if ((break_on_step && nsteps() == break_on_step)
+			|| break_on_fp) return false;
+		goto next_sequence;
 	}
 	return false;
 }
@@ -681,15 +622,18 @@ void driver::db_save(std::string filename) {
 }
 
 void driver::load(std::string filename) {
-	if (ii->size()) throw_runtime_error( // TODO
-		"Loading into a running program is not yet supported.");
-	load_archives.emplace_back(archive::type::DRIVER, filename, 0, false);
-	load_archives.back() >> *this;
+	if (!ii->size()) {
+		load_archives.emplace_back(archive::type::DRIVER, filename,0,0);
+		if (!load_archives.back().error) load_archives.back() >> *this;
+		return;
+	}
+	error = true;
+	throw_runtime_error(
+		"Loading into a running program is not yet supported."); // TODO
 }
 
 void driver::save(std::string filename) {
-	archive ar(archive::type::DRIVER, filename, archive::size(*this),
-		true);
+	archive ar(archive::type::DRIVER, filename, archive::size(*this), true);
 	ar << *this;
 }
 
@@ -697,7 +641,7 @@ void driver::read_inputs() {
 	//COUT << "read_inputs() current_input: " << current_input << " next_input: " << (current_input ? current_input->next() : 0) << endl;
 	while (current_input && current_input->next()) {
 		current_input = current_input->next();
-		add(current_input);
+		if (!add(current_input)) return;
 		++current_input_id;
 		//COUT << "current_inputid: " << current_input_id << endl;
 	}
@@ -718,10 +662,10 @@ driver::driver(string s, options o) : rp(), opts(o) {
 	set_print_step(opts.enabled("ps"));
 	set_print_updates(opts.enabled("pu"));
 	set_populate_tml_update(opts.enabled("tml_update"));
-
 	if (ii) {
 		current_input = ii->first();
-		if (current_input) add(current_input);
+		if (current_input)
+			if (!add(current_input)) return;
 		read_inputs();
 	}
 }

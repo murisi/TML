@@ -17,7 +17,6 @@
 #include "dict.h"
 #include "input.h"
 #include "output.h"
-#include "err.h"
 using namespace std;
 
 #define mkchr(x) ((((int_t)x)<<2)|1)
@@ -264,7 +263,7 @@ form::ftype transformer::getdual( form::ftype type) {
 		case form::ftype::FORALL2 : return form::ftype::EXISTS2 ;
 		case form::ftype::EXISTS1 : return form::ftype::FORALL1 ;
 		case form::ftype::EXISTS2 : return form::ftype::FORALL2 ;
-		default: throw 0;
+		default: { DBGFAIL; return {}; }
 	}
 }
 
@@ -293,12 +292,12 @@ bool demorgan::push_negation( form *&root) {
 			root->type = getdual(root->type);
 			if( ! push_negation(root->l) ||
 				! push_negation(root->r))
-				throw 0;
+					{ DBGFAIL; }
 			return true;
 	}
 	else if ( allow_neg_move_quant && root->isquantifier()) {
 			root->type = getdual(root->type);
-			if( ! push_negation(root->r) ) throw 0;
+			if( ! push_negation(root->r) ) { DBGFAIL; }
 
 			return true;
 	}
@@ -425,7 +424,7 @@ bool pull_quantifier::apply( form *&root) {
 	if( lprefbeg && rprefbeg ) {
 		if(!dosubstitution(lprefbeg, lprefend) ||
 			!dosubstitution(rprefbeg, rprefend) )
-			throw 0;
+				{ DBGFAIL; }
 		curr->l = lprefend->r;
 		curr->r = rprefend->r;
 		lprefend->r = rprefbeg;
@@ -437,7 +436,7 @@ bool pull_quantifier::apply( form *&root) {
 	}
 	else if(lprefbeg) {
 		if(!dosubstitution(lprefbeg, lprefend))
-			throw 0;
+			{ DBGFAIL; }
 		curr->l = lprefend->r;
 		lprefend->r = curr;
 		root = lprefbeg;
@@ -447,7 +446,7 @@ bool pull_quantifier::apply( form *&root) {
 	}
 	else if (rprefbeg) {
 		if(!dosubstitution(rprefbeg, rprefend))
-			throw 0;
+			{ DBGFAIL; }
 		curr->r = rprefend->r;
 		rprefend->r = curr;
 		root = rprefbeg;
@@ -491,15 +490,16 @@ bool tables::from_raw_form(const raw_form_tree *rfm, form *&froot, bool &is_sol)
 
 	form::ftype ft = form::NONE;
 	bool ret =false;
-	form *root = NULL;
-	int_t arg= 0;
+	form *root = 0;
+	int_t arg = 0;
 
 	if(!rfm) return froot=root, true;
 
 	if(rfm->rt) {
 		ft = form::ATOM;
 		term t = from_raw_term(*rfm->rt);
-		root = new form(ft, 0, &t );
+		arg = dict.get_temp_sym(rfm->rt->e[0].e);
+		root = new form(ft, arg, &t );
 		froot = root;
 		if(!root) return false;
 		return true;
@@ -520,7 +520,8 @@ bool tables::from_raw_form(const raw_form_tree *rfm, form *&froot, bool &is_sol)
 				ft = form::ATOM;
 				if( rfm->type == elem::VAR)
 					arg = dict.get_var(rfm->el->e);
-				else arg = dict.get_sym(rfm->el->e);
+				else
+					arg = dict.get_temp_sym(rfm->el->e); //VAR2
 				root = new form(ft, arg);
 				froot = root;
 				if(!root) return false;
@@ -547,13 +548,11 @@ bool tables::from_raw_form(const raw_form_tree *rfm, form *&froot, bool &is_sol)
 			default: return froot= root, false;
 		}
 		root =  new form(ft,0, 0);
-		if( root ) {
-			ret = from_raw_form(rfm->l, root->l, is_sol);
-			if(ret) ret = from_raw_form(rfm->r, root->r, is_sol);
-			froot = root;
-			return ret;
-		}
-		return false;
+		ret = from_raw_form(rfm->l, root->l, is_sol);
+		if(ret) ret = from_raw_form(rfm->r, root->r, is_sol);
+		froot = root;
+		return ret;
+		//return false;
 	}
 }
 
@@ -888,19 +887,18 @@ body tables::get_body(const term& t, const varmap& vm, size_t len) const {
 }
 
 void tables::get_facts(const flat_prog& m) {
-	map<ntable, set<spbdd_handle>> f;
+	map<ntable, set<spbdd_handle>> add, del;
 	for (const auto& r : m)
 		if (r.size() != 1) continue;
 		else if (r[0].goal) goals.insert(r[0]);
-		else f[r[0].tab].insert(from_fact(r[0]));
+		else (r[0].neg ? del : add)[r[0].tab].insert(from_fact(r[0]));
 	clock_t start{}, end;
 	if (optimize) measure_time_start();
 	bdd_handles v;
-	for (auto x : f) {
-		spbdd_handle r = hfalse;
-		for (auto y : x.second) r = r || y;
-		tbls[x.first].t = r;
-	}
+	for (auto x : add) for (auto y : x.second)
+		tbls[x.first].t = tbls[x.first].t || y;
+	for (auto x : del) for (auto y : x.second)
+		tbls[x.first].t = tbls[x.first].t % y;
 	if (optimize)
 		(o::ms() << "# get_facts: "),
 		measure_time_end();
@@ -931,73 +929,61 @@ bool tables::to_pnf(form *&froot) {
 
 }
 
-/* Adds the given raw rule to the flat program after first converting it
- * into a term vector.
- * */
-
-void tables::add_rule(flat_prog &m, const raw_rule& r) {
+flat_prog tables::to_terms(const raw_prog& p) {
+	flat_prog m;
 	vector<term> v;
 	term t;
 
-	if (r.type == raw_rule::NONE && !r.b.empty()) {
-		for (const raw_term& x : r.h) {
-			get_nums(x), t = from_raw_term(x, true),
-			v.push_back(t);
-			for (const vector<raw_term>& y : r.b) {
-				int i = 0;
-				for (const raw_term& z : y) // term_set(
-					v.push_back(from_raw_term(z, false, i++)),
-					get_nums(z);
-				align_vars(v), m.insert(move(v));
+	for (const raw_rule& r : p.r)
+		if (r.type == raw_rule::NONE && !r.b.empty()) {
+			for (const raw_term& x : r.h) {
+				get_nums(x), t = from_raw_term(x, true),
+				v.push_back(t);
+				for (const vector<raw_term>& y : r.b) {
+					int i = 0;
+					for (const raw_term& z : y) // term_set(
+						v.push_back(from_raw_term(z, false, i++)),
+						get_nums(z);
+					align_vars(v), m.insert(move(v));
+				}
 			}
 		}
-	}
-	else if(r.prft != NULL) {
+		else if(r.prft != NULL) {
 
-		const raw_term& x = r.h.front();
-		get_nums(x), t = from_raw_term(x, true), v.push_back(t);
+			const raw_term& x = r.h.front();
+			get_nums(x), t = from_raw_term(x, true), v.push_back(t);
 
-		bool is_sol = false;
-		form* froot = NULL;
+			bool is_sol = false;
+			form* froot = NULL;
 
-		from_raw_form(r.prft.get(), froot, is_sol);
+			from_raw_form(r.prft.get(), froot, is_sol);
+			/*
+			DBG(COUT << "\n ........... \n";)
+			DBG(r.prft.get()->printTree();)
+			DBG(COUT << "\n ........... \n";)
+			DBG(froot->printnode(0, this);)
+			*/
+			term::textype extype;
+			if(is_sol) {
+				//DBG(COUT << "\n SOL parsed \n";)
+				//to_pnf(froot);
+				extype = term::FORM2;
 
-		DBG(COUT << "\n ........... \n";)
-		DBG(r.prft.get()->printTree();)
-		DBG(COUT << "\n ........... \n";)
-		DBG(froot->printnode(0, this);)
-
-		term::textype extype = term::FORM1;
-		if(is_sol) {
-			DBG(COUT << "\n SOL parsed \n";)
-			//to_pnf(froot);
-			extype = term::FORM2;
+			} else {
+				//froot->implic_rmoval();
+				extype = term::FORM1;
+			}
+			t = term(extype, move(froot));
+			v.push_back(t);
+			//align_vars(v);
+			m.insert(move(v));
+		} else  {
+			for (const raw_term& x : r.h)
+				t = from_raw_term(x, true),
+				t.goal = r.type == raw_rule::GOAL,
+				m.insert({t}), get_nums(x);
 		}
-		//if(froot->is_sol()) to_pnf(froot), extype = term::FORM2;
-		//else froot->implic_rmoval(), froot->printnode(); //forcing implic removal for FOL here
-		//assert(froot);
 
-		t = term(extype, move(froot));
-		v.push_back(t);
-		//align_vars(v);
-		m.insert(move(v));
-		//delete froot;
-	} else  {
-		for (const raw_term& x : r.h)
-			t = from_raw_term(x, true),
-			t.goal = r.type == raw_rule::GOAL,
-			m.insert({t}), get_nums(x);
-	}
-}
-
-/* Creates a flat program containing the same rules as the raw program after
- * they have been converted to term vectors.
- */
-
-flat_prog tables::to_terms(const raw_prog& p) {
-	flat_prog m;
-	for (const raw_rule& r : p.r)
-		add_rule(m, r);
 	return m;
 }
 
@@ -1052,13 +1038,13 @@ flat_prog& get_canonical_db(vector<vector<term>>& x, flat_prog& p) {
 	return p;
 }
 
-/*void tables::run_internal_prog(flat_prog p, raw_prog &rp, set<term>& r, size_t nsteps) {
+void tables::run_internal_prog(flat_prog p, set<term>& r, size_t nsteps) {
 	dict_t tmpdict(dict); // copy ctor, only here, if this's needed at all?
 	tables t(move(tmpdict), false, false, true);
 	//t.dict = dict;
 	t.bcqc = false, t.chars = chars, t.nums = nums;
-	if (!t.run_nums(move(p), rp, r, nsteps)) throw 0;
-}*/
+	if (!t.run_nums(move(p), r, nsteps)) { DBGFAIL; }
+}
 
 void getvars(const term& t, set<int_t>& v) {
 	for (int_t i : t) if (i < 0) v.insert(i);
@@ -1441,40 +1427,34 @@ void tables::cqc(flat_prog& p) {
 		v.emplace_back(r), cqc_minimize(v.back());
 }*/
 
-void tables::get_form(pnf_t *p, const term_set& al, const term& h,std::set<alt>&
-#ifdef DEBUG
-	as
-#endif
-) {
+void tables::get_form(pnf_t *p, const term_set& al, const term& h) {
 
 	auto t = al.begin();
-	DBG(assert(t->extype == term::FORM1));
-	DBG(assert(as.size() == 0));
+	DBG(assert(t->extype == term::FORM1 || t->extype == term::FORM2));
 
-	//XXX: do same that for alts, but for pnf_t formula tree?
-	alt a;
-	a.vm = get_varmap(h, al, a.varslen);
-	a.inv = varmap_inv(a.vm);
-
-	o::dbg()<<L"\n FOL preparation ... \n " << endl;
-
-	//XXX: check vars in header
-	varmap vm;
-	form* f = t->qbf;
-	handler_form1(p, f, vm);
-
-	varmap vmh;
-	size_t varslen;
 	const term_set anull;
-	vmh = get_varmap(h, anull, varslen);
+	size_t varsh;
+	varmap vm = get_varmap(h, anull, varsh), vmh;
+	varsh = vm.size();
+	form* f = t->qbf;
+	p->vm = vm;
 
-	//**** varslen should be provided by from_raw_form
-	if (vmh.size() > 0) {
-		auto d = deltail(2, h.size());
-		p->ex = d.first;
-		p->perm = get_perm(h, p->vm, p->vm.size());
+	if (t->extype == term::FORM1) {
+		//o::dbg()<< "\n FOL preparation ... \n " << endl;
+		handler_form1(p, f, vm, vmh);
+
+	} else { //t->extype == term::FORM2
+		//o::dbg()<<"\n SOL preparation ... \n " << endl;
+	    handler_formh(p, f, vm, vmh);
 	}
-
+	if (varsh > 0) {
+		auto d = deltail(p->vm.size(), h.size());
+		term t; t.resize(vm.size());
+		for (auto &v : vm) t[v.second] = v.first;
+		assert(vm.size() == p->vm.size());
+		p->perm_h = get_perm(t, p->vm, p->vm.size());
+		p->ex = d.first, p->perm = d.second;
+	}
 	/*
 	set<int_t> vs;
 	set<pair<body, term>> b;
@@ -1538,9 +1518,12 @@ void tables::get_rules(flat_prog p) {
 		r.len = t.size();
 
 		for (const term_set& al : x.second)
-			if (al.begin()->extype != term::FORM1)
+			if (al.begin()->extype == term::FORM1)
+				r.f = new(pnf_t), get_form(r.f, al, t);
+			else if (al.begin()->extype == term::FORM2)
+				r.f = new(pnf_t), get_form(r.f, al, t);
+			else
 				get_alt(al, t, as);
-			else r.f = new(pnf_t), get_form(r.f, al, t, as);
 
 		for (alt x : as)
 			if ((ait = alts.find(&x)) != alts.end())
@@ -1959,7 +1942,7 @@ bool ptransformer::parse_factor( vector<elem> &next, size_t& cur){
 	else return cur = cur1, false;
 }
 
-bool ptransformer::visit( ) {
+bool ptransformer::visit() {
 	size_t cur = 1;		
 	DBG(COUT<<endl<<p<<endl);
 	bool ret = this->parse_alts( this->p.p, cur);
@@ -1968,7 +1951,8 @@ bool ptransformer::visit( ) {
 	DBG(COUT<<p<<endl);
 	for ( production t : lp )
 		DBG(COUT<<t<<endl);
-	if(!ret) parse_error("Error Production", cur < this->p.p.size()?p.p[cur].e : p.p[0].e );
+	if(!ret) parse_error("Error Production",
+		cur < this->p.p.size() ? p.p[cur].e : p.p[0].e );
 	return ret;
 	
 }
@@ -1978,18 +1962,18 @@ bool tables::transform_ebnf(vector<production> &g, dict_t &d, bool &changed){
 	changed = false;
 	for (size_t k = 0; k != g.size();k++) {
 		ptransformer pt(g[k], d);
-		if(!pt.visit()) { ret = false;  continue; }
+		if(!pt.visit()) return error = true, ret = false;
 		g.insert( g.end(), pt.lp.begin(), pt.lp.end() ), 
 		changed |= pt.lp.size()>0;
 	}
 	return ret;
 }
-void tables::transform_grammar(vector<production> g, flat_prog& p, form *&r ) {
-	if (g.empty()) return;
+bool tables::transform_grammar(vector<production> g, flat_prog& p, form*& /*r*/ ) {
+	if (g.empty()) return true;
 //	o::out()<<"grammar before:"<<endl;
 //	for (production& p : g) o::out() << p << endl;
 	bool changed;
-	if(!transform_ebnf(g, dict, changed )) return;
+	if(!transform_ebnf(g, dict, changed )) return true;
 
 	for (size_t k = 0; k != g.size();) {
 		if (g[k].p.size() < 2) parse_error(err_empty_prod, g[k].p[0].e);
@@ -2119,8 +2103,7 @@ void tables::transform_grammar(vector<production> g, flat_prog& p, form *&r ) {
 				v.push_back(move(plus1));
 				*/
 
-			} else throw runtime_error(
-				"Unexpected grammar element");
+			} else return er("Unexpected grammar element");
 			v.push_back(move(t));
 			refs[n] = v.back(); 		
 		}
@@ -2129,9 +2112,15 @@ void tables::transform_grammar(vector<production> g, flat_prog& p, form *&r ) {
 		for(int_t i =-1; i >= (int_t)-x.p.size(); i--) 
 			dict.get_var_lexeme_from(i);		
 		// adding quantifier
-		for(int_t j = 2; j< (int_t)x.p.size();j++)
-			root = new form(form::EXISTS1, -j, NULL, NULL, root);
-		DBG(COUT<<endl; root->printnode(0, this);)
+		for(int_t j = 2; j< (int_t)x.p.size();j++) {
+			root = new form(form::EXISTS1, 0,  NULL, new form(form::ATOM, -j), root);
+		}
+		//DBG(COUT<<endl; root->printnode(0, this);)
+		#define GRAMMAR_FOL
+		#ifdef GRAMMAR_FOL
+		v.erase(v.begin()+1,v.end());
+		v.emplace_back(term::FORM1, move(root));
+		#endif
 
 		std::set<term> done;
 		bool beqrule = false;
@@ -2174,10 +2163,10 @@ void tables::transform_grammar(vector<production> g, flat_prog& p, form *&r ) {
 				aritht[2] = oside;
 				//if(!done.insert(aritht).second)
 				if(n == rt.e.size())	v.push_back(aritht);
-				else er(" Only simple binary operation allowed." );
+				else return er("Only simple binary operation allowed.");
 			}
 			else if( n < rt.e.size() && 
-					 (rt.e[n].type == elem::EQ || rt.e[n].type == elem::LEQ)) {
+				   (rt.e[n].type == elem::EQ || rt.e[n].type == elem::LEQ)) {
 				//format: lopd = ropd
 				term equalt;
 				equalt.resize(2);
@@ -2209,7 +2198,7 @@ void tables::transform_grammar(vector<production> g, flat_prog& p, form *&r ) {
 						aritht[2] = lopd;
 						//if(!done.insert(aritht).second)
 						if(n == rt.e.size())	v.push_back(aritht);
-						else er("Only simple binary operation allowed.");
+						else return er("Only simple binary operation allowed.");
 		
 				} else parse_error(err_constraint_syntax);
 			}
@@ -2221,9 +2210,10 @@ void tables::transform_grammar(vector<production> g, flat_prog& p, form *&r ) {
 		<< "after transform_grammar:\n", p)
 		<< "\nrun after a fixed point:\n", prog_after_fp)
 		<< endl;
+	return true;
 }
 
-void tables::add_prog(raw_prog& p, const strs_t& strs_) {
+bool tables::add_prog(const raw_prog& p, const strs_t& strs_) {
 	strs = strs_;
 	if (!strs.empty())
 		chars = 255,
@@ -2234,10 +2224,10 @@ void tables::add_prog(raw_prog& p, const strs_t& strs_) {
 		dict.get_sym(dict.get_lexeme("printable"));
 	for (auto x : strs) nums = max(nums, (int_t)x.second.size()+1);
 
-	add_prog(to_terms(p), p.g);
+	return add_prog(to_terms(p), p.g);
 }
 
-/*bool tables::run_nums(flat_prog m, raw_prog &rp, set<term>& r, size_t nsteps) {
+bool tables::run_nums(flat_prog m, set<term>& r, size_t nsteps) {
 	map<ntable, ntable> m1, m2;
 	auto f = [&m1, &m2](ntable *x) {
 		auto it = m1.find(*x);
@@ -2269,11 +2259,11 @@ void tables::add_prog(raw_prog& p, const strs_t& strs_) {
 		x.insert(x.begin() + 1, s.begin(), s.end()), p.insert(x);
 	}
 //	DBG(print(o::out()<<"run_nums for:"<<endl, p)<<endl<<"returned:"<<endl;)
-	add_prog(move(p), rp, {});
+	if (!add_prog(move(p), {})) return false;
 	if (!pfp(nsteps)) return false;
 	r = g(decompress());
 	return true;
-}*/
+}
 
 void tables::add_tml_update(const term& t, bool neg) {
 	// TODO: decompose nstep if too big for the current universe
@@ -2305,7 +2295,8 @@ void tables::init_tml_update() {
 	sym_del = dict.get_sym(dict.get_lexeme("delete"));
 }
 
-void tables::add_prog(flat_prog m, const vector<production>& g, bool mknums) {
+bool tables::add_prog(flat_prog m, const vector<production>& g, bool mknums) {
+	error = false;
 	smemo.clear(), ememo.clear(), leqmemo.clear();
 	if (mknums) to_nums(m);
 	if (populate_tml_update) init_tml_update();
@@ -2314,13 +2305,14 @@ void tables::add_prog(flat_prog m, const vector<production>& g, bool mknums) {
 	while (max(max(nums, chars), syms) >= (1 << (bits - 2))) add_bit();
 	for (auto x : strs) load_string(x.first, x.second);
 	form *froot;
-	transform_grammar(g, m, froot);
+	if (!transform_grammar(g, m, froot)) return false;
 	get_rules(move(m));
 //	clock_t start, end;
 //	o::dbg()<<"load_string: ";
 //	measure_time_start();
 //	measure_time_end();
 	if (optimize) bdd::gc();
+	return true;
 }
 
 pair<bools, uints> tables::deltail(size_t len1, size_t len2) const {
@@ -2522,17 +2514,17 @@ char tables::fwd() noexcept {
 		spbdd_handle x;
 		bdd_handles f; //form
 
-		if (r.f == NULL)
+		if (!r.f)
 			for (size_t n = 0; n != r.size(); ++n)
 				v[n] = alt_query(*r[n], r.len);
 		else {
-			form_query(r.f, f);
-			//XXX: wrap up this for any type, working with ints so far
+			formula_query(r.f, f);
+			//TODO: complete for any type, only for ints by now
 			append_num_typebits(f[0], r.f->vm.size());
-
-			if (r.f->ex.size() != 0 && r.f->perm.size() != 0) //workaround for const header
+			f[0] = f[0]^r.f->perm_h;
+			if (r.f->ex.size() != 0)
 				v[0] = bdd_and_many_ex_perm(f,r.f->ex, r.f->perm);
-			else v[0] = f[0];
+			else v[0] = f[0] == hfalse ? hfalse : htrue;
 		}
 
 		if (v == r.last) { if (datalog) continue; x = r.rlast; }
@@ -2603,43 +2595,66 @@ level tables::get_front() const {
 	return r;
 }
 
+bool tables::contradiction_detected() {
+	error = true, o::err() << err_contradiction << endl;
+#ifdef WITH_EXCEPTIONS
+	throw contradiction_exception();
+#endif
+	return false;
+}
+bool tables::infloop_detected() {
+	error = true, o::err() << err_infloop << endl;
+#ifdef WITH_EXCEPTIONS
+	throw infloop_exception();
+#endif
+	return false;
+}
+
 bool tables::pfp(size_t nsteps, size_t break_on_step) {
+	error = false;
 	if (bproof) levels.emplace_back(get_front());
 	level l;
 	for (;;) {
-		for (ntable tab = 0; (size_t)tab != tbls.size(); ++tab)
-			/*decompress(tbls.at(tab).t, tab, [this](const term& r) {
-				});*/
 		if (print_steps || optimize)
 			o::inf() << "# step: " << nstep << endl;
 		++nstep;
 		if (!fwd()) return true; // FP found
-		if (unsat) throw contradiction_exception();
+		if (unsat) return contradiction_detected();
 		if ((break_on_step && nstep == break_on_step) ||
 			(nsteps && nstep == nsteps)) return false; // no FP yet
 		l = get_front();
 		if (!datalog && !fronts.emplace(l).second)
-			throw infloop_exception();
+			return infloop_detected();
 		if (bproof) levels.push_back(move(l));
 	}
-	throw 0;
+	DBGFAIL;
 }
 
-bool tables::run_prog(raw_prog& p, const strs_t& strs, size_t steps,
+bool tables::run_prog(const raw_prog& p, const strs_t& strs, size_t steps,
 	size_t break_on_step)
 {
 	clock_t start{}, end;
 	double t;
 	if (optimize) measure_time_start();
-	add_prog(p, strs);
+	if (!add_prog(p, strs)) return false;
 	if (optimize) {
 		end = clock(), t = double(end - start) / CLOCKS_PER_SEC;
 		o::ms() << "# pfp: ";
 		measure_time_start();
 	}
+	nlevel begstep = nstep;
 	bool r = pfp(steps ? nstep + steps : 0, break_on_step);
-	if (r && prog_after_fp.size())
-		add_prog(move(prog_after_fp), {}, false), r = pfp();
+	size_t went = nstep - begstep;
+	if (r && prog_after_fp.size()) {
+		if (!add_prog(move(prog_after_fp), {}, false)) return false;
+		r = pfp();
+	}
+	if (r) for (const raw_prog& np : p.nps) {
+		if (!r && went >= steps) break;
+		steps -= went; begstep = nstep;
+		r |= run_prog(np, strs, steps, break_on_step);
+		went = nstep - begstep;
+	}
 	if (optimize)
 		(o::ms() <<"add_prog: "<<t << " pfp: "),
 		measure_time_end();

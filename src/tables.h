@@ -25,6 +25,7 @@
 #include "dict.h"
 #include "input.h"
 #include "form.h"
+#include "err.h"
 
 typedef int_t rel_t;
 class archive;
@@ -36,15 +37,10 @@ struct raw_form_tree;
 class tables;
 //class dict_t;
 
-// The signature of a fact/rule is a pair comprising the relation id
-// and a list of the ids of each place in the relation.
 typedef std::pair<rel_t, ints> sig;
 //typedef std::map<int_t, size_t> varmap;
 typedef std::map<int_t, int_t> env;
 typedef bdd_handles level;
-// Each vector in a flat_prog represents a fact or a rule
-// The first term in a fact/rule is its head, that occurs on the LHS of :-
-// The remaining terms represent its body, that occurs on the RHS of :-
 typedef std::set<std::vector<term>> flat_prog;
 
 template<typename T>
@@ -130,7 +126,7 @@ struct rule : public std::vector<alt*> {
 	size_t len;
 	bdd_handles last;
 	term t;
-	pnf_t* f = NULL; //TODO destruct or make it smart
+	pnf_t* f = 0; //TODO make it smart
 	bool operator<(const rule& t) const {
 		if (neg != t.neg) return neg;
 		if (tab != t.tab) return tab < t.tab;
@@ -147,7 +143,6 @@ struct rule : public std::vector<alt*> {
 
 struct table {
 	sig s;
-	// The arity of the associated rule/fact
 	size_t len, priority = 0;
 	spbdd_handle t = hfalse;
 	bdd_handles add, del;
@@ -294,7 +289,13 @@ private:
 	spbdd_handle addtail(cr_spbdd_handle x, size_t len1, size_t len2) const;
 	spbdd_handle body_query(body& b, size_t);
 	spbdd_handle alt_query(alt& a, size_t);
-	void form_query(pnf_t *f, bdd_handles& v1);
+
+	void fol_query(pnf_t *f, bdd_handles& v);
+	void hol_query(pnf_t *f, bdd_handles& v, bdd_handles &v2, std::vector<bdd_handles> &hvarmap,
+			std::vector<quant_t> &quantsh, varmap &vmh);
+	void pr(spbdd_handle& b, spbdd_handle &vh, bdd_handles &vm, bool neg);
+	void formula_query(pnf_t *f, bdd_handles& v);
+
 	void alt_query_bltin(alt& a, bdd_handles& v1); //XXX review
 	DBG(vbools allsat(spbdd_handle x, size_t args) const;)
 	void decompress(spbdd_handle x, ntable tab, const cb_decompress&,
@@ -306,7 +307,7 @@ private:
 	void term_get_grounds(const term& t, size_t level, cb_ground f);
 	std::set<witness> get_witnesses(const term& t, size_t l);
 	size_t get_proof(const term& q, proof& p, size_t level, size_t dep=-1);
-	//void run_internal_prog(flat_prog p, raw_prog &rp, std::set<term>& r, size_t nsteps=0);
+	void run_internal_prog(flat_prog p, std::set<term>& r, size_t nsteps=0);
 	ntable create_tmp_rel(size_t len);
 	void create_tmp_head(std::vector<term>& x);
 	void print_env(const env& e, const rule& r) const;
@@ -318,11 +319,10 @@ private:
 	void out(spbdd_handle, ntable, const rt_printer&) const;
 	void get_nums(const raw_term& t);
 	flat_prog to_terms(const raw_prog& p);
-	void add_rule(flat_prog &m, const raw_rule& r);
 
 	void get_facts(const flat_prog& m);
 	void get_alt(const term_set& al, const term& h, std::set<alt>& as);
-	void get_form(pnf_t*, const term_set& al, const term& h, std::set<alt>& as);
+	void get_form(pnf_t*, const term_set& al, const term& h);
 	void get_rules(flat_prog m);
 
 	ntable get_table(const sig& s);
@@ -332,8 +332,10 @@ private:
 	lexeme get_new_rel();
 	void load_string(lexeme rel, const string_t& s);
 	lexeme get_var_lexeme(int_t i);
-	void add_prog(flat_prog m, const std::vector<struct production>&,
+	bool add_prog(flat_prog m, const std::vector<struct production>&,
 		bool mknums = false);
+	bool contradiction_detected();
+	bool infloop_detected();
 	char fwd() noexcept;
 	level get_front() const;
 	std::vector<term> interpolate(std::vector<term> x, std::set<int_t> v);
@@ -345,7 +347,7 @@ private:
 	
 	bool get_substr_equality(const raw_term &rt, size_t &n, std::map<size_t, term> &ref, 
 					std::vector<term> &v, std::set<term> &done);
-	void transform_grammar(std::vector<struct production> g, flat_prog& p, form *&root);
+	bool transform_grammar(std::vector<struct production> g, flat_prog& p, form *&root);
 	bool transform_ebnf(std::vector<struct production> &g, dict_t &d, bool &changed);
 	bool cqc(const std::vector<term>& x, std::vector<term> y) const;
 //	flat_prog cqc(std::vector<term> x, std::vector<term> y) const;
@@ -386,7 +388,8 @@ private:
 	spbdd_handle perm_from_to(size_t from, size_t to, spbdd_handle in, size_t n_bits, size_t n_vars);
 	spbdd_handle perm_bit_reverse(spbdd_handle in,  size_t n_bits, size_t n_vars);
 
-	void handler_form1(pnf_t *p, form* f, varmap &vm);
+	void handler_form1(pnf_t *p, form* f, varmap &vm, varmap &vmh);
+	void handler_formh(pnf_t *p, form* f, varmap &vm, varmap &vmh);
 	bool handler_arith(const term& t, varmap &vm, size_t varslen, spbdd_handle &cons);
 
 	spbdd_handle leq_var(size_t arg1, size_t arg2, size_t args,
@@ -423,16 +426,17 @@ private:
 	t_arith_op get_bwop(lexeme l);
 	t_arith_op get_pwop(lexeme l);
 
-
+	template <typename T>
+	bool er(const T& data) { return error=true, throw_runtime_error(data); }
 public:
 	tables(dict_t dict, bool bproof = false, bool optimize = true,
 		bool bin_transform = false, bool print_transformed = false);
 	~tables();
 	size_t step() { return nstep; }
-	void add_prog(raw_prog& p, const strs_t& strs);
-	bool run_prog(raw_prog& p, const strs_t& strs, size_t steps = 0,
+	bool add_prog(const raw_prog& p, const strs_t& strs);
+	bool run_prog(const raw_prog& p, const strs_t& strs, size_t steps = 0,
 		size_t break_on_step = 0);
-	//bool run_nums(flat_prog m, raw_prog &rp, std::set<term>& r, size_t nsteps);
+	bool run_nums(flat_prog m, std::set<term>& r, size_t nsteps);
 	bool pfp(size_t nsteps = 0, size_t break_on_step = 0);
 	template <typename T>
 	void out(std::basic_ostream<T>&) const;
@@ -447,6 +451,7 @@ public:
 
 	template <typename T>
 	std::basic_ostream<T>& print_dict(std::basic_ostream<T>&) const;
+	bool error = false;
 	bool populate_tml_update = false;
 	bool print_updates       = false;
 	bool print_steps         = false;
@@ -570,22 +575,22 @@ struct ptransformer{
 template <typename T>
 std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const vbools& x);
 
+#ifdef WITH_EXCEPTIONS
 struct unsat_exception : public std::exception {
 	virtual const char* what() const noexcept { return "unsat."; }
 };
 
 struct contradiction_exception : public unsat_exception {
 	virtual const char* what() const noexcept {
-		return "unsat (contradiction).";
+		return err_contradiction;
 	}
 };
 
 struct infloop_exception : public unsat_exception {
 	virtual const char* what() const noexcept {
-		return "unsat (infinite loop).";
+		return err_infloop;
 	}
 };
-
-
+#endif
 
 //#endif

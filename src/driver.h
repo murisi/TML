@@ -90,6 +90,7 @@ class driver {
 	void transform_proofs(raw_prog& r, const lexeme& rel);
 //	void transform_string(const sysstring_t&, raw_prog&, int_t);
 	void transform_grammar(raw_prog& r, lexeme rel, size_t len);
+  elem generate_var(int &var_counter);
   void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
 	raw_prog read_prog(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp, std::vector<elem>::const_iterator &prog_end);

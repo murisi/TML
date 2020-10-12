@@ -415,10 +415,10 @@ void driver::transform_evals(raw_prog &rp) {
 												for(int gidx2 = gidx1; gidx2 < prog_tree[ridx][didx2].size(); gidx2++) {
 													if(didx2 == 0 && gidx2 != hidx) continue;
 													for(int inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
-														rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENB, openbl),
+														rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENB, openbl), elem(elem::OPENB, openbl),
 															quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx1), elem(gidx1), elem(inidx1), elem(elem::CLOSEP, dict.cl),
 															elem(elem::AND, andl), quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx2), elem(gidx2), elem(inidx2), elem(elem::CLOSEP, dict.cl),
-															elem(elem::AND, andl), quote_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), quote_map[{ridx, didx2, gidx2, inidx2}],
+															elem(elem::AND, andl), quote_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), quote_map[{ridx, didx2, gidx2, inidx2}], elem(elem::CLOSEB, closebl),
 															elem(elem::IMPLIES, impliesl), real_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), real_map[{ridx, didx2, gidx2, inidx2}], elem(elem::CLOSEB, closebl)});
 													}
 												}

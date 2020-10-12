@@ -375,6 +375,48 @@ std::string quote_sym(const elem& e) {
 }
 
 template <typename T>
+basic_ostream<T>& operator<<(basic_ostream<T>& os, const raw_form_tree &t) {
+	switch(t.type) {
+		case elem::IMPLIES:
+			os << "{" << *t.l << " -> " << *t.r << "}";
+			break;
+		case elem::COIMPLIES:
+			os << "{" << *t.l << " <-> " << *t.r << "}";
+			break;
+		case elem::AND:
+			os << "{" << *t.l << " && " << *t.r << "}";
+			break;
+		case elem::ALT:
+			os << "{" << *t.l << " || " << *t.r << "}";
+			break;
+		case elem::NOT:
+			os << "~{" << *t.l << "}";
+			break;
+		case elem::EXISTS:
+			os << "exists " << *t.l << " { " << *t.r << " }";
+			break;
+		case elem::UNIQUE:
+			os << "unique " << *t.l << " { " << *t.r << " }";
+			break;
+		case elem::NONE:
+			os << *t.rt;
+			break;
+		case elem::FORALL:
+			os << "forall " << *t.l << " { " << *t.r << " }";
+			break;
+		case elem::SYM: case elem::VAR:
+			os << *t.el;
+			break;
+		default:
+			assert(false); //should never reach here
+	}
+	return os;
+}
+template basic_ostream<char>& operator<<(basic_ostream<char>&, const raw_form_tree &);
+template
+basic_ostream<wchar_t>& operator<<(basic_ostream<wchar_t>&, const raw_form_tree &);
+
+template <typename T>
 basic_ostream<T>& operator<<(basic_ostream<T>& os, const raw_term& t) {
 	if (t.neg) os << '~';
 	
@@ -440,13 +482,17 @@ basic_ostream<T>& operator<<(basic_ostream<T>& os, const raw_rule& r) {
 	}
 	for (size_t n = 0; n < r.h.size(); ++n)
 		if ((os << r.h[n]), n != r.h.size() - 1) os << ',';
-	if (!r.b.size()) return os << '.';
+	if (!r.b.size() && r.prft == NULL) return os << '.';
 	os << " :- " << endl;
-	for (size_t n = 0; n < r.b.size(); ++n) {
-		for (size_t k = 0; k < r.b[n].size(); ++k)
-			if ((os << '\t' << r.b[n][k]), k != r.b[n].size() - 1)
-				os << ',' << endl;
-		if (n != r.b.size() - 1) os << ';' << endl;
+	if(!r.b.empty()) {
+		for (size_t n = 0; n < r.b.size(); ++n) {
+			for (size_t k = 0; k < r.b[n].size(); ++k)
+				if ((os << '\t' << r.b[n][k]), k != r.b[n].size() - 1)
+					os << ',' << endl;
+			if (n != r.b.size() - 1) os << ';' << endl;
+		}
+	} else if(r.prft != NULL) {
+		os << '\t' << *r.prft;
 	}
 	return os << '.';
 }

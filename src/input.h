@@ -437,6 +437,8 @@ std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const directive& d)
 template <typename T>
 std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const elem& e);
 template <typename T>
+std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const raw_form_tree &t);
+template <typename T>
 std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const raw_term& t);
 template <typename T>
 std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const std::pair<raw_term, std::string>& p);

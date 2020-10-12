@@ -90,11 +90,13 @@ class driver {
 	void transform_proofs(raw_prog& r, const lexeme& rel);
 //	void transform_string(const sysstring_t&, raw_prog&, int_t);
 	void transform_grammar(raw_prog& r, lexeme rel, size_t len);
-  elem generate_var(int &var_counter);
-  void transform_evals(raw_prog &rp);
+	elem generate_var(int &var_counter);
+	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
 	raw_prog read_prog(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp, std::vector<elem>::const_iterator &prog_end);
 	raw_term quote_term(const raw_term &head, const elem &rel_name, int rule_idx, int disjunct_idx, int goal_idx, std::vector<std::tuple<int, int, int, int>> &variables);
+	std::vector<std::tuple<int, int, int, int>> extract_quote_arity(const elem &quote_rel, const raw_prog &rp);
+	std::vector<std::vector<std::vector<int>>> extract_quote_arity_tree(const elem &quote_rel, const raw_prog &rp);
 	raw_prog reify(const raw_prog& p);
 	raw_term from_grammar_elem(const elem& v, int_t v1, int_t v2);
 	raw_term from_grammar_elem_nt(const lexeme& r, const elem& c,
@@ -171,7 +173,7 @@ public:
 	input* get_current_input() const { return current_input; }
 	void set_current_input(input* in) { current_input = in; }
 	void read_inputs();
-  
+	
 #ifdef __EMSCRIPTEN__
 	void out(emscripten::val o) const { if (tbl) tbl->out(o); }
 	emscripten::val to_bin() {

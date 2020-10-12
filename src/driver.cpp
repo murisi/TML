@@ -111,9 +111,9 @@ raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int rule
 	dict_t &dict = tbl->get_dict();
 	// The elements of the term that we're building up
 	std::vector<elem> quoted_term_e;
-	// Add metadata to quoted term: term signature, rule #, disjunct #, goal #, relation sym
+	// Add metadata to quoted term: term signature, rule #, disjunct #, goal #, total inputs, relation sym
 	quoted_term_e.insert(quoted_term_e.end(),
-		{rel_name, elem(elem::OPENP, dict.op), elem(0), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), head.e[0] });
+		{rel_name, elem(elem::OPENP, dict.op), elem(0), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), elem((int_t) head.e.size()-3), head.e[0] });
 	for(std::vector<elem>::size_type param_idx = 2; param_idx < head.e.size() - 1; param_idx ++) {
 		if(head.e[param_idx].type == elem::VAR) {
 			// Convert the variable to a symbol and add it to quouted term
@@ -188,7 +188,7 @@ raw_prog driver::read_prog(std::vector<elem>::const_iterator iter, std::vector<e
  * rule to quote. Say that the output relation name is s, quote will populate it
  * according to the following schema:
  * For each context, each N-ary term is stored as:
- * s(0 <rule #> <disjunct #> <goal #> <relname> <input0> <input1> ... <inputN>)
+ * s(0 <rule #> <disjunct #> <goal #> <total inputs> <relname> <input0> <input1> ... <inputN>)
  * The locations of the variables in the above schema are stored as:
  * s(1 <rule #> <disjunct #> <goal #> <input #>) */
 
@@ -255,19 +255,65 @@ void driver::transform_quotes(raw_prog &rp) {
 	}
 }
 
+/* Generate a unique variable and update the counter. */
+
 elem driver::generate_var(int &var_counter) {
-  input *i = tmpii.add_string("?" + std::to_string(var_counter++));
-  i->prog_lex();
-  elem var;
-  var.parse(i);
-  return var;
+	input *i = tmpii.add_string("?" + std::to_string(var_counter++));
+	i->prog_lex();
+	elem var;
+	var.parse(i);
+	return var;
+}
+
+/* Extract the arities stored in a quote arity relation. A quote arity relation
+ * has the following schema:
+ * s(0 <rule #> <disjunct #> <goal #> <total inputs> ...)
+ * Note that this means that every quote relation contains a quote arity relation. */
+
+std::vector<std::tuple<int, int, int, int>> driver::extract_quote_arity(const elem &quote_rel, const raw_prog &rp) {
+	std::vector<std::tuple<int, int, int, int>> quote_shape;
+	for(const raw_rule &rr : rp.r) {
+		if(lexeme2str(rr.h[0].e[0].e) == lexeme2str(quote_rel.e) && rr.h[0].e[2].num == 0) {
+			quote_shape.push_back(std::make_tuple(rr.h[0].e[3].num, rr.h[0].e[4].num, rr.h[0].e[5].num, rr.h[0].e[6].num));
+		}
+	}
+	return quote_shape;
+}
+
+/* Extract the arities stored in a quote arity relation and put them into a tree
+ * format. */
+
+std::vector<std::vector<std::vector<int>>> driver::extract_quote_arity_tree(const elem &quote_rel, const raw_prog &rp) {
+	std::vector<std::tuple<int, int, int, int>> prog_shape = extract_quote_arity(quote_rel, rp);
+	std::vector<std::vector<std::vector<int>>> prog_tree;
+	// We need the verticies to be in lexicographic order for the loop to
+	// reconstruct the tree correctly.
+	std::sort(prog_shape.begin(), prog_shape.end());
+	std::tuple<int, int, int, int> prev_pos { -1, 0, 0, 0 };
+	// Put the program arity into the form of a tree.
+	for(auto const& pos : prog_shape) {
+		// Figure out which rule and where in the rule to put this term.
+		if(get<0>(pos) != get<0>(prev_pos)) {
+			// Case where we have encountered new rule in map
+			prog_tree.push_back({{get<3>(pos)}});
+		} else if(get<1>(pos) != get<1>(prev_pos)) {
+			// Case where we have encountered new disjunct in map
+			prog_tree.back().push_back({get<3>(pos)});
+		} else if(get<2>(pos) != get<2>(prev_pos)) {
+			// Case where we have encountered new goal in map
+			prog_tree.back().back().push_back(get<3>(pos));
+		}
+		prev_pos = pos;
+	}
+	return prog_tree;
 }
 
 /* Loop through the rules of the given program checking if they use a relation
  * called "eval" in their bodies. If eval is used, take its single argument,
  * the name of a relation containing a representation of a TML program, and
- * append to the current program the program represented by the relation.
- * See driver::transform_quotes for the schema of the relation. */
+ * append to the current program a relation equivalent to the original TML
+ * program but that only depends on the relation's arity and its name - not
+ * its entries. */
 
 void driver::transform_evals(raw_prog &rp) {
 	// We'll need the dict when we're creating terms with parentheses
@@ -278,181 +324,151 @@ void driver::transform_evals(raw_prog &rp) {
 		for(std::vector<raw_term> &bodie : outer_rule.b) {
 			for(raw_term &rhs_term : bodie) {
 				if(rhs_term.e[0].type == elem::SYM && to_string_t("eval") == lexeme2str(rhs_term.e[0].e)) {
-					// The first parenthesis marks the beginning of eval's arguments, the
-					// second marks the beginning of the rule being supplied to eval.
-					if(rhs_term.e.size() == 5 && rhs_term.e[1].type == elem::OPENP && rhs_term.e[4].type == elem::CLOSEP) {
-						// The relation containing the quotation is in between the parentheses
-            elem out_rel = rhs_term.e[2];
-						elem quote_rel = rhs_term.e[3];
-            std::vector<std::tuple<int, int, int, int>> prog_shape = {{ 0, 0, 0, 2 }, { 1, 0, 0, 2 }, { 2, 0, 0, 2 }, { 3, 0, 0, 2 }, {3, 1, 0, 2 }, { 3, 1, 1, 2 }};
-            std::sort(prog_shape.begin(), prog_shape.end());
-            std::vector<std::vector<std::vector<int>>> prog_tree;
-            
-            std::tuple<int, int, int, int> prev_pos { -1, 0, 0, 0 };
-						// Reconstruct the quoted rules. Since the body of this loop is doing the
-						// reconstructions in-order, it is important that the terms are iterated in
-						// lexicographic order.
-						for(auto const& pos : prog_shape) {
-							// Now figure out which rule and where in the rule to put this term.
-							if(get<0>(pos) != get<0>(prev_pos)) {
-								// Case where we have encountered new rule in map
-								prog_tree.push_back({{get<3>(pos)}});
-							} else if(get<1>(pos) != get<1>(prev_pos)) {
-								// Case where we have encountered new disjunct in map
-								prog_tree.back().push_back({get<3>(pos)});
-							} else if(get<2>(pos) != get<2>(prev_pos)) {
-								// Case where we have encountered new goal in map
-								prog_tree.back().back().push_back(get<3>(pos));
+					// The first parenthesis marks the beginning of eval's three arguments.
+					if(rhs_term.e.size() == 6 && rhs_term.e[1].type == elem::OPENP && rhs_term.e[5].type == elem::CLOSEP) {
+						// The relation to contain the evaled relation is the first symbol between the parentheses
+						elem out_rel = rhs_term.e[2];
+						// The relation containing the quotation arity is the second symbol between the parentheses
+						elem arity_rel = rhs_term.e[3];
+						// The formal symbol representing the quotation relation is the third symbol between the parentheses
+						elem quote_sym = rhs_term.e[4];
+						// Get the program arity in tree form
+						std::vector<std::vector<std::vector<int>>> prog_tree = extract_quote_arity_tree(arity_rel, rp);
+						
+						// Make lexemes for connectives
+						input *keywords = tmpii.add_string(std::string("&& = -> ~ exists { }"));
+						keywords->prog_lex();
+						lexeme andl = keywords->l[0];
+						lexeme eql = keywords->l[1];
+						lexeme impliesl = keywords->l[2];
+						lexeme notl = keywords->l[3];
+						lexeme existsl = keywords->l[4];
+						lexeme openbl = keywords->l[5];
+						lexeme closebl = keywords->l[6];
+						
+						// We want to generate a lot of unique variables. We do this by maintaining
+						// a counter. At any point in time, its string representation will be the
+						// name of the next generated variable.
+						int var_counter = 1;
+						
+						for(int ridx = 0; ridx < prog_tree.size(); ridx++) {
+							for(int hidx = 0; hidx < prog_tree[ridx][0].size(); hidx++) {
+								std::map<std::tuple<int, int, int, int>, elem> quote_map;
+								std::map<std::tuple<int, int, int, int>, elem> real_map;
+								// 1) Make the eval rule head
+								std::vector<elem> rrh_elems;
+								rrh_elems.insert(rrh_elems.end(), { out_rel, elem(elem::OPENP, dict.op),
+									real_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) });
+								for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
+									rrh_elems.push_back(real_map[{ridx, 0, hidx, inidx}] = generate_var(var_counter));
+								}
+								rrh_elems.insert(rrh_elems.end(), { elem(elem::CLOSEP, dict.cl) });
+								// 2) Make the quoted term declaration section
+								// 2a) Declare the quoted term corresponding to the rule head
+								std::vector<elem> rrb_elems;
+								rrb_elems.insert(rrb_elems.end(), { elem(elem::OPENB, openbl), quote_sym, elem(elem::OPENP, dict.op), elem(0), elem(ridx), elem(0), elem(hidx), elem(prog_tree[ridx][0][hidx]),
+									quote_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) });
+								for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
+									rrb_elems.push_back(quote_map[{ridx, 0, hidx, inidx}] = generate_var(var_counter));
+								}
+								rrb_elems.push_back(elem(elem::CLOSEP, dict.cl));
+								// 2b) Declare the quoted terms corresponding to the rule body
+								for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
+									for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
+										rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), quote_sym, elem(elem::OPENP, dict.op), elem(0), elem(ridx), elem(didx), elem(gidx), elem(prog_tree[ridx][didx][gidx]),
+											quote_map[{ridx, didx, gidx, -1}] = generate_var(var_counter) });
+										for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
+											rrb_elems.push_back(quote_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
+										}
+										rrb_elems.push_back(elem(elem::CLOSEP, dict.cl));
+									}
+								}
+								// 3) Make the real term declaration section. Since the head
+								// is at the head, we just do the body
+								for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
+									for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
+										rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), out_rel, elem(elem::OPENP, dict.op),
+											real_map[{ridx, didx, gidx, -1}] = generate_var(var_counter) });
+										for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
+											rrb_elems.push_back(real_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
+										}
+										rrb_elems.push_back(elem(elem::CLOSEP, dict.cl));
+									}
+								}
+								// 4) Make the relation fixing section
+								// 4a) Fix the relation of the rule head
+								rrb_elems.insert(rrb_elems.end(),
+									{ elem(elem::AND, andl), elem(elem::OPENB, openbl), real_map[{ridx, 0, hidx, -1}], elem(elem::EQ, eql), quote_map[{ridx, 0, hidx, -1}], elem(elem::CLOSEB, closebl)});
+								// 4b) Now fix the relations of the body terms
+								for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
+									for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
+										rrb_elems.insert(rrb_elems.end(),
+											{ elem(elem::AND, andl), elem(elem::OPENB, openbl), real_map[{ridx, didx, gidx, -1}], elem(elem::EQ, eql), quote_map[{ridx, didx, gidx, -1}], elem(elem::CLOSEB, closebl)});
+									}
+								}
+								// 5) Make the variable sameness section
+								for(int didx1 = 0; didx1 < prog_tree[ridx].size(); didx1++) {
+									for(int gidx1 = 0; gidx1 < prog_tree[ridx][didx1].size(); gidx1++) {
+										if(didx1 == 0 && gidx1 != hidx) continue;
+										for(int inidx1 = 0; inidx1 < prog_tree[ridx][didx1][gidx1]; inidx1++) {
+											for(int didx2 = didx1; didx2 < prog_tree[ridx].size(); didx2++) {
+												for(int gidx2 = gidx1; gidx2 < prog_tree[ridx][didx2].size(); gidx2++) {
+													if(didx2 == 0 && gidx2 != hidx) continue;
+													for(int inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
+														rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENB, openbl),
+															quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx1), elem(gidx1), elem(inidx1), elem(elem::CLOSEP, dict.cl),
+															elem(elem::AND, andl), quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx2), elem(gidx2), elem(inidx2), elem(elem::CLOSEP, dict.cl),
+															elem(elem::AND, andl), quote_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), quote_map[{ridx, didx2, gidx2, inidx2}],
+															elem(elem::IMPLIES, impliesl), real_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), real_map[{ridx, didx2, gidx2, inidx2}], elem(elem::CLOSEB, closebl)});
+													}
+												}
+											}
+										}
+									}
+								}
+								// 6) Make the symbol fixing section
+								// 6a) Fix the symbols in the rule head
+								for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
+									rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENB, openbl), elem(elem::NOT, notl), quote_sym, elem(elem::OPENP, dict.op),
+										elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem(elem::CLOSEP, dict.cl), elem(elem::IMPLIES, impliesl), quote_map[{ridx, 0, hidx, inidx}],
+										elem(elem::EQ, eql), real_map[{ridx, 0, hidx, inidx}], elem(elem::CLOSEB, closebl) });
+								}
+								// 6b) Fix the symbols in the rule body
+								for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
+									for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
+										for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
+											rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENB, openbl), elem(elem::NOT, notl), quote_sym, elem(elem::OPENP, dict.op),
+												elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem(elem::CLOSEP, dict.cl), elem(elem::IMPLIES, impliesl), quote_map[{ridx, didx, gidx, inidx}],
+												elem(elem::EQ, eql), real_map[{ridx, didx, gidx, inidx}], elem(elem::CLOSEB, closebl) });
+										}
+									}
+								}
+								rrb_elems.push_back(elem(elem::CLOSEB, closebl));
+								// 7) Existentially quantify all the variables being used in the body
+								for(auto const& [pos, var] : quote_map) {
+									rrb_elems.insert(rrb_elems.begin(), { elem(elem::EXISTS, existsl), var });
+								}
+								for(auto const& [pos, var] : real_map) {
+									rrb_elems.insert(rrb_elems.begin(), { elem(elem::EXISTS, existsl), var });
+								}
+								
+								std::stringstream ss;
+								for(const elem &e : rrh_elems) {
+									ss << e << " ";
+								}
+								ss << ":- ";
+								for(const elem &e : rrb_elems) {
+									ss << e << " ";
+								}
+								ss << ". ";
+								
+								input *nr = tmpii.add_string(ss.str());
+								nr->prog_lex();
+								raw_rule rr;
+								rr.parse(nr, rp);
+								rp.r.push_back(rr);
 							}
-							prev_pos = pos;
 						}
-            // Debugging: Print tree representation of program shape. The top level
-            // objects are rules, second level are disjuncts, and third level are
-            // goals. The number associated with a goal is its arity.
-            std::cout << "[";
-            for(int ridx = 0; ridx < prog_tree.size(); ridx++) {
-              if(ridx) std::cout  << ", ";
-              std::cout << "[";
-              for(int didx = 0; didx < prog_tree[ridx].size(); didx++) {
-                if(didx) std::cout  << ", ";
-                std::cout << "[";
-                for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
-                  if(gidx) std::cout  << ", ";
-                  std::cout << prog_tree[ridx][didx][gidx];
-                }
-                std::cout << "]";
-              }
-              std::cout << "]";
-            }
-            std::cout << "]" << std::endl;
-            
-            // Make lexemes for connectives
-            input *andi = tmpii.add_string(std::string("&& = -> ~ exists { }"));
-            andi->prog_lex();
-            lexeme andl = andi->l[0];
-            lexeme eql = andi->l[1];
-            lexeme impliesl = andi->l[2];
-            lexeme notl = andi->l[3];
-            lexeme existsl = andi->l[4];
-            lexeme openbl = andi->l[5];
-            lexeme closebl = andi->l[6];
-            
-            // We want to generate a lot of unique variables. We do this by maintaining
-            // a counter. At any point in time, its string representation will be the
-            // name of the next generated variable.
-            int var_counter = 1;
-            std::map<std::tuple<int, int, int, int>, elem> quote_map;
-            std::map<std::tuple<int, int, int, int>, elem> real_map;
-            
-            for(int ridx = 0; ridx < prog_tree.size(); ridx++) {
-              for(int hidx = 0; hidx < prog_tree[ridx][0].size(); hidx++) {
-                // 1) Make the eval rule head
-                std::vector<elem> rrh_elems;
-                rrh_elems.insert(rrh_elems.end(), { out_rel, elem(elem::OPENP, dict.op),
-                  real_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) });
-                for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
-                  rrh_elems.push_back(real_map[{ridx, 0, hidx, inidx}] = generate_var(var_counter));
-                }
-                rrh_elems.insert(rrh_elems.end(), { elem(elem::CLOSEP, dict.cl) });
-                // 2) Make the quoted term declaration section
-                // 2a) Declare the quoted term corresponding to the rule head
-                std::vector<elem> rrb_elems;
-                rrb_elems.insert(rrb_elems.end(), { elem(elem::EXISTS, existsl), generate_var(var_counter), elem(elem::OPENB, openbl), quote_rel, elem(elem::OPENP, dict.op), elem(0), elem(ridx), elem(0), elem(hidx),
-                  quote_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) });
-                for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
-                  rrb_elems.push_back(quote_map[{ridx, 0, hidx, inidx}] = generate_var(var_counter));
-                }
-                rrb_elems.push_back(elem(elem::CLOSEP, dict.cl));
-                // 2b) Declare the quoted terms corresponding to the rule body
-                for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
-                  for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
-                    rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), quote_rel, elem(elem::OPENP, dict.op), elem(0), elem(ridx), elem(didx), elem(gidx),
-                      quote_map[{ridx, didx, gidx, -1}] = generate_var(var_counter) });
-                    for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-                      rrb_elems.push_back(quote_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
-                    }
-                    rrb_elems.push_back(elem(elem::CLOSEP, dict.cl));
-                  }
-                }
-                // 3) Make the real term declaration section. Since the head
-                // is at the head, we just do the body
-                for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
-                  for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
-                    rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), out_rel, elem(elem::OPENP, dict.op),
-                      real_map[{ridx, didx, gidx, -1}] = generate_var(var_counter) });
-                    for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-                      rrb_elems.push_back(real_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
-                    }
-                    rrb_elems.push_back(elem(elem::CLOSEP, dict.cl));
-                  }
-                }
-                // 4) Make the relation fixing section
-                // 4a) Fix the relation of the rule head
-                rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), real_map[{ridx, 0, hidx, -1}], elem(elem::EQ, eql), quote_map[{ridx, 0, hidx, -1}]});
-                // 4b) Now fix the relations of the body terms
-                for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
-                  for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
-                    rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), real_map[{ridx, didx, gidx, -1}], elem(elem::EQ, eql), quote_map[{ridx, didx, gidx, -1}]});
-                  }
-                }
-                // 5) Make the variable sameness section
-                for(int didx1 = 0; didx1 < prog_tree[ridx].size(); didx1++) {
-                  for(int gidx1 = 0; gidx1 < prog_tree[ridx][didx1].size(); gidx1++) {
-                    if(didx1 == 0 && gidx1 != hidx) continue;
-                    for(int inidx1 = 0; inidx1 < prog_tree[ridx][didx1][gidx1]; inidx1++) {
-                      for(int didx2 = didx1; didx2 < prog_tree[ridx].size(); didx2++) {
-                        for(int gidx2 = gidx1; gidx2 < prog_tree[ridx][didx2].size(); gidx2++) {
-                          if(didx2 == 0 && gidx2 != hidx) continue;
-                          for(int inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
-                            rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENB, openbl),
-                              quote_rel, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx1), elem(gidx1), elem(inidx1), elem(elem::CLOSEP, dict.cl),
-                              elem(elem::AND, andl), quote_rel, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx2), elem(gidx2), elem(inidx2), elem(elem::CLOSEP, dict.cl),
-                              elem(elem::AND, andl), quote_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), quote_map[{ridx, didx2, gidx2, inidx2}],
-                              elem(elem::IMPLIES, impliesl), real_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), real_map[{ridx, didx2, gidx2, inidx2}], elem(elem::CLOSEB, closebl)});
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-                // 6) Make the symbol fixing section
-                // 6a) Fix the symbols in the rule head
-                for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
-                  rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENB, openbl), elem(elem::NOT, notl), quote_rel, elem(elem::OPENP, dict.op),
-                    elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem(elem::CLOSEP, dict.cl), elem(elem::IMPLIES, impliesl), quote_map[{ridx, 0, hidx, inidx}],
-                    elem(elem::EQ, eql), real_map[{ridx, 0, hidx, inidx}], elem(elem::CLOSEB, closebl) });
-                }
-                // 6b) Fix the symbols in the rule body
-                for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
-                  for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
-                    for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-                      rrb_elems.insert(rrb_elems.end(), { elem(elem::AND, andl), elem(elem::OPENB, openbl), elem(elem::NOT, notl), quote_rel, elem(elem::OPENP, dict.op),
-                        elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem(elem::CLOSEP, dict.cl), elem(elem::IMPLIES, impliesl), quote_map[{ridx, didx, gidx, inidx}],
-                        elem(elem::EQ, eql), real_map[{ridx, didx, gidx, inidx}], elem(elem::CLOSEB, closebl) });
-                    }
-                  }
-                }
-                
-                // Close the formula
-                rrb_elems.push_back(elem(elem::CLOSEB, closebl));
-                std::stringstream ss;
-                for(const elem &e : rrh_elems) {
-                  ss << e << " ";
-                }
-                ss << ":- ";
-                for(const elem &e : rrb_elems) {
-                  ss << e << " ";
-                }
-                ss << ". ";
-                std::cout << std::endl << ss.str() << std::endl;
-                /*input *nr = tmpii.add_string(ss.str());
-                nr->prog_lex();
-                raw_rule rr;
-                rr.parse(nr, rp);
-                std::cout << std::endl << "ans:" << std::endl << rr << std::endl;
-                rp.r.push_back(rr);*/
-              }
-            }
 					}
 				}
 			}

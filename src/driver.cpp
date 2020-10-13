@@ -483,8 +483,12 @@ void driver::transform_evals(raw_prog &rp) {
 								// in case.
 								for(auto const& [pos, var] : quote_map)
 									body_tree = new raw_form_tree(elem::EXISTS, new raw_form_tree(elem::VAR, var), body_tree);
-								for(auto const& [pos, var] : real_map)
-									body_tree = new raw_form_tree(elem::EXISTS, new raw_form_tree(elem::VAR, var), body_tree);
+								for(auto const& [pos, var] : real_map) {
+									// Only quantify variable if it is not in the head of the rule
+									if(get<1>(pos) != 0) {
+										body_tree = new raw_form_tree(elem::EXISTS, new raw_form_tree(elem::VAR, var), body_tree);
+									}
+								}
 								
 								// 8) Put the body and head constructed above together to make a
 								// rule and add that to the program.

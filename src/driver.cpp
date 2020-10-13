@@ -492,7 +492,138 @@ void driver::transform_evals(raw_prog &rp) {
 	}
 }
 
-bool driver::evaluate_term(const raw_term &query, const std::set<elem> &universe, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
+void driver::reduce_universe(const elem &var, const raw_term &rt, std::set<elem> &universe, std::set<raw_term> &database) {
+	if(rt.extype == raw_term::REL) {
+		int var_pos;
+		for(var_pos = 2; var_pos < rt.e.size() - 1 && rt.e[var_pos] != var; var_pos++);
+		if(var_pos < rt.e.size() - 1) {
+			std::set<elem> universe2;
+			for(const raw_term &entry : database) {
+				if(entry.e[0] == rt.e[0] && entry.e.size() == rt.e.size()) {
+					universe2.insert(entry.e[var_pos]);
+				}
+			}
+			universe = universe2;
+		}
+	}
+}
+
+void driver::reduce_universe(const elem &var, const raw_form_tree &t, std::set<elem> &universe, std::set<raw_term> &database) {
+	switch(t.type) {
+		case elem::IMPLIES:
+			break;
+		case elem::COIMPLIES:
+			break;
+		case elem::AND:
+			reduce_universe(var, *t.l, universe, database);
+			reduce_universe(var, *t.r, universe, database);
+			break;
+		case elem::ALT: {
+			std::set<elem> universe2 = universe;
+			reduce_universe(var, *t.l, universe2, database);
+			reduce_universe(var, *t.r, universe, database);
+			universe.insert(universe2.begin(), universe2.end());
+			break;
+		} case elem::NOT:
+			break;
+		case elem::EXISTS:
+			reduce_universe(var, *t.r, universe, database);
+			break;
+		case elem::UNIQUE:
+			reduce_universe(var, *t.r, universe, database);
+			break;
+		case elem::NONE:
+			reduce_universe(var, *t.rt, universe, database);
+			break;
+		case elem::FORALL:
+			reduce_universe(var, *t.r, universe, database);
+			break;
+		default:
+			assert(false); //should never reach here
+	}
+}
+
+void driver::reduce_universe(const elem &var, const raw_rule &rul, std::set<elem> &universe, std::set<raw_term> &database) {
+	if(!rul.b.empty()) {
+		std::set<elem> universe3;
+		for(const std::vector<raw_term> &bodie : rul.b) {
+			std::set<elem> universe2 = universe;
+			for(const raw_term &rt : bodie) {
+				reduce_universe(var, rt, universe2, database);
+			}
+			universe3.insert(universe2.begin(), universe2.end());
+		}
+		universe = universe3;
+	} else if(rul.prft) {
+		reduce_universe(var, *rul.prft, universe, database);
+	}
+}
+
+void driver::populate_universes(const raw_form_tree &t, std::set<elem> &universe, std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database) {
+	switch(t.type) {
+		case elem::IMPLIES:
+			populate_universes(*t.l, universe, universes, database);
+			populate_universes(*t.r, universe, universes, database);
+			break;
+		case elem::COIMPLIES:
+			populate_universes(*t.l, universe, universes, database);
+			populate_universes(*t.r, universe, universes, database);
+			break;
+		case elem::AND:
+			populate_universes(*t.l, universe, universes, database);
+			populate_universes(*t.r, universe, universes, database);
+			break;
+		case elem::ALT:
+			populate_universes(*t.l, universe, universes, database);
+			populate_universes(*t.r, universe, universes, database);
+			break;
+		case elem::NOT:
+			populate_universes(*t.l, universe, universes, database);
+			break;
+		case elem::EXISTS: {
+			populate_universes(*t.r, universe, universes, database);
+			std::set<elem> universe2 = universe;
+			elem elt = *(t.l->el);
+			reduce_universe(elt, *t.r, universe2, database);
+			universes[elt] = universe2;
+			break;
+		} case elem::UNIQUE: {
+			populate_universes(*t.r, universe, universes, database);
+			std::set<elem> universe2 = universe;
+			elem elt = *(t.l->el);
+			reduce_universe(elt, *t.r, universe2, database);
+			universes[elt] = universe2;
+			break;
+		} case elem::NONE:
+			break;
+		case elem::FORALL: {
+			populate_universes(*t.r, universe, universes, database);
+			std::set<elem> universe2 = universe;
+			elem elt = *(t.l->el);
+			reduce_universe(elt, *t.r, universe2, database);
+			universes[elt] = universe2;
+			break;
+		} default:
+			assert(false); //should never reach here
+	}
+}
+
+void driver::populate_universes(const raw_rule &rul, std::set<elem> &universe, std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database) {
+	for(const raw_term &head : rul.h) {
+		for(const elem &elt : head.e) {
+			if(elt.type == elem::VAR) {
+				std::set<elem> universe2 = universe;
+				reduce_universe(elt, rul, universe2, database);
+				universes[elt] = universe2;
+			}
+		}
+	}
+	if(rul.b.empty() && rul.prft) {
+		populate_universes(*rul.prft, universe, universes, database);
+	}
+}
+
+bool driver::evaluate_term(const raw_term &query, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
 	if(query.extype == raw_term::REL) {
 		for(const raw_term &entry : database) {
 			if(query.extype == raw_term::REL && query.e.size() == entry.e.size()) {
@@ -515,65 +646,68 @@ bool driver::evaluate_term(const raw_term &query, const std::set<elem> &universe
 	return false;
 }
 
-bool driver::evaluate_form_tree(const raw_form_tree &t, const std::set<elem> &universe, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
-	int count;
+bool driver::evaluate_form_tree(const raw_form_tree &t, const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
 	switch(t.type) {
 		case elem::IMPLIES:
-			if(evaluate_form_tree(*t.l, universe, bindings, database)) {
-				return evaluate_form_tree(*t.r, universe, bindings, database);
+			if(evaluate_form_tree(*t.l, universes, bindings, database)) {
+				return evaluate_form_tree(*t.r, universes, bindings, database);
 			} else {
 				return true;
 			}
 		case elem::COIMPLIES:
-			return evaluate_form_tree(*t.l, universe, bindings, database) == evaluate_form_tree(*t.r, universe, bindings, database);
+			return evaluate_form_tree(*t.l, universes, bindings, database) == evaluate_form_tree(*t.r, universes, bindings, database);
 		case elem::AND:
-			return evaluate_form_tree(*t.l, universe, bindings, database) && evaluate_form_tree(*t.r, universe, bindings, database);
+			return evaluate_form_tree(*t.l, universes, bindings, database) && evaluate_form_tree(*t.r, universes, bindings, database);
 		case elem::ALT:
-			return evaluate_form_tree(*t.l, universe, bindings, database) || evaluate_form_tree(*t.r, universe, bindings, database);
+			return evaluate_form_tree(*t.l, universes, bindings, database) || evaluate_form_tree(*t.r, universes, bindings, database);
 		case elem::NOT:
-			return !evaluate_form_tree(*t.l, universe, bindings, database);
-		case elem::EXISTS:
-			for(const elem &elt : universe) {
-				bindings[*(t.l->el)] = elt;
-				if(evaluate_form_tree(*t.r, universe, bindings, database)) {
+			return !evaluate_form_tree(*t.l, universes, bindings, database);
+		case elem::EXISTS: {
+			const elem &var = *(t.l->el);
+			for(const elem &elt : universes.at(var)) {
+				bindings[var] = elt;
+				if(evaluate_form_tree(*t.r, universes, bindings, database)) {
 					return true;
 				}
 			}
 			return false;
-		case elem::UNIQUE:
-			count = 0;
-			for(const elem &elt : universe) {
-				bindings[*(t.l->el)] = elt;
-				if(evaluate_form_tree(*t.r, universe, bindings, database)) {
+		} case elem::UNIQUE: {
+			int count = 0;
+			const elem &var = *(t.l->el);
+			for(const elem &elt : universes.at(var)) {
+				bindings[var] = elt;
+				if(evaluate_form_tree(*t.r, universes, bindings, database)) {
 					count++;
 				}
 			}
 			return count == 1;
-		case elem::NONE:
-			return evaluate_term(*t.rt, universe, bindings, database);
-		case elem::FORALL:
-			for(const elem &elt : universe) {
-				bindings[*(t.l->el)] = elt;
-				if(!evaluate_form_tree(*t.r, universe, bindings, database)) {
+		} case elem::NONE:
+			return evaluate_term(*t.rt, bindings, database);
+		case elem::FORALL: {
+			const elem &var = *(t.l->el);
+			for(const elem &elt : universes.at(var)) {
+				bindings[var] = elt;
+				if(!evaluate_form_tree(*t.r, universes, bindings, database)) {
 					return false;
 				}
 			}
 			return true;
-		default:
+		} default:
 			assert(false); //should never reach here
 	}
 }
 
-void driver::interpret_rule(int hd_idx, int inp_idx, const raw_rule &rul, const std::set<elem> &universe, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
+void driver::interpret_rule(int hd_idx, int inp_idx, const raw_rule &rul, const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
 	const raw_term &head = rul.h[hd_idx];
 	if(inp_idx < head.e.size() - 3) {
 		if(head.e[inp_idx + 2].type == elem::VAR) {
-			for(const elem &elt : universe) {
-				bindings[head.e[inp_idx + 2]] = elt;
-				interpret_rule(hd_idx, inp_idx + 1, rul, universe, bindings, database);
+			const elem &var = head.e[inp_idx + 2];
+			for(const elem &elt : universes.at(var)) {
+				bindings[var] = elt;
+				interpret_rule(hd_idx, inp_idx + 1, rul, universes, bindings, database);
 			}
 		} else {
-			interpret_rule(hd_idx, inp_idx + 1, rul, universe, bindings, database);
+			interpret_rule(hd_idx, inp_idx + 1, rul, universes, bindings, database);
 		}
 	} else {
 		bool succ;
@@ -582,12 +716,12 @@ void driver::interpret_rule(int hd_idx, int inp_idx, const raw_rule &rul, const 
 			for(const std::vector<raw_term> &bodie : rul.b) {
 				bool and_succ = true;
 				for(const raw_term &rt : bodie) {
-					and_succ &= evaluate_term(rt, universe, bindings, database);
+					and_succ &= evaluate_term(rt, bindings, database);
 				}
 				succ |= and_succ;
 			}
 		} else if(rul.prft) {
-			succ = evaluate_form_tree(*rul.prft, universe, bindings, database);
+			succ = evaluate_form_tree(*rul.prft, universes, bindings, database);
 		} else {
 			succ = true;
 		}
@@ -637,7 +771,16 @@ void driver::naive_pfp(const raw_prog &rp) {
 	for(const raw_rule &rr : rp.r) {
 		for(int hd_idx = 0; hd_idx < rr.h.size(); hd_idx++) {
 			std::cout << "Current Rule:" << std::endl << rr << std::endl << std::endl;
-			interpret_rule(hd_idx, 0, rr, universe, bindings, database);
+			std::map<elem, std::set<elem>> universes;
+			populate_universes(rr, universe, universes, database);
+			for(const auto &[var, universe] : universes) {
+				std::cout << var << ": [";
+				for(const elem &elt : universe) {
+					std::cout << elt << ", ";
+				}
+				std::cout << "]" << std::endl;
+			}
+			interpret_rule(hd_idx, 0, rr, universes, bindings, database);
 			std::cout << "New Database:" << std::endl << std::endl;
 			for(const raw_term &entry : database) {
 				std::cout << entry << std::endl;

@@ -294,6 +294,9 @@ struct raw_term {
 	// with -1s, closing parentheses with -2s, and contiguous sequences of elements
 	// with their cardinality.
 	ints arity;
+  raw_term() {}
+  raw_term(const std::vector<elem> &f) : e(f) { calc_arity(nullptr); }
+  raw_term(rtextype et, const std::vector<elem> &f) : extype(et), e(f) { calc_arity(nullptr); }
 	bool parse(input* in, const raw_prog& prog, bool is_form = false,
 		rtextype pref_type = raw_term::REL);
 	bool calc_arity(input* in);
@@ -368,13 +371,20 @@ struct raw_prefix {
 
 struct raw_form_tree {
 	elem::etype type;
-	raw_term *rt; // elem::NONE is used to identify it
-	elem * el;
+	raw_term *rt = nullptr; // elem::NONE is used to identify it
+	elem * el = nullptr;
 
-	raw_form_tree *l;
-	raw_form_tree *r;
+	raw_form_tree *l = nullptr;
+	raw_form_tree *r = nullptr;
 
-	raw_form_tree (elem::etype _type, raw_term* _rt = NULL, elem *_el =NULL,
+  raw_form_tree (elem::etype _type, const raw_term &_rt) : type(_type) {
+		rt = new raw_term(_rt);
+	}
+	raw_form_tree (elem::etype _type, const elem &_el) : type(_type) {
+		el = new elem(_el);
+	}
+  raw_form_tree (elem::etype _type, raw_form_tree *_l = nullptr, raw_form_tree *_r = nullptr) : type(_type), l(_l), r(_r) {}
+  raw_form_tree (elem::etype _type, const raw_term* _rt = NULL, const elem *_el =NULL,
 		raw_form_tree *_l = NULL, raw_form_tree *_r = NULL)
 	{
 		type = _type;

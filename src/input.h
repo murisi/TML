@@ -294,9 +294,9 @@ struct raw_term {
 	// with -1s, closing parentheses with -2s, and contiguous sequences of elements
 	// with their cardinality.
 	ints arity;
-  raw_term() {}
-  raw_term(const std::vector<elem> &f) : e(f) { calc_arity(nullptr); }
-  raw_term(rtextype et, const std::vector<elem> &f) : extype(et), e(f) { calc_arity(nullptr); }
+	raw_term() {}
+	raw_term(const std::vector<elem> &f) : e(f) { calc_arity(nullptr); }
+	raw_term(rtextype et, const std::vector<elem> &f) : extype(et), e(f) { calc_arity(nullptr); }
 	bool parse(input* in, const raw_prog& prog, bool is_form = false,
 		rtextype pref_type = raw_term::REL);
 	bool calc_arity(input* in);
@@ -338,7 +338,10 @@ bool operator==(const std::vector<raw_term>& x, const std::vector<raw_term>& y);
 
 struct raw_rule {
 	std::vector<raw_term> h;
+	// An empty b signifies the presence of a logical formula in prft if
+	// prft != nullptr, otherwise it signifies that this rule is a fact.
 	std::vector<std::vector<raw_term>> b;
+	// Contains a tree representing the logical formula.
 	sprawformtree prft;
 
 	enum etype { NONE, GOAL, TREE };
@@ -377,14 +380,14 @@ struct raw_form_tree {
 	raw_form_tree *l = nullptr;
 	raw_form_tree *r = nullptr;
 
-  raw_form_tree (elem::etype _type, const raw_term &_rt) : type(_type) {
+	raw_form_tree (elem::etype _type, const raw_term &_rt) : type(_type) {
 		rt = new raw_term(_rt);
 	}
 	raw_form_tree (elem::etype _type, const elem &_el) : type(_type) {
 		el = new elem(_el);
 	}
-  raw_form_tree (elem::etype _type, raw_form_tree *_l = nullptr, raw_form_tree *_r = nullptr) : type(_type), l(_l), r(_r) {}
-  raw_form_tree (elem::etype _type, const raw_term* _rt = NULL, const elem *_el =NULL,
+	raw_form_tree (elem::etype _type, raw_form_tree *_l = nullptr, raw_form_tree *_r = nullptr) : type(_type), l(_l), r(_r) {}
+	raw_form_tree (elem::etype _type, const raw_term* _rt = NULL, const elem *_el =NULL,
 		raw_form_tree *_l = NULL, raw_form_tree *_r = NULL)
 	{
 		type = _type;

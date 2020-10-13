@@ -347,10 +347,16 @@ void driver::transform_evals(raw_prog &rp) {
 						
 						for(int ridx = 0; ridx < prog_tree.size(); ridx++) {
 							for(int hidx = 0; hidx < prog_tree[ridx][0].size(); hidx++) {
+								// Exclusively store the variables that we have created in the
+								// following two maps.
 								std::map<std::tuple<int, int, int, int>, elem> quote_map;
 								std::map<std::tuple<int, int, int, int>, elem> real_map;
 								
-								// 1) Make the eval rule head
+								// 1) Make the eval rule head. First input is the name of the
+								// rule. Needed because the quoted program most likely contains
+								// multiple rules. The rest of the inputs are the values that
+								// would be supplied to the rule in the quoted program. I.e.
+								// these are not meta.
 								std::vector<elem> head_elems = { out_rel, elem(elem::OPENP, dict.op), real_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) };
 								for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
 									head_elems.push_back(real_map[{ridx, 0, hidx, inidx}] = generate_var(var_counter));
@@ -359,7 +365,10 @@ void driver::transform_evals(raw_prog &rp) {
 								raw_term head(head_elems);
 								
 								raw_form_tree *body_tree;
-								// 2) Make the quoted term declaration section
+								// 2) Make the quoted term declaration section. These variables
+								// take on the parameter names and relation names of the quoted
+								// program. I.e. these are meta, describing the program as a
+								// formal object.
 								// 2a) Declare the quoted term corresponding to the rule head
 								{
 									std::vector<elem> a = { quote_sym, elem(elem::OPENP, dict.op), elem(0), elem(ridx), elem(0), elem(hidx), elem(prog_tree[ridx][0][hidx]),
@@ -382,8 +391,10 @@ void driver::transform_evals(raw_prog &rp) {
 										body_tree = new raw_form_tree(elem::AND, body_tree, new raw_form_tree(elem::NONE, raw_term(a)));
 									}
 								}
-								// 3) Make the real term declaration section. Since the head
-								// is at the head, we just do the body
+								// 3) Make the real term declaration section. These variables
+								// take on the same values that the inputs to the quoted program
+								// would. I.e. this is not meta. Since the head is at the head,
+								// we just do the body
 								for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
 									for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
 										std::vector<elem> a = { out_rel, elem(elem::OPENP, dict.op), real_map[{ridx, didx, gidx, -1}] = generate_var(var_counter) };
@@ -394,7 +405,9 @@ void driver::transform_evals(raw_prog &rp) {
 										body_tree = new raw_form_tree(elem::AND, body_tree, new raw_form_tree(elem::NONE, raw_term(a)));
 									}
 								}
-								// 4) Make the relation fixing section
+								// 4) Make the relation fixing section. These propositions
+								// ensure that the relations referred to in the quotation are
+								// also used to constrain the corresponding real inputs.
 								// 4a) Fix the relation of the rule head
 								body_tree = new raw_form_tree(elem::AND, body_tree,
 									new raw_form_tree(elem::NONE, raw_term(raw_term::EQ,
@@ -408,7 +421,10 @@ void driver::transform_evals(raw_prog &rp) {
 												{ real_map[{ridx, didx, gidx, -1}], elem(elem::EQ, eql), quote_map[{ridx, didx, gidx, -1}] })));
 									}
 								}
-								// 5) Make the variable sameness section
+								// 5) Make the variable sameness section. These propositions
+								// ensure that is two quoted inputs labelled as variables are
+								// the same, then their corresponding real inputs are
+								// constrained to be same.
 								for(int didx1 = 0; didx1 < prog_tree[ridx].size(); didx1++) {
 									for(int gidx1 = 0; gidx1 < prog_tree[ridx][didx1].size(); gidx1++) {
 										if(didx1 == 0 && gidx1 != hidx) continue;
@@ -435,7 +451,10 @@ void driver::transform_evals(raw_prog &rp) {
 										}
 									}
 								}
-								// 6) Make the symbol fixing section
+								// 6) Make the symbol fixing section. Essentially, some of the
+								// inputs to rules in the quoted program will be literal symbols
+								// rather than variables. If this is the case, then fix the
+								// literals into the evaled program relation.
 								// 6a) Fix the symbols in the rule head
 								for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
 									raw_term a({ quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem(elem::CLOSEP, dict.cl) });
@@ -458,12 +477,17 @@ void driver::transform_evals(raw_prog &rp) {
 										}
 									}
 								}
-								// 7) Existentially quantify all the variables being used in the body
+								// 7) Existentially quantify all the variables being used in
+								// the body. This should not be necessary (going by syntax/
+								// semantics of other relational calculus languages), but just
+								// in case.
 								for(auto const& [pos, var] : quote_map)
 									body_tree = new raw_form_tree(elem::EXISTS, new raw_form_tree(elem::VAR, var), body_tree);
 								for(auto const& [pos, var] : real_map)
 									body_tree = new raw_form_tree(elem::EXISTS, new raw_form_tree(elem::VAR, var), body_tree);
 								
+								// 8) Put the body and head constructed above together to make a
+								// rule and add that to the program.
 								raw_rule rr;
 								rr.h.push_back(head);
 								rr.prft = std::shared_ptr<raw_form_tree>(body_tree);

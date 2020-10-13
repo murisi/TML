@@ -372,7 +372,7 @@ void driver::transform_evals(raw_prog &rp) {
 								// 2a) Declare the quoted term corresponding to the rule head
 								{
 									std::vector<elem> a = { quote_sym, elem(elem::OPENP, dict.op), elem(0), elem(ridx), elem(0), elem(hidx), elem(prog_tree[ridx][0][hidx]),
-										quote_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) };
+										quote_map[{ridx, 0, hidx, -1}] = real_map[{ridx, 0, hidx, -1}] };
 									for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
 										a.push_back(quote_map[{ridx, 0, hidx, inidx}] = generate_var(var_counter));
 									}
@@ -397,7 +397,7 @@ void driver::transform_evals(raw_prog &rp) {
 								// we just do the body
 								for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
 									for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
-										std::vector<elem> a = { out_rel, elem(elem::OPENP, dict.op), real_map[{ridx, didx, gidx, -1}] = generate_var(var_counter) };
+										std::vector<elem> a = { out_rel, elem(elem::OPENP, dict.op), real_map[{ridx, didx, gidx, -1}] = quote_map[{ridx, didx, gidx, -1}] };
 										for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 											a.push_back(real_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
 										}
@@ -405,23 +405,7 @@ void driver::transform_evals(raw_prog &rp) {
 										body_tree = new raw_form_tree(elem::AND, body_tree, new raw_form_tree(elem::NONE, raw_term(a)));
 									}
 								}
-								// 4) Make the relation fixing section. These propositions
-								// ensure that the relations referred to in the quotation are
-								// also used to constrain the corresponding real inputs.
-								// 4a) Fix the relation of the rule head
-								body_tree = new raw_form_tree(elem::AND, body_tree,
-									new raw_form_tree(elem::NONE, raw_term(raw_term::EQ,
-										{ real_map[{ridx, 0, hidx, -1}], elem(elem::EQ, eql), quote_map[{ridx, 0, hidx, -1}]})));
-								
-								// 4b) Now fix the relations of the body terms
-								for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
-									for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
-										body_tree = new raw_form_tree(elem::AND, body_tree,
-											new raw_form_tree(elem::NONE, raw_term(raw_term::EQ,
-												{ real_map[{ridx, didx, gidx, -1}], elem(elem::EQ, eql), quote_map[{ridx, didx, gidx, -1}] })));
-									}
-								}
-								// 5) Make the variable sameness section. These propositions
+								// 4) Make the variable sameness section. These propositions
 								// ensure that is two quoted inputs labelled as variables are
 								// the same, then their corresponding real inputs are
 								// constrained to be same.
@@ -451,11 +435,11 @@ void driver::transform_evals(raw_prog &rp) {
 										}
 									}
 								}
-								// 6) Make the symbol fixing section. Essentially, some of the
+								// 5) Make the symbol fixing section. Essentially, some of the
 								// inputs to rules in the quoted program will be literal symbols
 								// rather than variables. If this is the case, then fix the
 								// literals into the evaled program relation.
-								// 6a) Fix the symbols in the rule head
+								// 5a) Fix the symbols in the rule head
 								for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
 									raw_term a({ quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem(elem::CLOSEP, dict.cl) });
 									raw_term b(raw_term::EQ, { quote_map[{ridx, 0, hidx, inidx}], elem(elem::EQ, eql), real_map[{ridx, 0, hidx, inidx}] });
@@ -464,7 +448,7 @@ void driver::transform_evals(raw_prog &rp) {
 											new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE, a)),
 											new raw_form_tree(elem::NONE, b)));
 								}
-								// 6b) Fix the symbols in the rule body
+								// 5b) Fix the symbols in the rule body
 								for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
 									for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
 										for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
@@ -477,12 +461,15 @@ void driver::transform_evals(raw_prog &rp) {
 										}
 									}
 								}
-								// 7) Existentially quantify all the variables being used in
+								// 6) Existentially quantify all the variables being used in
 								// the body. This should not be necessary (going by syntax/
 								// semantics of other relational calculus languages), but just
 								// in case.
-								for(auto const& [pos, var] : quote_map)
-									body_tree = new raw_form_tree(elem::EXISTS, new raw_form_tree(elem::VAR, var), body_tree);
+								for(auto const& [pos, var] : quote_map) {
+									if(!(get<1>(pos) == 0 && get<3>(pos) == -1)) {
+										body_tree = new raw_form_tree(elem::EXISTS, new raw_form_tree(elem::VAR, var), body_tree);
+									}
+								}
 								for(auto const& [pos, var] : real_map) {
 									// Only quantify variable if it is not in the head of the rule
 									if(get<1>(pos) != 0) {
@@ -490,7 +477,7 @@ void driver::transform_evals(raw_prog &rp) {
 									}
 								}
 								
-								// 8) Put the body and head constructed above together to make a
+								// 7) Put the body and head constructed above together to make a
 								// rule and add that to the program.
 								raw_rule rr;
 								rr.h.push_back(head);
@@ -503,6 +490,166 @@ void driver::transform_evals(raw_prog &rp) {
 			}
 		}
 	}
+}
+
+bool driver::evaluate_term(const raw_term &query, const std::set<elem> &universe, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
+	if(query.extype == raw_term::REL) {
+		for(const raw_term &entry : database) {
+			if(query.extype == raw_term::REL && query.e.size() == entry.e.size()) {
+				bool succ = true;
+				for(int i = 0; i < query.e.size(); i++) {
+					if(!((query.e[i].type == elem::VAR && bindings[query.e[i]] == entry.e[i]) || query.e[i] == entry.e[i])) {
+						succ = false;
+						break;
+					} 
+				}
+				if(succ) return true;
+			}
+		}
+	} else if(query.extype == raw_term::EQ) {
+		elem lhs = query.e[0], rhs = query.e[2];
+		if(lhs.type == elem::VAR) lhs = bindings[lhs];
+		if(rhs.type == elem::VAR) rhs = bindings[rhs];
+		return lhs == rhs;
+	}
+	return false;
+}
+
+bool driver::evaluate_form_tree(const raw_form_tree &t, const std::set<elem> &universe, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
+	int count;
+	switch(t.type) {
+		case elem::IMPLIES:
+			if(evaluate_form_tree(*t.l, universe, bindings, database)) {
+				return evaluate_form_tree(*t.r, universe, bindings, database);
+			} else {
+				return true;
+			}
+		case elem::COIMPLIES:
+			return evaluate_form_tree(*t.l, universe, bindings, database) == evaluate_form_tree(*t.r, universe, bindings, database);
+		case elem::AND:
+			return evaluate_form_tree(*t.l, universe, bindings, database) && evaluate_form_tree(*t.r, universe, bindings, database);
+		case elem::ALT:
+			return evaluate_form_tree(*t.l, universe, bindings, database) || evaluate_form_tree(*t.r, universe, bindings, database);
+		case elem::NOT:
+			return !evaluate_form_tree(*t.l, universe, bindings, database);
+		case elem::EXISTS:
+			for(const elem &elt : universe) {
+				bindings[*(t.l->el)] = elt;
+				if(evaluate_form_tree(*t.r, universe, bindings, database)) {
+					return true;
+				}
+			}
+			return false;
+		case elem::UNIQUE:
+			count = 0;
+			for(const elem &elt : universe) {
+				bindings[*(t.l->el)] = elt;
+				if(evaluate_form_tree(*t.r, universe, bindings, database)) {
+					count++;
+				}
+			}
+			return count == 1;
+		case elem::NONE:
+			return evaluate_term(*t.rt, universe, bindings, database);
+		case elem::FORALL:
+			for(const elem &elt : universe) {
+				bindings[*(t.l->el)] = elt;
+				if(!evaluate_form_tree(*t.r, universe, bindings, database)) {
+					return false;
+				}
+			}
+			return true;
+		default:
+			assert(false); //should never reach here
+	}
+}
+
+void driver::interpret_rule(int hd_idx, int inp_idx, const raw_rule &rul, const std::set<elem> &universe, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
+	const raw_term &head = rul.h[hd_idx];
+	if(inp_idx < head.e.size() - 3) {
+		if(head.e[inp_idx + 2].type == elem::VAR) {
+			for(const elem &elt : universe) {
+				bindings[head.e[inp_idx + 2]] = elt;
+				interpret_rule(hd_idx, inp_idx + 1, rul, universe, bindings, database);
+			}
+		} else {
+			interpret_rule(hd_idx, inp_idx + 1, rul, universe, bindings, database);
+		}
+	} else {
+		bool succ;
+		if(!rul.b.empty()) {
+			succ = false;
+			for(const std::vector<raw_term> &bodie : rul.b) {
+				bool and_succ = true;
+				for(const raw_term &rt : bodie) {
+					and_succ &= evaluate_term(rt, universe, bindings, database);
+				}
+				succ |= and_succ;
+			}
+		} else if(rul.prft) {
+			succ = evaluate_form_tree(*rul.prft, universe, bindings, database);
+		} else {
+			succ = true;
+		}
+		if(succ) {
+			raw_term fact = head;
+			for(elem &e : fact.e) {
+				if(e.type == elem::VAR) {
+					e = bindings[e];
+				}
+			}
+			database.insert(fact);
+		}
+	}
+}
+
+void driver::naive_pfp(const raw_prog &rp) {
+	std::set<elem> universe;
+	// Populate our universe
+	for(const raw_rule &rr : rp.r) {
+		for(const raw_term &rt : rr.h) {
+			for(int i = 2; i < rt.e.size() - 1; i++) {
+				if(rt.e[i].type != elem::VAR) {
+					universe.insert(rt.e[i]);
+				}
+			}
+		}
+		for(const std::vector<raw_term> &bodie : rr.b) {
+			for(const raw_term &rt : bodie) {
+				for(int i = 2; i < rt.e.size() - 1; i++) {
+					if(rt.e[i].type != elem::VAR) {
+						universe.insert(rt.e[i]);
+					}
+				}
+			}
+		}
+	}
+	// Debug: Print the universe
+	std::cout << "[";
+	for(const elem &e : universe) {
+		std::cout << e << ", ";
+	}
+	std::cout << "]" << std::endl;
+	
+	std::map<elem, elem> bindings;
+	std::set<raw_term> database;
+	// Interpret program
+	for(const raw_rule &rr : rp.r) {
+		for(int hd_idx = 0; hd_idx < rr.h.size(); hd_idx++) {
+			std::cout << "Current Rule:" << std::endl << rr << std::endl << std::endl;
+			interpret_rule(hd_idx, 0, rr, universe, bindings, database);
+			std::cout << "New Database:" << std::endl << std::endl;
+			for(const raw_term &entry : database) {
+				std::cout << entry << std::endl;
+			}
+			std::cout << std::endl << std::endl;
+		}
+	}
+	std::cout << "Database:" << std::endl << std::endl;
+	for(const raw_term &entry : database) {
+		std::cout << entry << std::endl;
+	}
+	std::cout << std::endl;
 }
 
 bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
@@ -543,6 +690,8 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 	for (raw_prog& p : rp.p) {
 		transform_quotes(p);
 		transform_evals(p);
+		std::cout << "Transformed Program:" << std::endl << std::endl << p << std::endl;
+		naive_pfp(p);
 	}
 #ifdef TRANSFORM_BIN_DRIVER
 	if (opts.enabled("bin"))

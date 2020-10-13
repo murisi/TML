@@ -97,6 +97,10 @@ class driver {
 	raw_term quote_term(const raw_term &head, const elem &rel_name, int rule_idx, int disjunct_idx, int goal_idx, std::vector<std::tuple<int, int, int, int>> &variables);
 	std::vector<std::tuple<int, int, int, int>> extract_quote_arity(const elem &quote_rel, const raw_prog &rp);
 	std::vector<std::vector<std::vector<int>>> extract_quote_arity_tree(const elem &quote_rel, const raw_prog &rp);
+	void interpret_rule(int hd_idx, int inp_idx, const raw_rule &rul, const std::set<elem> &universe, std::map<elem, elem> &bindings, std::set<raw_term> &database);
+	bool evaluate_term(const raw_term &rt, const std::set<elem> &universe, std::map<elem, elem> &bindings, std::set<raw_term> &database);
+	bool evaluate_form_tree(const raw_form_tree &rft, const std::set<elem> &universe, std::map<elem, elem> &bindings, std::set<raw_term> &database);
+	void naive_pfp(const raw_prog &rp);
 	raw_prog reify(const raw_prog& p);
 	raw_term from_grammar_elem(const elem& v, int_t v1, int_t v2);
 	raw_term from_grammar_elem_nt(const lexeme& r, const elem& c,

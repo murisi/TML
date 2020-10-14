@@ -499,8 +499,16 @@ void driver::reduce_universe(const elem &var, const raw_term &rt, std::set<elem>
 		if(var_pos < rt.e.size() - 1) {
 			std::set<elem> universe2;
 			for(const raw_term &entry : database) {
-				if(entry.e[0] == rt.e[0] && entry.e.size() == rt.e.size()) {
-					universe2.insert(entry.e[var_pos]);
+				if(entry.e.size() == rt.e.size()) {
+					int i;
+					for(i = 0; i < entry.e.size(); i++) {
+						if(rt.e[i].type != elem::VAR && rt.e[i] != entry.e[i]) {
+							break;
+						}
+					}
+					if(i == entry.e.size()) {
+						universe2.insert(entry.e[var_pos]);
+					}
 				}
 			}
 			universe = universe2;
@@ -766,33 +774,24 @@ void driver::naive_pfp(const raw_prog &rp) {
 	std::cout << "]" << std::endl;
 	
 	std::map<elem, elem> bindings;
-	std::set<raw_term> database;
+	std::set<raw_term> database, prev_database;
 	// Interpret program
-	for(const raw_rule &rr : rp.r) {
-		for(int hd_idx = 0; hd_idx < rr.h.size(); hd_idx++) {
-			std::cout << "Current Rule:" << std::endl << rr << std::endl << std::endl;
-			std::map<elem, std::set<elem>> universes;
-			populate_universes(rr, universe, universes, database);
-			for(const auto &[var, universe] : universes) {
-				std::cout << var << ": [";
-				for(const elem &elt : universe) {
-					std::cout << elt << ", ";
-				}
-				std::cout << "]" << std::endl;
+	do {
+		prev_database = database;
+		for(const raw_rule &rr : rp.r) {
+			for(int hd_idx = 0; hd_idx < rr.h.size(); hd_idx++) {
+				std::cout << rr << std::endl << std::endl;
+				std::map<elem, std::set<elem>> universes;
+				populate_universes(rr, universe, universes, database);
+				interpret_rule(hd_idx, 0, rr, universes, bindings, database);
 			}
-			interpret_rule(hd_idx, 0, rr, universes, bindings, database);
-			std::cout << "New Database:" << std::endl << std::endl;
-			for(const raw_term &entry : database) {
-				std::cout << entry << std::endl;
-			}
-			std::cout << std::endl << std::endl;
 		}
-	}
-	std::cout << "Database:" << std::endl << std::endl;
-	for(const raw_term &entry : database) {
-		std::cout << entry << std::endl;
-	}
-	std::cout << std::endl;
+		std::cout << "New Database:" << std::endl << std::endl;
+		for(const raw_term &entry : database) {
+			std::cout << entry << std::endl;
+		}
+		std::cout << std::endl << std::endl;
+	} while(prev_database != database);
 }
 
 bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {

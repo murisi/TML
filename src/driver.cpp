@@ -771,8 +771,7 @@ void driver::interpret_rule(int hd_idx, int inp_idx, const raw_rule &rul, const 
 	}
 }
 
-void driver::naive_pfp(const raw_prog &rp) {
-	std::set<elem> universe;
+void driver::naive_pfp(const raw_prog &rp, std::set<elem> &universe, std::set<raw_term> &database) {
 	// Populate our universe
 	for(const raw_rule &rr : rp.r) {
 		for(const raw_term &rt : rr.h) {
@@ -792,31 +791,19 @@ void driver::naive_pfp(const raw_prog &rp) {
 			}
 		}
 	}
-	// Debug: Print the universe
-	std::cout << "Universe:";
-	for(const elem &e : universe) {
-		std::cout << " " << e;
-	}
-	std::cout << std::endl << std::endl;
 	
-	std::map<elem, elem> bindings;
-	std::set<raw_term> database, prev_database;
+	std::set<raw_term> prev_database;
 	// Interpret program
 	do {
 		prev_database = database;
 		for(const raw_rule &rr : rp.r) {
 			for(int hd_idx = 0; hd_idx < rr.h.size(); hd_idx++) {
-				std::cout << rr << std::endl << std::endl;
 				std::map<elem, std::set<elem>> universes;
 				populate_universes(rr, universe, universes, database);
+				std::map<elem, elem> bindings;
 				interpret_rule(hd_idx, 0, rr, universes, bindings, database);
 			}
 		}
-		std::cout << "New Database:" << std::endl << std::endl;
-		for(const raw_term &entry : database) {
-			std::cout << entry << std::endl;
-		}
-		std::cout << std::endl << std::endl;
 	} while(prev_database != database);
 }
 
@@ -857,9 +844,17 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 //			p = transform_sdt(move(p));
 	for (raw_prog& p : rp.p) {
 		transform_quotes(p);
+		std::cout << "Quoted Program:" << std::endl << std::endl << p << std::endl;
 		transform_evals(p);
-		std::cout << "Transformed Program:" << std::endl << std::endl << p << std::endl;
-		naive_pfp(p);
+		std::cout << "Evaled Program:" << std::endl << std::endl << p << std::endl;
+		std::set<elem> universe;
+		std::set<raw_term> database;
+		naive_pfp(p, universe, database);
+		std::cout << "Fixed Point:" << std::endl << std::endl;
+		for(const raw_term &entry : database) {
+			std::cout << entry << std::endl;
+		}
+		std::cout << std::endl << std::endl;
 	}
 #ifdef TRANSFORM_BIN_DRIVER
 	if (opts.enabled("bin"))

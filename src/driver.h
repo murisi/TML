@@ -105,7 +105,7 @@ class driver {
 	void reduce_universe(const elem &var, const raw_rule &rul, std::set<elem> &universe, std::set<raw_term> &database);
 	void populate_universes(const raw_rule &rul, std::set<elem> &universe, std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database);
 	void populate_universes(const raw_form_tree &rft, std::set<elem> &universe, std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database);
-	void naive_pfp(const raw_prog &rp);
+	void naive_pfp(const raw_prog &rp, std::set<elem> &universe, std::set<raw_term> &database);
 	raw_prog reify(const raw_prog& p);
 	raw_term from_grammar_elem(const elem& v, int_t v1, int_t v2);
 	raw_term from_grammar_elem_nt(const lexeme& r, const elem& c,

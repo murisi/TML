@@ -218,13 +218,11 @@ void driver::transform_quotes(raw_prog &rp) {
 						// Maintain the current rule index of rules being quoted
 						int rule_idx = 0;
 						for(const raw_rule &rr : nrp.r) {
-							// We are going to make a separate quoted rule with identical body
-							// for each head of the supplied rule.
-							for(const raw_term &head : rr.h) {
-								rp.r.push_back(raw_rule(quote_term(head, rel_name, rule_idx, 0, 0, variables)));
-								// Maintain the current disjunction index of the bodies being quoted
-								int disjunct_idx = 1;
-								for(const std::vector<raw_term> &bodie : rr.b) {
+							// Maintain the current disjunction index of the bodies being quoted
+							int disjunct_idx = 0;
+							
+							for(const std::vector<std::vector<raw_term>> &tmp : {{ rr.h }, rr.b }) {
+								for(const std::vector<raw_term> &bodie : tmp) {
 									// Maintain the current goal index of the disjunction being quoted
 									int goal_idx = 0;
 									for(const raw_term &goal : bodie) {
@@ -233,8 +231,8 @@ void driver::transform_quotes(raw_prog &rp) {
 									}
 									disjunct_idx ++;
 								}
-								rule_idx ++;
 							}
+							rule_idx ++;
 						}
 						
 						// Now create sub-relation to store the location of variables in the quoted relation

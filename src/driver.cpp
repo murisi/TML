@@ -107,13 +107,11 @@ inputs tmpii;
  * elements within the raw term are added to the variables vector. */
 
 raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int rule_idx, int disjunct_idx, int goal_idx, std::vector<std::tuple<int, int, int, int>> &variables) {
-	// We'll need the dict when we're creating terms with parentheses
-	dict_t &dict = tbl->get_dict();
 	// The elements of the term that we're building up
 	std::vector<elem> quoted_term_e;
 	// Add metadata to quoted term: term signature, rule #, disjunct #, goal #, total inputs, relation sym
 	quoted_term_e.insert(quoted_term_e.end(),
-		{rel_name, elem(elem::OPENP, dict.op), elem(0), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), elem((int_t) head.e.size()-3), head.e[0] });
+		{rel_name, elem_openp, elem(0), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), elem((int_t) head.e.size()-3), head.e[0] });
 	for(std::vector<elem>::size_type param_idx = 2; param_idx < head.e.size() - 1; param_idx ++) {
 		if(head.e[param_idx].type == elem::VAR) {
 			// Convert the variable to a symbol and add it to quouted term
@@ -126,7 +124,7 @@ raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int rule
 		}
 	}
 	// Terminate term elements and make raw_term object
-	quoted_term_e.push_back(elem(elem::CLOSEP, dict.cl));
+	quoted_term_e.push_back(elem_closep);
 	raw_term quoted_term;
 	quoted_term.e = quoted_term_e;
 	// We can call calc_arity with nullptr because no validation error will
@@ -193,8 +191,6 @@ raw_prog driver::read_prog(std::vector<elem>::const_iterator iter, std::vector<e
  * s(1 <rule #> <disjunct #> <goal #> <input #>) */
 
 void driver::transform_quotes(raw_prog &rp) {
-	// We'll need the dict when we're creating terms with parentheses
-	dict_t &dict = tbl->get_dict();
 	for(raw_rule &outer_rule : rp.r) {
 		// Iterate through the bodies of the current rule looking for uses of the
 		// "quote" relation.
@@ -238,7 +234,7 @@ void driver::transform_quotes(raw_prog &rp) {
 						// Now create sub-relation to store the location of variables in the quoted relation
 						for(auto const& [rule_idx, disjunct_idx, goal_idx, arg_idx] : variables) {
 							std::vector<elem> var_e =
-								{ rel_name, elem(elem::OPENP, dict.op), elem(1), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), elem(arg_idx), elem(elem::CLOSEP, dict.cl) };
+								{ rel_name, elem_openp, elem(1), elem(rule_idx), elem(disjunct_idx), elem(goal_idx), elem(arg_idx), elem_closep };
 							raw_term var_t;
 							var_t.e = var_e;
 							var_t.calc_arity(nullptr);
@@ -312,8 +308,6 @@ std::vector<std::vector<std::vector<int>>> driver::extract_quote_arity_tree(cons
  * its entries. */
 
 void driver::transform_evals(raw_prog &rp) {
-	// We'll need the dict when we're creating terms with parentheses
-	dict_t &dict = tbl->get_dict();
 	for(raw_rule &outer_rule : rp.r) {
 		// Iterate through the bodies of the current rule looking for uses of the
 		// "eval" relation.
@@ -329,11 +323,6 @@ void driver::transform_evals(raw_prog &rp) {
 					elem quote_sym = rhs_term.e[4];
 					// Get the program arity in tree form
 					std::vector<std::vector<std::vector<int>>> prog_tree = extract_quote_arity_tree(arity_rel, rp);
-					
-					// Make lexemes for connectives
-					input *keywords = tmpii.add_string(std::string("="));
-					keywords->prog_lex();
-					lexeme eql = keywords->l[0];
 					
 					// We want to generate a lot of unique variables. We do this by maintaining
 					// a counter. At any point in time, its string representation will be the
@@ -352,15 +341,15 @@ void driver::transform_evals(raw_prog &rp) {
 							// multiple rules. The rest of the inputs are the values that
 							// would be supplied to the rule in the quoted program. I.e.
 							// these are not meta.
-							std::vector<elem> head_elems = { out_rel, elem(elem::OPENP, dict.op), real_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) };
+							std::vector<elem> head_elems = { out_rel, elem_openp, real_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) };
 							for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
 								head_elems.push_back(real_map[{ridx, 0, hidx, inidx}] = generate_var(var_counter));
 							}
-							head_elems.push_back(elem(elem::CLOSEP, dict.cl));
+							head_elems.push_back(elem_closep);
 							raw_term head(head_elems);
 							
 							// Start of with the true constant (0=0), and add conjunctions
-							raw_form_tree *body_tree = new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {elem(0), elem(elem::EQ, eql), elem(0)}));
+							raw_form_tree *body_tree = new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {elem(0), elem_eq, elem(0)}));
 							
 							// 2) Make the quoted term declaration section. These variables
 							// take on the parameter names and relation names of the quoted
@@ -369,12 +358,12 @@ void driver::transform_evals(raw_prog &rp) {
 							for(int didx = 0; didx < prog_tree[ridx].size(); didx++) {
 								for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
 									if(didx == 0 && gidx != hidx) continue;
-									std::vector<elem> a = { quote_sym, elem(elem::OPENP, dict.op), elem(0), elem(ridx), elem(didx), elem(gidx), elem(prog_tree[ridx][didx][gidx]),
+									std::vector<elem> a = { quote_sym, elem_openp, elem(0), elem(ridx), elem(didx), elem(gidx), elem(prog_tree[ridx][didx][gidx]),
 										quote_map[{ridx, didx, gidx, -1}] = (didx == 0 ? real_map[{ridx, 0, hidx, -1}] : generate_var(var_counter)) };
 									for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 										a.push_back(quote_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
 									}
-									a.push_back(elem(elem::CLOSEP, dict.cl));
+									a.push_back(elem_closep);
 									body_tree = new raw_form_tree(elem::AND, body_tree, new raw_form_tree(elem::NONE, raw_term(a)));
 								}
 							}
@@ -384,11 +373,11 @@ void driver::transform_evals(raw_prog &rp) {
 							// we just do the body
 							for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
 								for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
-									std::vector<elem> a = { out_rel, elem(elem::OPENP, dict.op), real_map[{ridx, didx, gidx, -1}] = quote_map[{ridx, didx, gidx, -1}] };
+									std::vector<elem> a = { out_rel, elem_openp, real_map[{ridx, didx, gidx, -1}] = quote_map[{ridx, didx, gidx, -1}] };
 									for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 										a.push_back(real_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
 									}
-									a.push_back(elem(elem::CLOSEP, dict.cl));
+									a.push_back(elem_closep);
 									body_tree = new raw_form_tree(elem::AND, body_tree, new raw_form_tree(elem::NONE, raw_term(a)));
 								}
 							}
@@ -406,10 +395,10 @@ void driver::transform_evals(raw_prog &rp) {
 												for(int inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
 													// Without this, each formula would be constructed twice.
 													if(std::make_tuple(didx1, gidx1, inidx1) >= std::make_tuple(didx2, gidx2, inidx2)) continue;
-													raw_term a({ quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx1), elem(gidx1), elem(inidx1), elem(elem::CLOSEP, dict.cl) }),
-														b({ quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx2), elem(gidx2), elem(inidx2), elem(elem::CLOSEP, dict.cl) }),
-														c(raw_term::EQ, { quote_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), quote_map[{ridx, didx2, gidx2, inidx2}] }),
-														d(raw_term::EQ, { real_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), real_map[{ridx, didx2, gidx2, inidx2}] });
+													raw_term a({ quote_sym, elem_openp, elem(1), elem(ridx), elem(didx1), elem(gidx1), elem(inidx1), elem_closep }),
+														b({ quote_sym, elem_openp, elem(1), elem(ridx), elem(didx2), elem(gidx2), elem(inidx2), elem_closep }),
+														c(raw_term::EQ, { quote_map[{ridx, didx1, gidx1, inidx1}], elem_eq, quote_map[{ridx, didx2, gidx2, inidx2}] }),
+														d(raw_term::EQ, { real_map[{ridx, didx1, gidx1, inidx1}], elem_eq, real_map[{ridx, didx2, gidx2, inidx2}] });
 													body_tree = new raw_form_tree(elem::AND, body_tree,
 														new raw_form_tree(elem::IMPLIES,
 															new raw_form_tree(elem::AND,
@@ -432,8 +421,8 @@ void driver::transform_evals(raw_prog &rp) {
 								for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
 									if(didx == 0 && gidx != hidx) continue;
 									for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-										raw_term a({ quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem(elem::CLOSEP, dict.cl) });
-										raw_term b(raw_term::EQ, { quote_map[{ridx, didx, gidx, inidx}], elem(elem::EQ, eql), real_map[{ridx, didx, gidx, inidx}] });
+										raw_term a({ quote_sym, elem_openp, elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem_closep });
+										raw_term b(raw_term::EQ, { quote_map[{ridx, didx, gidx, inidx}], elem_eq, real_map[{ridx, didx, gidx, inidx}] });
 										body_tree = new raw_form_tree(elem::AND, body_tree,
 											new raw_form_tree(elem::IMPLIES,
 												new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE, a)),

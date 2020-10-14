@@ -64,6 +64,7 @@ typedef size_t nlevel;
 #define measure_time(x) measure_time_start(); x; measure_time_end()
 #define elem_openp elem(elem::OPENP, get_lexeme("("))
 #define elem_closep elem(elem::CLOSEP, get_lexeme(")"))
+#define elem_eq elem(elem::EQ, get_lexeme("="))
 #define htrue bdd_handle::T
 #define hfalse bdd_handle::F
 template<typename T> T sort(const T& x){T t=x;return sort(t.begin(),t.end()),t;}

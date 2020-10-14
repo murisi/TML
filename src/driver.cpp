@@ -414,9 +414,11 @@ void driver::transform_evals(raw_prog &rp) {
 										if(didx1 == 0 && gidx1 != hidx) continue;
 										for(int inidx1 = 0; inidx1 < prog_tree[ridx][didx1][gidx1]; inidx1++) {
 											for(int didx2 = didx1; didx2 < prog_tree[ridx].size(); didx2++) {
-												for(int gidx2 = gidx1; gidx2 < prog_tree[ridx][didx2].size(); gidx2++) {
+												for(int gidx2 = 0; gidx2 < prog_tree[ridx][didx2].size(); gidx2++) {
 													if(didx2 == 0 && gidx2 != hidx) continue;
 													for(int inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
+														// Without this, each formula would be constructed twice.
+														if(std::make_tuple(didx1, gidx1, inidx1) >= std::make_tuple(didx2, gidx2, inidx2)) continue;
 														raw_term a({ quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx1), elem(gidx1), elem(inidx1), elem(elem::CLOSEP, dict.cl) });
 														raw_term b({ quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(didx2), elem(gidx2), elem(inidx2), elem(elem::CLOSEP, dict.cl) });
 														raw_term c(raw_term::EQ, { quote_map[{ridx, didx1, gidx1, inidx1}], elem(elem::EQ, eql), quote_map[{ridx, didx2, gidx2, inidx2}] });
@@ -492,6 +494,9 @@ void driver::transform_evals(raw_prog &rp) {
 	}
 }
 
+/* Reduce the size of the universe that the given variable takes its values from
+ * by statically analyzing the term and determining what is impossible. */
+
 void driver::reduce_universe(const elem &var, const raw_term &rt, std::set<elem> &universe, std::set<raw_term> &database) {
 	if(rt.extype == raw_term::REL) {
 		int var_pos;
@@ -515,6 +520,10 @@ void driver::reduce_universe(const elem &var, const raw_term &rt, std::set<elem>
 		}
 	}
 }
+
+/* Reduce the size of the universe that the given variable takes its values from
+ * by statically analyzing the logical formula and determining what is
+ * impossible. */
 
 void driver::reduce_universe(const elem &var, const raw_form_tree &t, std::set<elem> &universe, std::set<raw_term> &database) {
 	switch(t.type) {
@@ -551,6 +560,9 @@ void driver::reduce_universe(const elem &var, const raw_form_tree &t, std::set<e
 	}
 }
 
+/* Reduce the size of the universe that the given variable takes its values from
+ * by statically analyzing the rule and determining what is impossible. */
+
 void driver::reduce_universe(const elem &var, const raw_rule &rul, std::set<elem> &universe, std::set<raw_term> &database) {
 	if(!rul.b.empty()) {
 		std::set<elem> universe3;
@@ -566,6 +578,10 @@ void driver::reduce_universe(const elem &var, const raw_rule &rul, std::set<elem
 		reduce_universe(var, *rul.prft, universe, database);
 	}
 }
+
+/* Based on the current state of the database, use static analysis of the
+ * logical formulas to remove from the universe of each quantification, elements
+ * that could never satisfy their inner formula. */
 
 void driver::populate_universes(const raw_form_tree &t, std::set<elem> &universe, std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database) {
 	switch(t.type) {
@@ -616,6 +632,10 @@ void driver::populate_universes(const raw_form_tree &t, std::set<elem> &universe
 	}
 }
 
+/* Based on the current state of the database, use static analysis of the
+ * logical formulas to remove from the universe of each quantification, elements
+ * that could never satisfy their inner formula. */
+
 void driver::populate_universes(const raw_rule &rul, std::set<elem> &universe, std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database) {
 	for(const raw_term &head : rul.h) {
 		for(const elem &elt : head.e) {
@@ -630,6 +650,9 @@ void driver::populate_universes(const raw_rule &rul, std::set<elem> &universe, s
 		populate_universes(*rul.prft, universe, universes, database);
 	}
 }
+
+/* Evaluate the given logical term over the given database in the context of
+ * the given bindings and return whether it is true or false. */
 
 bool driver::evaluate_term(const raw_term &query, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
 	if(query.extype == raw_term::REL) {
@@ -653,6 +676,10 @@ bool driver::evaluate_term(const raw_term &query, std::map<elem, elem> &bindings
 	}
 	return false;
 }
+
+/* Evaluate the given logical formula over the given database in the context of
+ * the given bindings and return whether it is true or false. The universes
+ * parameter is used to obtain the domain for each quantification. */
 
 bool driver::evaluate_form_tree(const raw_form_tree &t, const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
 	switch(t.type) {
@@ -704,6 +731,9 @@ bool driver::evaluate_form_tree(const raw_form_tree &t, const std::map<elem, std
 			assert(false); //should never reach here
 	}
 }
+
+/* Interpret a rule. That is, run a rule over the current databaseand add the
+ * discovered facts to the database. */
 
 void driver::interpret_rule(int hd_idx, int inp_idx, const raw_rule &rul, const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
 	const raw_term &head = rul.h[hd_idx];
@@ -767,11 +797,11 @@ void driver::naive_pfp(const raw_prog &rp) {
 		}
 	}
 	// Debug: Print the universe
-	std::cout << "[";
+	std::cout << "Universe:";
 	for(const elem &e : universe) {
-		std::cout << e << ", ";
+		std::cout << " " << e;
 	}
-	std::cout << "]" << std::endl;
+	std::cout << std::endl << std::endl;
 	
 	std::map<elem, elem> bindings;
 	std::set<raw_term> database, prev_database;

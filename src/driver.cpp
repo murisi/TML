@@ -359,26 +359,18 @@ void driver::transform_evals(raw_prog &rp) {
 							head_elems.push_back(elem(elem::CLOSEP, dict.cl));
 							raw_term head(head_elems);
 							
-							raw_form_tree *body_tree;
+							// Start of with the true constant (0=0), and add conjunctions
+							raw_form_tree *body_tree = new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {elem(0), elem(elem::EQ, eql), elem(0)}));
+							
 							// 2) Make the quoted term declaration section. These variables
 							// take on the parameter names and relation names of the quoted
 							// program. I.e. these are meta, describing the program as a
 							// formal object.
-							// 2a) Declare the quoted term corresponding to the rule head
-							{
-								std::vector<elem> a = { quote_sym, elem(elem::OPENP, dict.op), elem(0), elem(ridx), elem(0), elem(hidx), elem(prog_tree[ridx][0][hidx]),
-									quote_map[{ridx, 0, hidx, -1}] = real_map[{ridx, 0, hidx, -1}] };
-								for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
-									a.push_back(quote_map[{ridx, 0, hidx, inidx}] = generate_var(var_counter));
-								}
-								a.push_back(elem(elem::CLOSEP, dict.cl));
-								body_tree = new raw_form_tree(elem::NONE, raw_term(a));
-							}
-							// 2b) Declare the quoted terms corresponding to the rule body
-							for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
+							for(int didx = 0; didx < prog_tree[ridx].size(); didx++) {
 								for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
+									if(didx == 0 && gidx != hidx) continue;
 									std::vector<elem> a = { quote_sym, elem(elem::OPENP, dict.op), elem(0), elem(ridx), elem(didx), elem(gidx), elem(prog_tree[ridx][didx][gidx]),
-										quote_map[{ridx, didx, gidx, -1}] = generate_var(var_counter) };
+										quote_map[{ridx, didx, gidx, -1}] = (didx == 0 ? real_map[{ridx, 0, hidx, -1}] : generate_var(var_counter)) };
 									for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 										a.push_back(quote_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
 									}
@@ -436,22 +428,13 @@ void driver::transform_evals(raw_prog &rp) {
 							// inputs to rules in the quoted program will be literal symbols
 							// rather than variables. If this is the case, then fix the
 							// literals into the evaled program relation.
-							// 5a) Fix the symbols in the rule head
-							for(int inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
-								raw_term a({ quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem(elem::CLOSEP, dict.cl) });
-								raw_term b(raw_term::EQ, { quote_map[{ridx, 0, hidx, inidx}], elem(elem::EQ, eql), real_map[{ridx, 0, hidx, inidx}] });
-								body_tree = new raw_form_tree(elem::AND, body_tree,
-									new raw_form_tree(elem::IMPLIES,
-										new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE, a)),
-										new raw_form_tree(elem::NONE, b)));
-							}
-							// 5b) Fix the symbols in the rule body
-							for(int didx = 1; didx < prog_tree[ridx].size(); didx++) {
+							for(int didx = 0; didx < prog_tree[ridx].size(); didx++) {
 								for(int gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
+									if(didx == 0 && gidx != hidx) continue;
 									for(int inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 										raw_term a({ quote_sym, elem(elem::OPENP, dict.op), elem(1), elem(ridx), elem(0), elem(hidx), elem(inidx), elem(elem::CLOSEP, dict.cl) });
 										raw_term b(raw_term::EQ, { quote_map[{ridx, didx, gidx, inidx}], elem(elem::EQ, eql), real_map[{ridx, didx, gidx, inidx}] });
-										body_tree = new raw_form_tree(elem::AND, nullptr, nullptr, body_tree,
+										body_tree = new raw_form_tree(elem::AND, body_tree,
 											new raw_form_tree(elem::IMPLIES,
 												new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE, a)),
 												new raw_form_tree(elem::NONE, b)));

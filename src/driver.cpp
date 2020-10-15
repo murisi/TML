@@ -150,10 +150,10 @@ raw_prog driver::read_prog(elem prog, const raw_prog &rp) {
  * s(1 <rule #> <disjunct #> <goal #> <input #>) */
 
 void driver::transform_quotes(raw_prog &rp) {
-	for(raw_rule &outer_rule : rp.r) {
+	for(size_t oridx = 0; oridx < rp.r.size(); oridx++) {
 		// Iterate through the bodies of the current rule looking for uses of the
 		// "quote" relation.
-		for(raw_term &curr_term : outer_rule.h) {
+		for(raw_term &curr_term : rp.r[oridx].h) {
 			// Search for uses of quote within a relation.
 			for(int_t offset = 3; offset < ssize(curr_term.e); offset ++) {
 				if(curr_term.e[offset].type == elem::STR &&
@@ -258,11 +258,11 @@ program_arity driver::extract_quote_arity_tree(const elem &quote_rel,
  * relation's arity and its name - not its entries. */
 
 void driver::transform_evals(raw_prog &rp) {
-	for(const raw_rule &outer_rule : rp.r) {
+	for(size_t oridx = 0; oridx < rp.r.size(); oridx++) {
 		// Iterate through the bodies of the current rule looking for uses
 		// of the "eval" relation.
-		for(const raw_term &curr_term : outer_rule.h) {
-			if(!(curr_term.e[0].type == elem::SYM &&
+		for(const raw_term &curr_term : rp.r[oridx].h) {
+			if(!(!curr_term.e.empty() && curr_term.e[0].type == elem::SYM &&
 				to_string_t("eval") == lexeme2str(curr_term.e[0].e))) continue;
 			// The first parenthesis marks the beginning of eval's three arguments.
 			if(!(ssize(curr_term.e) == 6 && curr_term.e[1].type == elem::OPENP &&
@@ -278,7 +278,6 @@ void driver::transform_evals(raw_prog &rp) {
 			elem quote_sym = curr_term.e[4];
 			// Get the program arity in tree form
 			program_arity prog_tree = extract_quote_arity_tree(arity_rel, rp);
-			
 			// We want to generate a lot of unique variables. We do this by
 			// maintaining a counter. At any point in time, its string
 			// representation will be the name of the next generated variable.
@@ -304,11 +303,9 @@ void driver::transform_evals(raw_prog &rp) {
 					}
 					head_elems.push_back(elem_closep);
 					raw_term head(head_elems);
-					
 					// Start of with the true constant (0=0), and add conjunctions
 					raw_form_tree *body_tree = new raw_form_tree(elem::NONE,
 						raw_term(raw_term::EQ, {elem(0), elem_eq, elem(0)}));
-					
 					// 2) Make the quoted term declaration section. These variables
 					// take on the parameter names and relation names of the quoted
 					// program. I.e. these are meta, describing the program as a
@@ -423,7 +420,6 @@ void driver::transform_evals(raw_prog &rp) {
 								new raw_form_tree(elem::VAR, var), body_tree);
 						}
 					}
-					
 					// 7) Put the body and head constructed above together to make a
 					// rule and add that to the program.
 					raw_rule rr;

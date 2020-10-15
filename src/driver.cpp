@@ -392,8 +392,8 @@ void driver::transform_evals(raw_prog &rp) {
 							if(didx == 0 && gidx != hidx) continue;
 							for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 								raw_term
-									a({ quote_sym, elem_openp, elem(1), uelem(ridx), elem(0),
-										uelem(hidx), uelem(inidx), elem_closep }),
+									a({ quote_sym, elem_openp, elem(1), uelem(ridx), elem(didx),
+										uelem(gidx), uelem(inidx), elem_closep }),
 									b(raw_term::EQ, { quote_map[{ridx, didx, gidx, inidx}],
 										elem_eq, real_map[{ridx, didx, gidx, inidx}] });
 								body_tree = new raw_form_tree(elem::AND, body_tree,

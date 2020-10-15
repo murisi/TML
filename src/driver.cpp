@@ -128,51 +128,16 @@ raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int_t ru
 	return raw_term(quoted_term_e);
 }
 
-/* Read a vector of elements up until an unmatched closing parenthesis and
- * parse what was read into a raw_prog. */
+/* Parse an STR elem into a raw_prog. */
 
-raw_prog driver::read_prog(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp, std::vector<elem>::const_iterator &prog_end) {
-	stringstream quote_tmp;
-	// Number of nested parentheses we're in.
-	int nest_level = 1;
-	// Capture the rule argument to quote by adding all lexemes until
-	// closing parenthesis of rule to a string.
-	for(; iter != end && nest_level; iter ++) {
-		if(iter->type == elem::OPENP) nest_level++;
-		else if(iter->type == elem::CLOSEP) nest_level--;
-		// Make sure this lexeme is not the closing parenthesis that wraps
-		// the entire rule.
-		if(nest_level) {
-			// Lexer does not allow the turnstile operator ":-" and comma
-			// operator "," inside rules, so we'll look for the lexemes "ts"
-			// and "cm" for now.
-			string_t elem_str = lexeme2str(iter->e);
-			if(iter->type == elem::SYM && to_string_t("ts") == elem_str) {
-				quote_tmp << ":- ";
-			} else if(iter->type == elem::SYM && to_string_t("cm") == elem_str) {
-				quote_tmp << ", ";
-			} else if(iter->type == elem::SYM && to_string_t("dt") == elem_str) {
-				quote_tmp << ". ";
-			} else {
-				quote_tmp << *iter << " ";
-			}
-		}
-	}
-	// If we have not managed to reach the parenthesis that encloses the entire
-	// rule being supplied to quote, then the supplied vector could not have
-	// been a representation of a rule.
-	if(nest_level) {
-		exit(1);
-	} else {
-		input *prog_in = tmpii.add_string(quote_tmp.str());
-		prog_in->prog_lex();
-		raw_prog nrp;
-		nrp.builtins = rp.builtins;
-		// Try to parse the string that we have been building using elems.
-		nrp.parse(prog_in, tbl->get_dict());
-		prog_end = iter - 1;
-		return nrp;
-	}
+raw_prog driver::read_prog(elem prog, const raw_prog &rp) {
+	lexeme prog_str = {prog.e[0]+1, prog.e[1]-1};
+	input *prog_in = tmpii.add_string(lexeme2str(prog_str));
+	prog_in->prog_lex();
+	raw_prog nrp;
+	nrp.builtins = rp.builtins;
+	nrp.parse(prog_in, tbl->get_dict());
+	return nrp;
 }
 
 /* Loop through the rules of the given program checking if they use a function
@@ -191,33 +156,28 @@ void driver::transform_quotes(raw_prog &rp) {
 		// "quote" relation.
 		for(raw_term &rhs_term : outer_rule.h) {
 			// Search for uses of quote within a relation.
-			for(int_t offset = 2; offset < ssize(rhs_term.e); offset ++) {
-				if(rhs_term.e[offset].type == elem::SYM && to_string_t("quote") == lexeme2str(rhs_term.e[offset].e)) {
-					// The parenthesis marks the beginning of quote's arguments.
-					if(ssize(rhs_term.e) > offset + 1 && rhs_term.e[offset + 1].type == elem::OPENP) {
-						std::vector<elem>::const_iterator prog_end;
-						raw_prog nrp = read_prog(rhs_term.e.begin() + offset + 3, rhs_term.e.end(), rp, prog_end);
-						// The relation under which the quotation we build will be stored.
-						elem rel_name = rhs_term.e[offset + 2];
-						// Replace the whole quotation with the relation it will create.
-						rhs_term.e.erase(rhs_term.e.begin() + offset, prog_end + 1);
-						rhs_term.e.insert(rhs_term.e.begin() + offset, rel_name);
-						rhs_term.calc_arity(nullptr);
-						// Maintain a list of locations where variables occur:
-						std::vector<quote_coord> variables;
-						for(int_t ridx = 0; ridx < ssize(nrp.r); ridx++) {
-							for(int_t didx = 0; didx < ssize(nrp.r[ridx].b) + 1; didx++) {
-								const std::vector<raw_term> &bodie = didx == 0 ? nrp.r[ridx].h : nrp.r[ridx].b[didx-1];
-								for(int_t gidx = 0; gidx < ssize(bodie); gidx++) {
-									rp.r.push_back(raw_rule(quote_term(bodie[gidx], rel_name, ridx, didx, gidx, variables)));
-								}
+			for(int_t offset = 3; offset < ssize(rhs_term.e); offset ++) {
+				if(rhs_term.e[offset].type == elem::STR) {
+					raw_prog nrp = read_prog(rhs_term.e[offset], rp);
+					// The relation under which the quotation we build will be stored.
+					elem rel_name = rhs_term.e[offset - 1];
+					// Replace the whole quotation with the relation it will create.
+					rhs_term.e.erase(rhs_term.e.begin() + offset);
+					rhs_term.calc_arity(nullptr);
+					// Maintain a list of locations where variables occur:
+					std::vector<quote_coord> variables;
+					for(int_t ridx = 0; ridx < ssize(nrp.r); ridx++) {
+						for(int_t didx = 0; didx < ssize(nrp.r[ridx].b) + 1; didx++) {
+							const std::vector<raw_term> &bodie = didx == 0 ? nrp.r[ridx].h : nrp.r[ridx].b[didx-1];
+							for(int_t gidx = 0; gidx < ssize(bodie); gidx++) {
+								rp.r.push_back(raw_rule(quote_term(bodie[gidx], rel_name, ridx, didx, gidx, variables)));
 							}
 						}
-						
-						// Now create sub-relation to store the location of variables in the quoted relation
-						for(auto const& [rule_idx, disjunct_idx, goal_idx, arg_idx] : variables) {
-							rp.r.push_back(raw_rule(raw_term({ rel_name, elem_openp, elem(1), uelem(rule_idx), uelem(disjunct_idx), uelem(goal_idx), uelem(arg_idx), elem_closep })));
-						}
+					}
+					
+					// Now create sub-relation to store the location of variables in the quoted relation
+					for(auto const& [rule_idx, disjunct_idx, goal_idx, arg_idx] : variables) {
+						rp.r.push_back(raw_rule(raw_term({ rel_name, elem_openp, elem(1), uelem(rule_idx), uelem(disjunct_idx), uelem(goal_idx), uelem(arg_idx), elem_closep })));
 					}
 				}
 			}

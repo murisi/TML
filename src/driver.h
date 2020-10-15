@@ -102,7 +102,7 @@ class driver {
 	elem generate_var(int &var_counter);
 	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
-	raw_prog read_prog(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp, std::vector<elem>::const_iterator &prog_end);
+	raw_prog read_prog(elem prog, const raw_prog &rp);
 	raw_term quote_term(const raw_term &head, const elem &rel_name, int_t rule_idx, int_t disjunct_idx, int_t goal_idx, std::vector<quote_coord> &variables);
 	std::vector<quote_coord> extract_quote_arity(const elem &quote_rel, const raw_prog &rp);
 	program_arity extract_quote_arity_tree(const elem &quote_rel, const raw_prog &rp);

@@ -31,11 +31,11 @@ typedef enum prolog_dialect { XSB, SWIPL } prolog_dialect;
 
 #define uelem(x) elem(int_t(x))
 
-typedef uint_t goal_arity;
+typedef int_t goal_arity;
 typedef std::vector<goal_arity> disjunct_arity;
 typedef std::vector<disjunct_arity> rule_arity;
 typedef std::vector<rule_arity> program_arity;
-typedef std::tuple<uint_t, uint_t, uint_t, uint_t> quote_coord;
+typedef std::array<int_t, 4> quote_coord;
 
 class archive;
 
@@ -102,7 +102,7 @@ class driver {
 	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
 	raw_prog read_prog(std::vector<elem>::const_iterator iter, std::vector<elem>::const_iterator end, const raw_prog &rp, std::vector<elem>::const_iterator &prog_end);
-	raw_term quote_term(const raw_term &head, const elem &rel_name, uint_t rule_idx, uint_t disjunct_idx, uint_t goal_idx, std::vector<quote_coord> &variables);
+	raw_term quote_term(const raw_term &head, const elem &rel_name, int_t rule_idx, int_t disjunct_idx, int_t goal_idx, std::vector<quote_coord> &variables);
 	std::vector<quote_coord> extract_quote_arity(const elem &quote_rel, const raw_prog &rp);
 	program_arity extract_quote_arity_tree(const elem &quote_rel, const raw_prog &rp);
 	void interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul, const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings, std::set<raw_term> &database);

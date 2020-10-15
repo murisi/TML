@@ -106,19 +106,19 @@ inputs tmpii;
  * its quotation within a relation of the given name. The locations of variable
  * elements within the raw term are added to the variables vector. */
 
-raw_term driver::quote_term(const raw_term &head, const elem &rel_name, uint_t rule_idx, uint_t disjunct_idx, uint_t goal_idx, std::vector<quote_coord> &variables) {
+raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int_t rule_idx, int_t disjunct_idx, int_t goal_idx, std::vector<quote_coord> &variables) {
 	// The elements of the term that we're building up
 	std::vector<elem> quoted_term_e;
 	// Add metadata to quoted term: term signature, rule #, disjunct #, goal #, total inputs, relation sym
 	quoted_term_e.insert(quoted_term_e.end(),
-		{rel_name, elem_openp, elem(0), uelem(rule_idx), uelem(disjunct_idx), uelem(goal_idx), uelem(head.e.size()-3), head.e[0] });
-	for(std::vector<elem>::size_type param_idx = 2; param_idx < head.e.size() - 1; param_idx ++) {
+		{rel_name, elem_openp, elem(0), uelem(rule_idx), uelem(disjunct_idx), uelem(goal_idx), uelem(ssize(head.e)-3), head.e[0] });
+	for(int_t param_idx = 2; param_idx < ssize(head.e) - 1; param_idx ++) {
 		if(head.e[param_idx].type == elem::VAR) {
 			// Convert the variable to a symbol and add it to quouted term
 			elem var_sym_elem(elem::SYM, head.e[param_idx].e);
 			quoted_term_e.push_back(var_sym_elem);
 			// Log the fact that a variable occurs at this location
-			variables.emplace_back(rule_idx, disjunct_idx, goal_idx, param_idx-2);
+			variables.push_back({rule_idx, disjunct_idx, goal_idx, param_idx-2});
 		} else {
 			quoted_term_e.push_back(head.e[param_idx]);
 		}
@@ -196,10 +196,10 @@ void driver::transform_quotes(raw_prog &rp) {
 		// "quote" relation.
 		for(raw_term &rhs_term : outer_rule.h) {
 			// Search for uses of quote within a relation.
-			for(std::vector<elem>::size_type offset = 2; offset < rhs_term.e.size(); offset ++) {
+			for(int_t offset = 2; offset < ssize(rhs_term.e); offset ++) {
 				if(rhs_term.e[offset].type == elem::SYM && to_string_t("quote") == lexeme2str(rhs_term.e[offset].e)) {
 					// The parenthesis marks the beginning of quote's arguments.
-					if(rhs_term.e.size() > offset + 1 && rhs_term.e[offset + 1].type == elem::OPENP) {
+					if(ssize(rhs_term.e) > offset + 1 && rhs_term.e[offset + 1].type == elem::OPENP) {
 						std::vector<elem>::const_iterator prog_end;
 						raw_prog nrp = read_prog(rhs_term.e.begin() + offset + 3, rhs_term.e.end(), rp, prog_end);
 						// The relation under which the quotation we build will be stored.
@@ -266,7 +266,7 @@ std::vector<quote_coord> driver::extract_quote_arity(const elem &quote_rel, cons
 	std::vector<quote_coord> quote_shape;
 	for(const raw_rule &rr : rp.r) {
 		if(lexeme2str(rr.h[0].e[0].e) == lexeme2str(quote_rel.e) && rr.h[0].e[2].num == 0) {
-			quote_shape.push_back(std::make_tuple(rr.h[0].e[3].num, rr.h[0].e[4].num, rr.h[0].e[5].num, rr.h[0].e[6].num));
+			quote_shape.push_back({ rr.h[0].e[3].num, rr.h[0].e[4].num, rr.h[0].e[5].num, rr.h[0].e[6].num });
 		}
 	}
 	return quote_shape;
@@ -285,15 +285,15 @@ program_arity driver::extract_quote_arity_tree(const elem &quote_rel, const raw_
 	// Put the program arity into the form of a tree.
 	for(auto const& pos : prog_shape) {
 		// Figure out which rule and where in the rule to put this term.
-		if(get<0>(pos) != get<0>(prev_pos)) {
+		if(pos[0] != prev_pos[0]) {
 			// Case where we have encountered new rule in map
-			prog_tree.push_back({{get<3>(pos)}});
-		} else if(get<1>(pos) != get<1>(prev_pos)) {
+			prog_tree.push_back({{pos[3]}});
+		} else if(pos[1] != prev_pos[1]) {
 			// Case where we have encountered new disjunct in map
-			prog_tree.back().push_back({get<3>(pos)});
-		} else if(get<2>(pos) != get<2>(prev_pos)) {
+			prog_tree.back().push_back({pos[3]});
+		} else if(pos[2] != prev_pos[2]) {
 			// Case where we have encountered new goal in map
-			prog_tree.back().back().push_back(get<3>(pos));
+			prog_tree.back().back().push_back(pos[3]);
 		}
 		prev_pos = pos;
 	}
@@ -314,7 +314,7 @@ void driver::transform_evals(raw_prog &rp) {
 		for(const raw_term &rhs_term : outer_rule.h) {
 			if(rhs_term.e[0].type == elem::SYM && to_string_t("eval") == lexeme2str(rhs_term.e[0].e)) {
 				// The first parenthesis marks the beginning of eval's three arguments.
-				if(rhs_term.e.size() == 6 && rhs_term.e[1].type == elem::OPENP && rhs_term.e[5].type == elem::CLOSEP) {
+				if(ssize(rhs_term.e) == 6 && rhs_term.e[1].type == elem::OPENP && rhs_term.e[5].type == elem::CLOSEP) {
 					// The relation to contain the evaled relation is the first symbol between the parentheses
 					elem out_rel = rhs_term.e[2];
 					// The relation containing the quotation arity is the second symbol between the parentheses
@@ -329,8 +329,8 @@ void driver::transform_evals(raw_prog &rp) {
 					// name of the next generated variable.
 					int var_counter = 1;
 					
-					for(uint_t ridx = 0; ridx < prog_tree.size(); ridx++) {
-						for(uint_t hidx = 0; hidx < prog_tree[ridx][0].size(); hidx++) {
+					for(int_t ridx = 0; ridx < ssize(prog_tree); ridx++) {
+						for(int_t hidx = 0; hidx < ssize(prog_tree[ridx][0]); hidx++) {
 							// Exclusively store the variables that we have created in the
 							// following two maps.
 							std::map<quote_coord, elem> quote_map;
@@ -342,7 +342,7 @@ void driver::transform_evals(raw_prog &rp) {
 							// would be supplied to the rule in the quoted program. I.e.
 							// these are not meta.
 							std::vector<elem> head_elems = { out_rel, elem_openp, real_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) };
-							for(uint_t inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
+							for(int_t inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
 								head_elems.push_back(real_map[{ridx, 0, hidx, inidx}] = generate_var(var_counter));
 							}
 							head_elems.push_back(elem_closep);
@@ -355,12 +355,12 @@ void driver::transform_evals(raw_prog &rp) {
 							// take on the parameter names and relation names of the quoted
 							// program. I.e. these are meta, describing the program as a
 							// formal object.
-							for(uint_t didx = 0; didx < prog_tree[ridx].size(); didx++) {
-								for(uint_t gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
+							for(int_t didx = 0; didx < ssize(prog_tree[ridx]); didx++) {
+								for(int_t gidx = 0; gidx < ssize(prog_tree[ridx][didx]); gidx++) {
 									if(didx == 0 && gidx != hidx) continue;
 									std::vector<elem> a = { quote_sym, elem_openp, elem(0), uelem(ridx), uelem(didx), uelem(gidx), uelem(prog_tree[ridx][didx][gidx]),
 										quote_map[{ridx, didx, gidx, -1}] = (didx == 0 ? real_map[{ridx, 0, hidx, -1}] : generate_var(var_counter)) };
-									for(uint_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
+									for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 										a.push_back(quote_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
 									}
 									a.push_back(elem_closep);
@@ -371,10 +371,10 @@ void driver::transform_evals(raw_prog &rp) {
 							// take on the same values that the inputs to the quoted program
 							// would. I.e. this is not meta. Since the head is at the head,
 							// we just do the body
-							for(uint_t didx = 1; didx < prog_tree[ridx].size(); didx++) {
-								for(uint_t gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
+							for(int_t didx = 1; didx < ssize(prog_tree[ridx]); didx++) {
+								for(int_t gidx = 0; gidx < ssize(prog_tree[ridx][didx]); gidx++) {
 									std::vector<elem> a = { out_rel, elem_openp, real_map[{ridx, didx, gidx, -1}] = quote_map[{ridx, didx, gidx, -1}] };
-									for(uint_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
+									for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 										a.push_back(real_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
 									}
 									a.push_back(elem_closep);
@@ -385,14 +385,14 @@ void driver::transform_evals(raw_prog &rp) {
 							// ensure that is two quoted inputs labelled as variables are
 							// the same, then their corresponding real inputs are
 							// constrained to be same.
-							for(uint_t didx1 = 0; didx1 < prog_tree[ridx].size(); didx1++) {
-								for(uint_t gidx1 = 0; gidx1 < prog_tree[ridx][didx1].size(); gidx1++) {
+							for(int_t didx1 = 0; didx1 < ssize(prog_tree[ridx]); didx1++) {
+								for(int_t gidx1 = 0; gidx1 < ssize(prog_tree[ridx][didx1]); gidx1++) {
 									if(didx1 == 0 && gidx1 != hidx) continue;
-									for(uint_t inidx1 = 0; inidx1 < prog_tree[ridx][didx1][gidx1]; inidx1++) {
-										for(uint_t didx2 = didx1; didx2 < prog_tree[ridx].size(); didx2++) {
-											for(uint_t gidx2 = 0; gidx2 < prog_tree[ridx][didx2].size(); gidx2++) {
+									for(int_t inidx1 = 0; inidx1 < prog_tree[ridx][didx1][gidx1]; inidx1++) {
+										for(int_t didx2 = didx1; didx2 < ssize(prog_tree[ridx]); didx2++) {
+											for(int_t gidx2 = 0; gidx2 < ssize(prog_tree[ridx][didx2]); gidx2++) {
 												if(didx2 == 0 && gidx2 != hidx) continue;
-												for(uint_t inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
+												for(int_t inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
 													// Without this, each formula would be constructed twice.
 													if(std::make_tuple(didx1, gidx1, inidx1) >= std::make_tuple(didx2, gidx2, inidx2)) continue;
 													raw_term a({ quote_sym, elem_openp, elem(1), uelem(ridx), uelem(didx1), uelem(gidx1), uelem(inidx1), elem_closep }),
@@ -417,10 +417,10 @@ void driver::transform_evals(raw_prog &rp) {
 							// inputs to rules in the quoted program will be literal symbols
 							// rather than variables. If this is the case, then fix the
 							// literals into the evaled program relation.
-							for(uint_t didx = 0; didx < prog_tree[ridx].size(); didx++) {
-								for(uint_t gidx = 0; gidx < prog_tree[ridx][didx].size(); gidx++) {
+							for(int_t didx = 0; didx < ssize(prog_tree[ridx]); didx++) {
+								for(int_t gidx = 0; gidx < ssize(prog_tree[ridx][didx]); gidx++) {
 									if(didx == 0 && gidx != hidx) continue;
-									for(uint_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
+									for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 										raw_term a({ quote_sym, elem_openp, elem(1), uelem(ridx), elem(0), uelem(hidx), uelem(inidx), elem_closep });
 										raw_term b(raw_term::EQ, { quote_map[{ridx, didx, gidx, inidx}], elem_eq, real_map[{ridx, didx, gidx, inidx}] });
 										body_tree = new raw_form_tree(elem::AND, body_tree,
@@ -435,13 +435,13 @@ void driver::transform_evals(raw_prog &rp) {
 							// semantics of other relational calculus languages), but just
 							// in case.
 							for(auto const& [pos, var] : quote_map) {
-								if(!(get<1>(pos) == 0 && get<3>(pos) == (uint_t) -1)) {
+								if(!(pos[1] == 0 && pos[3] == -1)) {
 									body_tree = new raw_form_tree(elem::EXISTS, new raw_form_tree(elem::VAR, var), body_tree);
 								}
 							}
 							for(auto const& [pos, var] : real_map) {
 								// Only quantify variable if it is not in the head of the rule
-								if(get<1>(pos) != 0) {
+								if(pos[1] != 0) {
 									body_tree = new raw_form_tree(elem::EXISTS, new raw_form_tree(elem::VAR, var), body_tree);
 								}
 							}

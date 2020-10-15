@@ -125,12 +125,7 @@ raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int_t ru
 	}
 	// Terminate term elements and make raw_term object
 	quoted_term_e.push_back(elem_closep);
-	raw_term quoted_term;
-	quoted_term.e = quoted_term_e;
-	// We can call calc_arity with nullptr because no validation error will
-	// occur because we've already done validation here.
-	quoted_term.calc_arity(nullptr);
-	return quoted_term;
+	return raw_term(quoted_term_e);
 }
 
 /* Read a vector of elements up until an unmatched closing parenthesis and
@@ -233,12 +228,7 @@ void driver::transform_quotes(raw_prog &rp) {
 						
 						// Now create sub-relation to store the location of variables in the quoted relation
 						for(auto const& [rule_idx, disjunct_idx, goal_idx, arg_idx] : variables) {
-							std::vector<elem> var_e =
-								{ rel_name, elem_openp, elem(1), uelem(rule_idx), uelem(disjunct_idx), uelem(goal_idx), uelem(arg_idx), elem_closep };
-							raw_term var_t;
-							var_t.e = var_e;
-							var_t.calc_arity(nullptr);
-							rp.r.push_back(raw_rule(var_t));
+							rp.r.push_back(raw_rule(raw_term({ rel_name, elem_openp, elem(1), uelem(rule_idx), uelem(disjunct_idx), uelem(goal_idx), uelem(arg_idx), elem_closep })));
 						}
 					}
 				}

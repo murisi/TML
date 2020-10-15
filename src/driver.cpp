@@ -157,7 +157,7 @@ void driver::transform_quotes(raw_prog &rp) {
 		for(raw_term &rhs_term : outer_rule.h) {
 			// Search for uses of quote within a relation.
 			for(int_t offset = 3; offset < ssize(rhs_term.e); offset ++) {
-				if(rhs_term.e[offset].type == elem::STR) {
+				if(rhs_term.e[offset].type == elem::STR && rhs_term.e[offset].e[1] > rhs_term.e[offset].e[0] && *rhs_term.e[offset].e[0] == '`') {
 					raw_prog nrp = read_prog(rhs_term.e[offset], rp);
 					// The relation under which the quotation we build will be stored.
 					elem rel_name = rhs_term.e[offset - 1];

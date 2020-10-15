@@ -61,6 +61,13 @@ lexeme input::lex(pccs s) {
 				return PE(parse_error(*s, err_escape));
 		return { t, ++(*s) };
 	}
+  if (**s == '`') {
+		while (*++*s != '`')
+			if (!**s) return PE(parse_error(t, unmatched_quotes));
+			else if (**s == '\\' && !strchr("\\`", *++*s))
+				return PE(parse_error(*s, err_escape));
+		return { t, ++(*s) };
+	}
 
 	// implication and coimplication
 	if (**s == '-' && *(*s + 1) == '>') {
@@ -193,7 +200,7 @@ bool directive::parse(input* in, const raw_prog& prog) {
 				in->parse_error(l[curr2][1], err_fname);
 		type = FNAME, arg = lexeme{ l[curr2][0], l[pos-1][1] };
 	}
-	else if (*l[pos][0] == '"') type = STR, arg = l[pos++];
+	else if (*l[pos][0] == '"' || *l[pos][0] == '`') type = STR, arg = l[pos++];
 	else if (*l[pos][0] == '$')
 		type=CMDLINE, ++pos, n = in->get_int_t(l[pos][0], l[pos][1]), ++pos;
 	else if (l[pos] == "stdin") type = STDIN;
@@ -291,7 +298,7 @@ bool elem::parse(input* in) {
 	}
 
 	if (!is_alnum(l[pos][0], l[pos][1]-l[pos][0], chl) &&
-		!strchr("\"'?", *l[pos][0])) return false;
+		!strchr("\"`'?", *l[pos][0])) return false;
 	if (e = l[pos], *l[pos][0] == '\'') {
 		type = CHR, e = { 0, 0 };
 		if (l[pos][0][1] == '\'') ch = 0;
@@ -315,7 +322,7 @@ bool elem::parse(input* in) {
 			type = UNIQUE;
 		else type = SYM;
 	}
-	else if (*l[pos][0] == '"') type = STR;
+	else if (*l[pos][0] == '"' || *l[pos][0] == '`') type = STR;
 	else type = NUM, num = in->get_int_t(l[pos][0], l[pos][1]);
 	return ++pos, !in->error;
 }

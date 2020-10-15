@@ -103,18 +103,30 @@ class driver {
 	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
-	raw_term quote_term(const raw_term &head, const elem &rel_name, int_t rule_idx, int_t disjunct_idx, int_t goal_idx, std::vector<quote_coord> &variables);
+	raw_term quote_term(const raw_term &head, const elem &rel_name, int_t rule_idx,
+		int_t disjunct_idx, int_t goal_idx, std::vector<quote_coord> &variables);
 	std::vector<quote_coord> extract_quote_arity(const elem &quote_rel, const raw_prog &rp);
 	program_arity extract_quote_arity_tree(const elem &quote_rel, const raw_prog &rp);
-	void interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul, const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings, std::set<raw_term> &database);
-	bool evaluate_term(const raw_term &rt, std::map<elem, elem> &bindings, std::set<raw_term> &database);
-	bool evaluate_form_tree(const raw_form_tree &rft, const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings, std::set<raw_term> &database);
-	void reduce_universe(const elem &var, const raw_form_tree &t, std::set<elem> &universe, std::set<raw_term> &database);
-	void reduce_universe(const elem &var, const raw_term &rt, std::set<elem> &universe, std::set<raw_term> &database);
-	void reduce_universe(const elem &var, const raw_rule &rul, std::set<elem> &universe, std::set<raw_term> &database);
-	void populate_universes(const raw_rule &rul, std::set<elem> &universe, std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database);
-	void populate_universes(const raw_form_tree &rft, std::set<elem> &universe, std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database);
-	void naive_pfp(const raw_prog &rp, std::set<elem> &universe, std::set<raw_term> &database);
+	void interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
+		const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings,
+		std::set<raw_term> &database);
+	bool evaluate_term(const raw_term &rt, std::map<elem, elem> &bindings,
+		std::set<raw_term> &database);
+	bool evaluate_form_tree(const raw_form_tree &rft,
+		const std::map<elem, std::set<elem>> &universes,
+		std::map<elem, elem> &bindings, std::set<raw_term> &database);
+	void reduce_universe(const elem &var, const raw_form_tree &t,
+		std::set<elem> &universe, std::set<raw_term> &database);
+	void reduce_universe(const elem &var, const raw_term &rt,
+		std::set<elem> &universe, std::set<raw_term> &database);
+	void reduce_universe(const elem &var, const raw_rule &rul,
+		std::set<elem> &universe, std::set<raw_term> &database);
+	void populate_universes(const raw_rule &rul, std::set<elem> &universe,
+		std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database);
+	void populate_universes(const raw_form_tree &rft, std::set<elem> &universe,
+		std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database);
+	void naive_pfp(const raw_prog &rp, std::set<elem> &universe,
+		std::set<raw_term> &database);
 	raw_prog reify(const raw_prog& p);
 	raw_term from_grammar_elem(const elem& v, int_t v1, int_t v2);
 	raw_term from_grammar_elem_nt(const lexeme& r, const elem& c,

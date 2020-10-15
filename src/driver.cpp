@@ -94,16 +94,21 @@ void driver::directives_load(raw_prog& p, lexeme& trel) {
 		}
 }
 
-/* Takes a raw term and its position in the program to be quoted and returns
- * its quotation within a relation of the given name. The locations of variable
- * elements within the raw term are added to the variables vector. */
+/* Takes a raw term and its position in the program to be quoted and
+ * returns its quotation within a relation of the given name. The
+ * locations of variable elements within the raw term are added to the
+ * variables vector. */
 
-raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int_t rule_idx, int_t disjunct_idx, int_t goal_idx, std::vector<quote_coord> &variables) {
+raw_term driver::quote_term(const raw_term &head, const elem &rel_name,
+		int_t rule_idx, int_t disjunct_idx, int_t goal_idx,
+		std::vector<quote_coord> &variables) {
 	// The elements of the term that we're building up
 	std::vector<elem> quoted_term_e;
-	// Add metadata to quoted term: term signature, rule #, disjunct #, goal #, total inputs, relation sym
+	// Add metadata to quoted term: term signature, rule #, disjunct #,
+	// goal #, total inputs, relation sym
 	quoted_term_e.insert(quoted_term_e.end(),
-		{rel_name, elem_openp, elem(0), uelem(rule_idx), uelem(disjunct_idx), uelem(goal_idx), uelem(ssize(head.e)-3), head.e[0] });
+		{rel_name, elem_openp, elem(0), uelem(rule_idx), uelem(disjunct_idx),
+			uelem(goal_idx), uelem(ssize(head.e)-3), head.e[0] });
 	for(int_t param_idx = 2; param_idx < ssize(head.e) - 1; param_idx ++) {
 		if(head.e[param_idx].type == elem::VAR) {
 			// Convert the variable to a symbol and add it to quouted term
@@ -132,13 +137,15 @@ raw_prog driver::read_prog(elem prog, const raw_prog &rp) {
 	return nrp;
 }
 
-/* Loop through the rules of the given program checking if they use a function
- * called "quote" in their bodies. Quote's first argument is the relation into
- * which it should put the quotation it creates, and it's second argument is the
- * rule to quote. Say that the output relation name is s, quote will populate it
- * according to the following schema:
+/* Loop through the rules of the given program checking if they use a
+ * function called "quote" in their bodies. Quote's first argument is
+ * the relation into which it should put the quotation it creates, and
+ * it's second argument is the rule to quote. Say that the output
+ * relation name is s, quote will populate it according to the following
+ * schema:
  * For each context, each N-ary term is stored as:
- * s(0 <rule #> <disjunct #> <goal #> <total inputs> <relname> <input0> <input1> ... <inputN>)
+ * s(0 <rule #> <disjunct #> <goal #> <total inputs> <relname> <input0>
+ * 	<input1> ... <inputN>)
  * The locations of the variables in the above schema are stored as:
  * s(1 <rule #> <disjunct #> <goal #> <input #>) */
 
@@ -149,7 +156,9 @@ void driver::transform_quotes(raw_prog &rp) {
 		for(raw_term &curr_term : outer_rule.h) {
 			// Search for uses of quote within a relation.
 			for(int_t offset = 3; offset < ssize(curr_term.e); offset ++) {
-				if(curr_term.e[offset].type == elem::STR && curr_term.e[offset].e[1] > curr_term.e[offset].e[0] && *curr_term.e[offset].e[0] == '`') {
+				if(curr_term.e[offset].type == elem::STR &&
+						curr_term.e[offset].e[1] > curr_term.e[offset].e[0] &&
+						*curr_term.e[offset].e[0] == '`') {
 					raw_prog nrp = read_prog(curr_term.e[offset], rp);
 					// The relation under which the quotation we build will be stored.
 					elem rel_name = curr_term.e[offset - 1];
@@ -160,16 +169,22 @@ void driver::transform_quotes(raw_prog &rp) {
 					std::vector<quote_coord> variables;
 					for(int_t ridx = 0; ridx < ssize(nrp.r); ridx++) {
 						for(int_t didx = 0; didx < ssize(nrp.r[ridx].b) + 1; didx++) {
-							const std::vector<raw_term> &bodie = didx == 0 ? nrp.r[ridx].h : nrp.r[ridx].b[didx-1];
+							const std::vector<raw_term> &bodie =
+								didx == 0 ? nrp.r[ridx].h : nrp.r[ridx].b[didx-1];
 							for(int_t gidx = 0; gidx < ssize(bodie); gidx++) {
-								rp.r.push_back(raw_rule(quote_term(bodie[gidx], rel_name, ridx, didx, gidx, variables)));
+								rp.r.push_back(raw_rule(quote_term(bodie[gidx], rel_name,
+									ridx, didx, gidx, variables)));
 							}
 						}
 					}
 					
-					// Now create sub-relation to store the location of variables in the quoted relation
-					for(auto const& [rule_idx, disjunct_idx, goal_idx, arg_idx] : variables) {
-						rp.r.push_back(raw_rule(raw_term({ rel_name, elem_openp, elem(1), uelem(rule_idx), uelem(disjunct_idx), uelem(goal_idx), uelem(arg_idx), elem_closep })));
+					// Now create sub-relation to store the location of variables
+					// in the quoted relation
+					for(auto const&
+							[rule_idx, disjunct_idx, goal_idx, arg_idx] : variables) {
+						rp.r.push_back(raw_rule(raw_term({ rel_name, elem_openp,
+							elem(1), uelem(rule_idx), uelem(disjunct_idx),
+							uelem(goal_idx), uelem(arg_idx), elem_closep })));
 					}
 				}
 			}
@@ -187,25 +202,30 @@ elem driver::generate_var(int &var_counter) {
 	return var;
 }
 
-/* Extract the arities stored in a quote arity relation. A quote arity relation
- * has the following schema:
+/* Extract the arities stored in a quote arity relation. A quote arity
+ * relation has the following schema:
  * s(0 <rule #> <disjunct #> <goal #> <total inputs> ...)
- * Note that this means that every quote relation contains a quote arity relation. */
+ * Note that this means that every quote relation contains a quote arity
+ * relation. */
 
-std::vector<quote_coord> driver::extract_quote_arity(const elem &quote_rel, const raw_prog &rp) {
+std::vector<quote_coord> driver::extract_quote_arity(const elem &quote_rel,
+		const raw_prog &rp) {
 	std::vector<quote_coord> quote_shape;
 	for(const raw_rule &rr : rp.r) {
-		if(lexeme2str(rr.h[0].e[0].e) == lexeme2str(quote_rel.e) && rr.h[0].e[2].num == 0) {
-			quote_shape.push_back({ rr.h[0].e[3].num, rr.h[0].e[4].num, rr.h[0].e[5].num, rr.h[0].e[6].num });
+		if(lexeme2str(rr.h[0].e[0].e) == lexeme2str(quote_rel.e) &&
+				rr.h[0].e[2].num == 0) {
+			quote_shape.push_back({ rr.h[0].e[3].num, rr.h[0].e[4].num,
+				rr.h[0].e[5].num, rr.h[0].e[6].num });
 		}
 	}
 	return quote_shape;
 }
 
-/* Extract the arities stored in a quote arity relation and put them into a tree
- * format. */
+/* Extract the arities stored in a quote arity relation and put them
+ * into a tree format. */
 
-program_arity driver::extract_quote_arity_tree(const elem &quote_rel, const raw_prog &rp) {
+program_arity driver::extract_quote_arity_tree(const elem &quote_rel,
+		const raw_prog &rp) {
 	std::vector<quote_coord> prog_shape = extract_quote_arity(quote_rel, rp);
 	program_arity prog_tree;
 	// We need the verticies to be in lexicographic order for the loop to
@@ -230,33 +250,38 @@ program_arity driver::extract_quote_arity_tree(const elem &quote_rel, const raw_
 	return prog_tree;
 }
 
-/* Loop through the rules of the given program checking if they use a relation
- * called "eval" in their bodies. If eval is used, take its single argument,
- * the name of a relation containing a representation of a TML program, and
- * append to the current program a relation equivalent to the original TML
- * program but that only depends on the relation's arity and its name - not
- * its entries. */
+/* Loop through the rules of the given program checking if they use a
+ * relation called "eval" in their bodies. If eval is used, take its
+ * single argument, the name of a relation containing a representation
+ * of a TML program, and append to the current program a relation
+ * equivalent to the original TML program but that only depends on the
+ * relation's arity and its name - not its entries. */
 
 void driver::transform_evals(raw_prog &rp) {
 	for(const raw_rule &outer_rule : rp.r) {
-		// Iterate through the bodies of the current rule looking for uses of the
-		// "eval" relation.
+		// Iterate through the bodies of the current rule looking for uses
+		// of the "eval" relation.
 		for(const raw_term &curr_term : outer_rule.h) {
-			if(!(curr_term.e[0].type == elem::SYM && to_string_t("eval") == lexeme2str(curr_term.e[0].e))) continue;
+			if(!(curr_term.e[0].type == elem::SYM &&
+				to_string_t("eval") == lexeme2str(curr_term.e[0].e))) continue;
 			// The first parenthesis marks the beginning of eval's three arguments.
-			if(!(ssize(curr_term.e) == 6 && curr_term.e[1].type == elem::OPENP && curr_term.e[5].type == elem::CLOSEP)) continue;
-			// The relation to contain the evaled relation is the first symbol between the parentheses
+			if(!(ssize(curr_term.e) == 6 && curr_term.e[1].type == elem::OPENP &&
+				curr_term.e[5].type == elem::CLOSEP)) continue;
+			// The relation to contain the evaled relation is the first symbol
+			// between the parentheses
 			elem out_rel = curr_term.e[2];
-			// The relation containing the quotation arity is the second symbol between the parentheses
+			// The relation containing the quotation arity is the second symbol
+			// between the parentheses
 			elem arity_rel = curr_term.e[3];
-			// The formal symbol representing the quotation relation is the third symbol between the parentheses
+			// The formal symbol representing the quotation relation is the
+			// third symbol between the parentheses
 			elem quote_sym = curr_term.e[4];
 			// Get the program arity in tree form
 			program_arity prog_tree = extract_quote_arity_tree(arity_rel, rp);
 			
-			// We want to generate a lot of unique variables. We do this by maintaining
-			// a counter. At any point in time, its string representation will be the
-			// name of the next generated variable.
+			// We want to generate a lot of unique variables. We do this by
+			// maintaining a counter. At any point in time, its string
+			// representation will be the name of the next generated variable.
 			int var_counter = 1;
 			
 			for(int_t ridx = 0; ridx < ssize(prog_tree); ridx++) {
@@ -271,15 +296,18 @@ void driver::transform_evals(raw_prog &rp) {
 					// multiple rules. The rest of the inputs are the values that
 					// would be supplied to the rule in the quoted program. I.e.
 					// these are not meta.
-					std::vector<elem> head_elems = { out_rel, elem_openp, real_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) };
+					std::vector<elem> head_elems = { out_rel, elem_openp,
+						real_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) };
 					for(int_t inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
-						head_elems.push_back(real_map[{ridx, 0, hidx, inidx}] = generate_var(var_counter));
+						head_elems.push_back(real_map[{ridx, 0, hidx, inidx}] =
+							generate_var(var_counter));
 					}
 					head_elems.push_back(elem_closep);
 					raw_term head(head_elems);
 					
 					// Start of with the true constant (0=0), and add conjunctions
-					raw_form_tree *body_tree = new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {elem(0), elem_eq, elem(0)}));
+					raw_form_tree *body_tree = new raw_form_tree(elem::NONE,
+						raw_term(raw_term::EQ, {elem(0), elem_eq, elem(0)}));
 					
 					// 2) Make the quoted term declaration section. These variables
 					// take on the parameter names and relation names of the quoted
@@ -288,13 +316,18 @@ void driver::transform_evals(raw_prog &rp) {
 					for(int_t didx = 0; didx < ssize(prog_tree[ridx]); didx++) {
 						for(int_t gidx = 0; gidx < ssize(prog_tree[ridx][didx]); gidx++) {
 							if(didx == 0 && gidx != hidx) continue;
-							std::vector<elem> a = { quote_sym, elem_openp, elem(0), uelem(ridx), uelem(didx), uelem(gidx), uelem(prog_tree[ridx][didx][gidx]),
-								quote_map[{ridx, didx, gidx, -1}] = (didx == 0 ? real_map[{ridx, 0, hidx, -1}] : generate_var(var_counter)) };
+							std::vector<elem> a = { quote_sym, elem_openp, elem(0),
+								uelem(ridx), uelem(didx), uelem(gidx),
+								uelem(prog_tree[ridx][didx][gidx]),
+								quote_map[{ridx, didx, gidx, -1}] = (didx == 0 ?
+									real_map[{ridx, 0, hidx, -1}] : generate_var(var_counter)) };
 							for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-								a.push_back(quote_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
+								a.push_back(quote_map[{ridx, didx, gidx, inidx}] =
+									generate_var(var_counter));
 							}
 							a.push_back(elem_closep);
-							body_tree = new raw_form_tree(elem::AND, body_tree, new raw_form_tree(elem::NONE, raw_term(a)));
+							body_tree = new raw_form_tree(elem::AND, body_tree,
+								new raw_form_tree(elem::NONE, raw_term(a)));
 						}
 					}
 					// 3) Make the real term declaration section. These variables
@@ -303,12 +336,15 @@ void driver::transform_evals(raw_prog &rp) {
 					// we just do the body
 					for(int_t didx = 1; didx < ssize(prog_tree[ridx]); didx++) {
 						for(int_t gidx = 0; gidx < ssize(prog_tree[ridx][didx]); gidx++) {
-							std::vector<elem> a = { out_rel, elem_openp, real_map[{ridx, didx, gidx, -1}] = quote_map[{ridx, didx, gidx, -1}] };
+							std::vector<elem> a = { out_rel, elem_openp,
+								real_map[{ridx, didx, gidx, -1}] = quote_map[{ridx, didx, gidx, -1}] };
 							for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-								a.push_back(real_map[{ridx, didx, gidx, inidx}] = generate_var(var_counter));
+								a.push_back(real_map[{ridx, didx, gidx, inidx}] =
+									generate_var(var_counter));
 							}
 							a.push_back(elem_closep);
-							body_tree = new raw_form_tree(elem::AND, body_tree, new raw_form_tree(elem::NONE, raw_term(a)));
+							body_tree = new raw_form_tree(elem::AND, body_tree,
+								new raw_form_tree(elem::NONE, raw_term(a)));
 						}
 					}
 					// 4) Make the variable sameness section. These propositions
@@ -323,12 +359,19 @@ void driver::transform_evals(raw_prog &rp) {
 									for(int_t gidx2 = 0; gidx2 < ssize(prog_tree[ridx][didx2]); gidx2++) {
 										if(didx2 == 0 && gidx2 != hidx) continue;
 										for(int_t inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
-											// Without this, each formula would be constructed twice.
-											if(std::make_tuple(didx1, gidx1, inidx1) >= std::make_tuple(didx2, gidx2, inidx2)) continue;
-											raw_term a({ quote_sym, elem_openp, elem(1), uelem(ridx), uelem(didx1), uelem(gidx1), uelem(inidx1), elem_closep }),
-												b({ quote_sym, elem_openp, elem(1), uelem(ridx), uelem(didx2), uelem(gidx2), uelem(inidx2), elem_closep }),
-												c(raw_term::EQ, { quote_map[{ridx, didx1, gidx1, inidx1}], elem_eq, quote_map[{ridx, didx2, gidx2, inidx2}] }),
-												d(raw_term::EQ, { real_map[{ridx, didx1, gidx1, inidx1}], elem_eq, real_map[{ridx, didx2, gidx2, inidx2}] });
+											// Without this, almost every formula would be
+											// constructed twice.
+											if(std::make_tuple(didx1, gidx1, inidx1) >=
+												std::make_tuple(didx2, gidx2, inidx2)) continue;
+											raw_term
+												a({ quote_sym, elem_openp, elem(1), uelem(ridx),
+													uelem(didx1), uelem(gidx1), uelem(inidx1), elem_closep }),
+												b({ quote_sym, elem_openp, elem(1), uelem(ridx),
+													uelem(didx2), uelem(gidx2), uelem(inidx2), elem_closep }),
+												c(raw_term::EQ, { quote_map[{ridx, didx1, gidx1, inidx1}],
+													elem_eq, quote_map[{ridx, didx2, gidx2, inidx2}] }),
+												d(raw_term::EQ, { real_map[{ridx, didx1, gidx1, inidx1}],
+													elem_eq, real_map[{ridx, didx2, gidx2, inidx2}] });
 											body_tree = new raw_form_tree(elem::AND, body_tree,
 												new raw_form_tree(elem::IMPLIES,
 													new raw_form_tree(elem::AND,
@@ -351,8 +394,11 @@ void driver::transform_evals(raw_prog &rp) {
 						for(int_t gidx = 0; gidx < ssize(prog_tree[ridx][didx]); gidx++) {
 							if(didx == 0 && gidx != hidx) continue;
 							for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-								raw_term a({ quote_sym, elem_openp, elem(1), uelem(ridx), elem(0), uelem(hidx), uelem(inidx), elem_closep });
-								raw_term b(raw_term::EQ, { quote_map[{ridx, didx, gidx, inidx}], elem_eq, real_map[{ridx, didx, gidx, inidx}] });
+								raw_term
+									a({ quote_sym, elem_openp, elem(1), uelem(ridx), elem(0),
+										uelem(hidx), uelem(inidx), elem_closep }),
+									b(raw_term::EQ, { quote_map[{ridx, didx, gidx, inidx}],
+										elem_eq, real_map[{ridx, didx, gidx, inidx}] });
 								body_tree = new raw_form_tree(elem::AND, body_tree,
 									new raw_form_tree(elem::IMPLIES,
 										new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE, a)),
@@ -366,13 +412,15 @@ void driver::transform_evals(raw_prog &rp) {
 					// in case.
 					for(auto const& [pos, var] : quote_map) {
 						if(!(pos[1] == 0 && pos[3] == -1)) {
-							body_tree = new raw_form_tree(elem::EXISTS, new raw_form_tree(elem::VAR, var), body_tree);
+							body_tree = new raw_form_tree(elem::EXISTS,
+								new raw_form_tree(elem::VAR, var), body_tree);
 						}
 					}
 					for(auto const& [pos, var] : real_map) {
 						// Only quantify variable if it is not in the head of the rule
 						if(pos[1] != 0) {
-							body_tree = new raw_form_tree(elem::EXISTS, new raw_form_tree(elem::VAR, var), body_tree);
+							body_tree = new raw_form_tree(elem::EXISTS,
+								new raw_form_tree(elem::VAR, var), body_tree);
 						}
 					}
 					
@@ -391,7 +439,8 @@ void driver::transform_evals(raw_prog &rp) {
 /* Reduce the size of the universe that the given variable takes its values from
  * by statically analyzing the term and determining what is impossible. */
 
-void driver::reduce_universe(const elem &var, const raw_term &rt, std::set<elem> &universe, std::set<raw_term> &database) {
+void driver::reduce_universe(const elem &var, const raw_term &rt,
+		std::set<elem> &universe, std::set<raw_term> &database) {
 	if(rt.extype == raw_term::REL) {
 		size_t var_pos;
 		for(var_pos = 2; var_pos < rt.e.size() - 1 && rt.e[var_pos] != var; var_pos++);
@@ -419,7 +468,8 @@ void driver::reduce_universe(const elem &var, const raw_term &rt, std::set<elem>
  * by statically analyzing the logical formula and determining what is
  * impossible. */
 
-void driver::reduce_universe(const elem &var, const raw_form_tree &t, std::set<elem> &universe, std::set<raw_term> &database) {
+void driver::reduce_universe(const elem &var, const raw_form_tree &t,
+		std::set<elem> &universe, std::set<raw_term> &database) {
 	switch(t.type) {
 		case elem::IMPLIES:
 			break;
@@ -454,10 +504,12 @@ void driver::reduce_universe(const elem &var, const raw_form_tree &t, std::set<e
 	}
 }
 
-/* Reduce the size of the universe that the given variable takes its values from
- * by statically analyzing the rule and determining what is impossible. */
+/* Reduce the size of the universe that the given variable takes its
+ * values from by statically analyzing the rule and determining what is
+ * impossible. */
 
-void driver::reduce_universe(const elem &var, const raw_rule &rul, std::set<elem> &universe, std::set<raw_term> &database) {
+void driver::reduce_universe(const elem &var, const raw_rule &rul,
+		std::set<elem> &universe, std::set<raw_term> &database) {
 	if(!rul.b.empty()) {
 		std::set<elem> universe3;
 		for(const std::vector<raw_term> &bodie : rul.b) {
@@ -473,11 +525,12 @@ void driver::reduce_universe(const elem &var, const raw_rule &rul, std::set<elem
 	}
 }
 
-/* Based on the current state of the database, use static analysis of the
- * logical formulas to remove from the universe of each quantification, elements
- * that could never satisfy their inner formula. */
+/* Based on the current state of the database, use static analysis of
+ * the logical formulas to remove from the universe of each quantification,
+ * elements that could never satisfy their inner formula. */
 
-void driver::populate_universes(const raw_form_tree &t, std::set<elem> &universe, std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database) {
+void driver::populate_universes(const raw_form_tree &t, std::set<elem> &universe,
+		std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database) {
 	switch(t.type) {
 		case elem::IMPLIES:
 			populate_universes(*t.l, universe, universes, database);
@@ -526,11 +579,12 @@ void driver::populate_universes(const raw_form_tree &t, std::set<elem> &universe
 	}
 }
 
-/* Based on the current state of the database, use static analysis of the
- * logical formulas to remove from the universe of each quantification, elements
- * that could never satisfy their inner formula. */
+/* Based on the current state of the database, use static analysis of
+ * the logical formulas to remove from the universe of each quantification,
+ * elements that could never satisfy their inner formula. */
 
-void driver::populate_universes(const raw_rule &rul, std::set<elem> &universe, std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database) {
+void driver::populate_universes(const raw_rule &rul, std::set<elem> &universe,
+		std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database) {
 	for(const raw_term &head : rul.h) {
 		for(const elem &elt : head.e) {
 			if(elt.type == elem::VAR) {
@@ -545,16 +599,18 @@ void driver::populate_universes(const raw_rule &rul, std::set<elem> &universe, s
 	}
 }
 
-/* Evaluate the given logical term over the given database in the context of
- * the given bindings and return whether it is true or false. */
+/* Evaluate the given logical term over the given database in the context
+ * of the given bindings and return whether it is true or false. */
 
-bool driver::evaluate_term(const raw_term &query, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
+bool driver::evaluate_term(const raw_term &query, std::map<elem, elem> &bindings,
+		std::set<raw_term> &database) {
 	if(query.extype == raw_term::REL) {
 		for(const raw_term &entry : database) {
 			if(query.extype == raw_term::REL && query.e.size() == entry.e.size()) {
 				bool succ = true;
 				for(size_t i = 0; i < query.e.size(); i++) {
-					if(!((query.e[i].type == elem::VAR && bindings[query.e[i]] == entry.e[i]) || query.e[i] == entry.e[i])) {
+					if(!((query.e[i].type == elem::VAR && bindings[query.e[i]] == entry.e[i]) ||
+							query.e[i] == entry.e[i])) {
 						succ = false;
 						break;
 					} 
@@ -571,11 +627,14 @@ bool driver::evaluate_term(const raw_term &query, std::map<elem, elem> &bindings
 	return false;
 }
 
-/* Evaluate the given logical formula over the given database in the context of
- * the given bindings and return whether it is true or false. The universes
- * parameter is used to obtain the domain for each quantification. */
+/* Evaluate the given logical formula over the given database in the
+ * context of the given bindings and return whether it is true or false.
+ * The universes parameter is used to obtain the domain for each
+ * quantification. */
 
-bool driver::evaluate_form_tree(const raw_form_tree &t, const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
+bool driver::evaluate_form_tree(const raw_form_tree &t,
+		const std::map<elem, std::set<elem>> &universes,
+		std::map<elem, elem> &bindings, std::set<raw_term> &database) {
 	switch(t.type) {
 		case elem::IMPLIES:
 			if(evaluate_form_tree(*t.l, universes, bindings, database)) {
@@ -584,11 +643,14 @@ bool driver::evaluate_form_tree(const raw_form_tree &t, const std::map<elem, std
 				return true;
 			}
 		case elem::COIMPLIES:
-			return evaluate_form_tree(*t.l, universes, bindings, database) == evaluate_form_tree(*t.r, universes, bindings, database);
+			return evaluate_form_tree(*t.l, universes, bindings, database) ==
+				evaluate_form_tree(*t.r, universes, bindings, database);
 		case elem::AND:
-			return evaluate_form_tree(*t.l, universes, bindings, database) && evaluate_form_tree(*t.r, universes, bindings, database);
+			return evaluate_form_tree(*t.l, universes, bindings, database) &&
+				evaluate_form_tree(*t.r, universes, bindings, database);
 		case elem::ALT:
-			return evaluate_form_tree(*t.l, universes, bindings, database) || evaluate_form_tree(*t.r, universes, bindings, database);
+			return evaluate_form_tree(*t.l, universes, bindings, database) ||
+				evaluate_form_tree(*t.r, universes, bindings, database);
 		case elem::NOT:
 			return !evaluate_form_tree(*t.l, universes, bindings, database);
 		case elem::EXISTS: {
@@ -630,7 +692,9 @@ bool driver::evaluate_form_tree(const raw_form_tree &t, const std::map<elem, std
 /* Interpret a rule. That is, run a rule over the current databaseand add the
  * discovered facts to the database. */
 
-void driver::interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul, const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings, std::set<raw_term> &database) {
+void driver::interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
+		const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings,
+		std::set<raw_term> &database) {
 	const raw_term &head = rul.h[hd_idx];
 	if(inp_idx < head.e.size() - 3) {
 		if(head.e[inp_idx + 2].type == elem::VAR) {
@@ -670,7 +734,8 @@ void driver::interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul, 
 	}
 }
 
-void driver::naive_pfp(const raw_prog &rp, std::set<elem> &universe, std::set<raw_term> &database) {
+void driver::naive_pfp(const raw_prog &rp, std::set<elem> &universe,
+		std::set<raw_term> &database) {
 	// Populate our universe
 	for(const raw_rule &rr : rp.r) {
 		for(const raw_term &rt : rr.h) {

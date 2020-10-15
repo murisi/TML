@@ -140,6 +140,7 @@ class driver {
 	raw_progs rp;
 	bool running = false;
 	inputs* ii;
+	inputs dynii; // For inputs generated from running TML programs
 	input* current_input = 0;
 	size_t current_input_id = 0;
 	std::vector<archive> load_archives;

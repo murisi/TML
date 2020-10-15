@@ -94,14 +94,6 @@ void driver::directives_load(raw_prog& p, lexeme& trel) {
 		}
 }
 
-/* Holds the ever-growing program text. This object cannot be isolated to the
- * code where command line arguments are parsed, because the "eval" relation
- * constantly creates more program text that needs to be parsed and kept alive
- * till the program's termination.
- */
-
-inputs tmpii;
-
 /* Takes a raw term and its position in the program to be quoted and returns
  * its quotation within a relation of the given name. The locations of variable
  * elements within the raw term are added to the variables vector. */
@@ -132,7 +124,7 @@ raw_term driver::quote_term(const raw_term &head, const elem &rel_name, int_t ru
 
 raw_prog driver::read_prog(elem prog, const raw_prog &rp) {
 	lexeme prog_str = {prog.e[0]+1, prog.e[1]-1};
-	input *prog_in = tmpii.add_string(lexeme2str(prog_str));
+	input *prog_in = dynii.add_string(lexeme2str(prog_str));
 	prog_in->prog_lex();
 	raw_prog nrp;
 	nrp.builtins = rp.builtins;
@@ -188,7 +180,7 @@ void driver::transform_quotes(raw_prog &rp) {
 /* Generate a unique variable and update the counter. */
 
 elem driver::generate_var(int &var_counter) {
-	input *i = tmpii.add_string("?" + std::to_string(var_counter++));
+	input *i = dynii.add_string("?" + std::to_string(var_counter++));
 	i->prog_lex();
 	elem var;
 	var.parse(i);

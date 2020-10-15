@@ -204,26 +204,14 @@ void driver::transform_quotes(raw_prog &rp) {
 						rhs_term.e.insert(rhs_term.e.begin() + offset, rel_name);
 						rhs_term.calc_arity(nullptr);
 						// Maintain a list of locations where variables occur:
-						// (rule #, disjunction #, goal #, elem #)
 						std::vector<quote_coord> variables;
-						// Maintain the current rule index of rules being quoted
-						int_t rule_idx = 0;
-						for(const raw_rule &rr : nrp.r) {
-							// Maintain the current disjunction index of the bodies being quoted
-							int_t disjunct_idx = 0;
-							
-							for(const std::vector<std::vector<raw_term>> &tmp : {{ rr.h }, rr.b }) {
-								for(const std::vector<raw_term> &bodie : tmp) {
-									// Maintain the current goal index of the disjunction being quoted
-									int_t goal_idx = 0;
-									for(const raw_term &goal : bodie) {
-										rp.r.push_back(raw_rule(quote_term(goal, rel_name, rule_idx, disjunct_idx, goal_idx, variables)));
-										goal_idx ++;
-									}
-									disjunct_idx ++;
+						for(int_t ridx = 0; ridx < ssize(nrp.r); ridx++) {
+							for(int_t didx = 0; didx < ssize(nrp.r[ridx].b) + 1; didx++) {
+								const std::vector<raw_term> &bodie = didx == 0 ? nrp.r[ridx].h : nrp.r[ridx].b[didx-1];
+								for(int_t gidx = 0; gidx < ssize(bodie); gidx++) {
+									rp.r.push_back(raw_rule(quote_term(bodie[gidx], rel_name, ridx, didx, gidx, variables)));
 								}
 							}
-							rule_idx ++;
 						}
 						
 						// Now create sub-relation to store the location of variables in the quoted relation

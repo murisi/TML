@@ -35,6 +35,7 @@ typedef int_t goal_arity;
 typedef std::vector<goal_arity> disjunct_arity;
 typedef std::vector<disjunct_arity> rule_arity;
 typedef std::vector<rule_arity> program_arity;
+// Follows this schema: (rule #, disjunction #, goal #, elem #)
 typedef std::array<int_t, 4> quote_coord;
 
 class archive;

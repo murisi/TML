@@ -202,50 +202,26 @@ elem driver::generate_var(int &var_counter) {
 	return var;
 }
 
-/* Extract the arities stored in a quote arity relation. A quote arity
- * relation has the following schema:
+/* Extract the arities stored in a quote arity relation and put them
+ * into a tree format. A quote arity relation has the following schema:
  * s(0 <rule #> <disjunct #> <goal #> <total inputs> ...)
  * Note that this means that every quote relation contains a quote arity
  * relation. */
 
-std::vector<quote_coord> driver::extract_quote_arity(const elem &quote_rel,
+program_arity driver::extract_prog_arity(const elem &quote_rel,
 		const raw_prog &rp) {
-	std::vector<quote_coord> quote_shape;
+	std::vector<quote_coord> prog_shape;
 	for(const raw_rule &rr : rp.r) {
 		if(lexeme2str(rr.h[0].e[0].e) == lexeme2str(quote_rel.e) &&
 				rr.h[0].e[2].num == 0) {
-			quote_shape.push_back({ rr.h[0].e[3].num, rr.h[0].e[4].num,
+			prog_shape.push_back({ rr.h[0].e[3].num, rr.h[0].e[4].num,
 				rr.h[0].e[5].num, rr.h[0].e[6].num });
 		}
 	}
-	return quote_shape;
-}
-
-/* Extract the arities stored in a quote arity relation and put them
- * into a tree format. */
-
-program_arity driver::extract_quote_arity_tree(const elem &quote_rel,
-		const raw_prog &rp) {
-	std::vector<quote_coord> prog_shape = extract_quote_arity(quote_rel, rp);
 	program_arity prog_tree;
-	// We need the verticies to be in lexicographic order for the loop to
-	// reconstruct the tree correctly.
-	std::sort(prog_shape.begin(), prog_shape.end());
-	quote_coord prev_pos { -1, 0, 0, 0 };
 	// Put the program arity into the form of a tree.
 	for(auto const& pos : prog_shape) {
-		// Figure out which rule and where in the rule to put this term.
-		if(pos[0] != prev_pos[0]) {
-			// Case where we have encountered new rule in map
-			prog_tree.push_back({{pos[3]}});
-		} else if(pos[1] != prev_pos[1]) {
-			// Case where we have encountered new disjunct in map
-			prog_tree.back().push_back({pos[3]});
-		} else if(pos[2] != prev_pos[2]) {
-			// Case where we have encountered new goal in map
-			prog_tree.back().back().push_back(pos[3]);
-		}
-		prev_pos = pos;
+		prog_tree[pos[0]][pos[1]][pos[2]] = pos[3];
 	}
 	return prog_tree;
 }
@@ -277,14 +253,14 @@ void driver::transform_evals(raw_prog &rp) {
 			// third symbol between the parentheses
 			elem quote_sym = curr_term.e[4];
 			// Get the program arity in tree form
-			program_arity prog_tree = extract_quote_arity_tree(arity_rel, rp);
+			program_arity prog_tree = extract_prog_arity(arity_rel, rp);
 			// We want to generate a lot of unique variables. We do this by
 			// maintaining a counter. At any point in time, its string
 			// representation will be the name of the next generated variable.
 			int var_counter = 1;
 			
-			for(int_t ridx = 0; ridx < ssize(prog_tree); ridx++) {
-				for(int_t hidx = 0; hidx < ssize(prog_tree[ridx][0]); hidx++) {
+			for(auto const& [ridx, _] : prog_tree) {
+				for(auto const& [hidx, _] : prog_tree[ridx][0]) {
 					// Exclusively store the variables that we have created in the
 					// following two maps.
 					std::map<quote_coord, elem> quote_map;
@@ -303,15 +279,15 @@ void driver::transform_evals(raw_prog &rp) {
 					}
 					head_elems.push_back(elem_closep);
 					raw_term head(head_elems);
-					// Start of with the true constant (0=0), and add conjunctions
+					// Start off with the true constant (0=0), and add conjunctions
 					raw_form_tree *body_tree = new raw_form_tree(elem::NONE,
 						raw_term(raw_term::EQ, {elem(0), elem_eq, elem(0)}));
 					// 2) Make the quoted term declaration section. These variables
 					// take on the parameter names and relation names of the quoted
 					// program. I.e. these are meta, describing the program as a
 					// formal object.
-					for(int_t didx = 0; didx < ssize(prog_tree[ridx]); didx++) {
-						for(int_t gidx = 0; gidx < ssize(prog_tree[ridx][didx]); gidx++) {
+					for(auto const& [didx, _] : prog_tree[ridx]) {
+						for(auto const& [gidx, _] : prog_tree[ridx][didx]) {
 							if(didx == 0 && gidx != hidx) continue;
 							std::vector<elem> a = { quote_sym, elem_openp, elem(0),
 								uelem(ridx), uelem(didx), uelem(gidx),
@@ -331,8 +307,9 @@ void driver::transform_evals(raw_prog &rp) {
 					// take on the same values that the inputs to the quoted program
 					// would. I.e. this is not meta. Since the head is at the head,
 					// we just do the body
-					for(int_t didx = 1; didx < ssize(prog_tree[ridx]); didx++) {
-						for(int_t gidx = 0; gidx < ssize(prog_tree[ridx][didx]); gidx++) {
+					for(auto const& [didx, _] : prog_tree[ridx]) {
+						if(didx == 0) continue;
+						for(auto const& [gidx, _] : prog_tree[ridx][didx]) {
 							std::vector<elem> a = { out_rel, elem_openp,
 								real_map[{ridx, didx, gidx, -1}] = quote_map[{ridx, didx, gidx, -1}] };
 							for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
@@ -348,12 +325,13 @@ void driver::transform_evals(raw_prog &rp) {
 					// ensure that is two quoted inputs labelled as variables are
 					// the same, then their corresponding real inputs are
 					// constrained to be same.
-					for(int_t didx1 = 0; didx1 < ssize(prog_tree[ridx]); didx1++) {
-						for(int_t gidx1 = 0; gidx1 < ssize(prog_tree[ridx][didx1]); gidx1++) {
+					for(auto const& [didx1, _] : prog_tree[ridx]) {
+						for(auto const& [gidx1, _] : prog_tree[ridx][didx1]) {
 							if(didx1 == 0 && gidx1 != hidx) continue;
 							for(int_t inidx1 = 0; inidx1 < prog_tree[ridx][didx1][gidx1]; inidx1++) {
-								for(int_t didx2 = didx1; didx2 < ssize(prog_tree[ridx]); didx2++) {
-									for(int_t gidx2 = 0; gidx2 < ssize(prog_tree[ridx][didx2]); gidx2++) {
+								for(auto const& [didx2, _] : prog_tree[ridx]) {
+									if(didx2 < didx1) continue;
+									for(auto const& [gidx2, _] : prog_tree[ridx][didx2]) {
 										if(didx2 == 0 && gidx2 != hidx) continue;
 										for(int_t inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
 											// Without this, almost every formula would be
@@ -387,8 +365,8 @@ void driver::transform_evals(raw_prog &rp) {
 					// inputs to rules in the quoted program will be literal symbols
 					// rather than variables. If this is the case, then fix the
 					// literals into the evaled program relation.
-					for(int_t didx = 0; didx < ssize(prog_tree[ridx]); didx++) {
-						for(int_t gidx = 0; gidx < ssize(prog_tree[ridx][didx]); gidx++) {
+					for(auto const [didx, _] : prog_tree[ridx]) {
+						for(auto const [gidx, _] : prog_tree[ridx][didx]) {
 							if(didx == 0 && gidx != hidx) continue;
 							for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 								raw_term

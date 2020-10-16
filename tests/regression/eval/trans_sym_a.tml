@@ -1,0 +1,8 @@
+# Testing transitive symetric closure
+
+eval(r q q`
+  e(1 2).
+  e(2 3).
+  e(3 4).
+  t(?x ?y), t(?y ?x) :- e(?x ?y).
+  t(?x ?y) :- t(?x ?z), t(?z ?y).`).

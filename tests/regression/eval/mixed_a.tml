@@ -1,0 +1,8 @@
+# Testing mixed variables and symbols
+
+eval(r q q`
+  e(1 "2"), e('3' four), e(four 5).
+  t(?x ?y) :- e(?x ?y).
+  t(?x ?y), t(?y ?x) :- t(?x ?z), t(?z ?y).
+  reachable_from_3(?x) :- t('3' ?x).
+  reachable_from(3 ?x) :- t('3' ?x).`).

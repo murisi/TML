@@ -1,0 +1,8 @@
+# 1 more variable than transitive closure
+
+eval(r q q`
+  e(1 2).
+  e(2 3).
+  e(3 4).
+  t(?x ?y) :- e(?x ?y).
+  t(?x ?y) :- t(?x ?z), t(?z ?w), t(?w ?y).`).

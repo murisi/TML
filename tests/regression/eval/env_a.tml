@@ -1,0 +1,9 @@
+# Modifying eval environment
+
+r(t ?x ?y) :- r(e ?x ?y).
+r(t ?y ?x) :- r(t ?x ?y).
+
+eval(r q q`
+  e(1 "2"), e("2" '3'), e('3' four), e(four 5).
+  reachable_from_3(?x) :- t('3' ?x).
+  reachable_from(3 ?x) :- t('3' ?x).`).

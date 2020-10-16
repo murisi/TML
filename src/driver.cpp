@@ -228,10 +228,12 @@ program_arity driver::extract_prog_arity(const elem &quote_rel,
 
 /* Loop through the rules of the given program checking if they use a
  * relation called "eval" in their bodies. If eval is used, take its
- * single argument, the name of a relation containing a representation
- * of a TML program, and append to the current program a relation
- * equivalent to the original TML program but that only depends on the
- * relation's arity and its name - not its entries. */
+ * three arguments: the name of the relation that will contain the
+ * equivalent of the original TML program, the name of a relation
+ * containing the program arity of the relation to be evaluated, and the
+ * formal name of a relation containing a representation of a TML program.
+ * Note that the evaled relation will only depend on the relation's
+ * program arity and its name - not its entries. */
 
 void driver::transform_evals(raw_prog &rp) {
 	for(size_t oridx = 0; oridx < rp.r.size(); oridx++) {
@@ -386,6 +388,8 @@ void driver::transform_evals(raw_prog &rp) {
 					// semantics of other relational calculus languages), but just
 					// in case.
 					for(auto const& [pos, var] : quote_map) {
+						// Only quantify variable if it is not the relation name of
+						// the head.
 						if(!(pos[1] == 0 && pos[3] == -1)) {
 							body_tree = new raw_form_tree(elem::EXISTS,
 								new raw_form_tree(elem::VAR, var), body_tree);
@@ -790,7 +794,7 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 		naive_pfp(p, universe, database);
 		std::cout << "Fixed Point:" << std::endl << std::endl;
 		for(const raw_term &entry : database) {
-			std::cout << entry << std::endl;
+			std::cout << entry << "." << std::endl;
 		}
 		std::cout << std::endl << std::endl;
 	}

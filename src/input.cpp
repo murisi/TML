@@ -537,8 +537,7 @@ head:	h.emplace_back();
 		for (b.back().emplace_back(); b.back().back().parse(in, prog);
 			b.back().emplace_back(), ++pos) {
 			if (*l[pos][0] == '.') return ++pos, true;
-			//XXX: this causes a segfault, why we need semi-colon here?
-			//else if (*l[pos][0] == L';') b.emplace_back();
+			else if (*l[pos][0] == L';') b.emplace_back();
 			else if (*l[pos][0] != ',') return
 				in->parse_error(l[pos][0], err_term_or_dot,l[pos]);
 		}

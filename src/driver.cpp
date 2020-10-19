@@ -262,154 +262,154 @@ void driver::transform_evals(raw_prog &rp) {
 			int var_counter = 1;
 			
 			for(auto const& [ridx, _] : prog_tree) {
-				for(auto const& [hidx, _] : prog_tree[ridx][0]) {
-					// Exclusively store the variables that we have created in the
-					// following two maps.
-					std::map<quote_coord, elem> quote_map;
-					std::map<quote_coord, elem> real_map;
-					
-					// 1) Make the eval rule head. First input is the name of the
-					// rule. Needed because the quoted program most likely contains
-					// multiple rules. The rest of the inputs are the values that
-					// would be supplied to the rule in the quoted program. I.e.
-					// these are not meta.
-					std::vector<elem> head_elems = { out_rel, elem_openp,
-						real_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) };
-					for(int_t inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
-						head_elems.push_back(real_map[{ridx, 0, hidx, inidx}] =
-							generate_var(var_counter));
-					}
-					head_elems.push_back(elem_closep);
-					raw_term head(head_elems);
-					// Start off with the true constant (0=0), and add conjunctions
-					raw_form_tree *body_tree = new raw_form_tree(elem::NONE,
-						raw_term(raw_term::EQ, {elem(0), elem_eq, elem(0)}));
-					// 2) Make the quoted term declaration section. These variables
-					// take on the parameter names and relation names of the quoted
-					// program. I.e. these are meta, describing the program as a
-					// formal object.
-					for(auto const& [didx, _] : prog_tree[ridx]) {
-						for(auto const& [gidx, _] : prog_tree[ridx][didx]) {
-							if(didx == 0 && gidx != hidx) continue;
-							std::vector<elem> a = { quote_sym, elem_openp, elem(0),
-								uelem(ridx), uelem(didx), uelem(gidx),
-								uelem(prog_tree[ridx][didx][gidx]),
-								quote_map[{ridx, didx, gidx, -1}] = (didx == 0 ?
-									real_map[{ridx, 0, hidx, -1}] : generate_var(var_counter)) };
-							for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-								a.push_back(quote_map[{ridx, didx, gidx, inidx}] =
-									generate_var(var_counter));
-							}
-							a.push_back(elem_closep);
-							body_tree = new raw_form_tree(elem::AND, body_tree,
-								new raw_form_tree(elem::NONE, raw_term(a)));
+			for(auto const& [hidx, _] : prog_tree[ridx][0]) {
+			for(auto const& [bidx, _] : prog_tree[ridx]) {
+				if(bidx == 0 && prog_tree[ridx].size() > 1) continue;
+				// Exclusively store the variables that we have created in the
+				// following two maps.
+				std::map<quote_coord, elem> quote_map;
+				std::map<quote_coord, elem> real_map;
+				
+				// 1) Make the eval rule head. First input is the name of the
+				// rule. Needed because the quoted program most likely contains
+				// multiple rules. The rest of the inputs are the values that
+				// would be supplied to the rule in the quoted program. I.e.
+				// these are not meta.
+				std::vector<elem> head_elems = { out_rel, elem_openp,
+					real_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) };
+				for(int_t inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
+					head_elems.push_back(real_map[{ridx, 0, hidx, inidx}] =
+						generate_var(var_counter));
+				}
+				head_elems.push_back(elem_closep);
+				raw_term head(head_elems);
+				// Start off with the true constant (0=0), and add conjunctions
+				raw_form_tree *body_tree = new raw_form_tree(elem::NONE,
+					raw_term(raw_term::EQ, {elem(0), elem_eq, elem(0)}));
+				// 2) Make the quoted term declaration section. These variables
+				// take on the parameter names and relation names of the quoted
+				// program. I.e. these are meta, describing the program as a
+				// formal object.
+				for(auto const& [didx, _] : prog_tree[ridx]) {
+					for(auto const& [gidx, _] : prog_tree[ridx][didx]) {
+						if(didx == 0 ? gidx != hidx : didx != bidx) continue;
+						std::vector<elem> a = { quote_sym, elem_openp, elem(0),
+							uelem(ridx), uelem(didx), uelem(gidx),
+							uelem(prog_tree[ridx][didx][gidx]),
+							quote_map[{ridx, didx, gidx, -1}] = (didx == 0 ?
+								real_map[{ridx, 0, hidx, -1}] : generate_var(var_counter)) };
+						for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
+							a.push_back(quote_map[{ridx, didx, gidx, inidx}] =
+								generate_var(var_counter));
 						}
+						a.push_back(elem_closep);
+						body_tree = new raw_form_tree(elem::AND, body_tree,
+							new raw_form_tree(elem::NONE, raw_term(a)));
 					}
-					// 3) Make the real term declaration section. These variables
-					// take on the same values that the inputs to the quoted program
-					// would. I.e. this is not meta. Since the head is at the head,
-					// we just do the body
-					for(auto const& [didx, _] : prog_tree[ridx]) {
-						if(didx == 0) continue;
-						for(auto const& [gidx, _] : prog_tree[ridx][didx]) {
-							std::vector<elem> a = { out_rel, elem_openp,
-								real_map[{ridx, didx, gidx, -1}] = quote_map[{ridx, didx, gidx, -1}] };
-							for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-								a.push_back(real_map[{ridx, didx, gidx, inidx}] =
-									generate_var(var_counter));
-							}
-							a.push_back(elem_closep);
-							body_tree = new raw_form_tree(elem::AND, body_tree,
-								new raw_form_tree(elem::NONE, raw_term(a)));
+				}
+				// 3) Make the real term declaration section. These variables
+				// take on the same values that the inputs to the quoted program
+				// would. I.e. this is not meta. Since the head is at the head,
+				// we just do the body
+				if(bidx != 0) {
+					for(auto const& [gidx, _] : prog_tree[ridx][bidx]) {
+						std::vector<elem> a = { out_rel, elem_openp,
+							real_map[{ridx, bidx, gidx, -1}] = quote_map[{ridx, bidx, gidx, -1}] };
+						for(int_t inidx = 0; inidx < prog_tree[ridx][bidx][gidx]; inidx++) {
+							a.push_back(real_map[{ridx, bidx, gidx, inidx}] =
+								generate_var(var_counter));
 						}
+						a.push_back(elem_closep);
+						body_tree = new raw_form_tree(elem::AND, body_tree,
+							new raw_form_tree(elem::NONE, raw_term(a)));
 					}
-					// 4) Make the variable sameness section. These propositions
-					// ensure that is two quoted inputs labelled as variables are
-					// the same, then their corresponding real inputs are
-					// constrained to be same.
-					for(auto const& [didx1, _] : prog_tree[ridx]) {
-						for(auto const& [gidx1, _] : prog_tree[ridx][didx1]) {
-							if(didx1 == 0 && gidx1 != hidx) continue;
-							for(int_t inidx1 = 0; inidx1 < prog_tree[ridx][didx1][gidx1]; inidx1++) {
-								for(auto const& [didx2, _] : prog_tree[ridx]) {
-									if(didx2 < didx1) continue;
-									for(auto const& [gidx2, _] : prog_tree[ridx][didx2]) {
-										if(didx2 == 0 && gidx2 != hidx) continue;
-										for(int_t inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
-											// Without this, almost every formula would be
-											// constructed twice.
-											if(std::make_tuple(didx1, gidx1, inidx1) >=
-												std::make_tuple(didx2, gidx2, inidx2)) continue;
-											raw_term
-												a({ quote_sym, elem_openp, elem(1), uelem(ridx),
-													uelem(didx1), uelem(gidx1), uelem(inidx1), elem_closep }),
-												b({ quote_sym, elem_openp, elem(1), uelem(ridx),
-													uelem(didx2), uelem(gidx2), uelem(inidx2), elem_closep }),
-												c(raw_term::EQ, { quote_map[{ridx, didx1, gidx1, inidx1}],
-													elem_eq, quote_map[{ridx, didx2, gidx2, inidx2}] }),
-												d(raw_term::EQ, { real_map[{ridx, didx1, gidx1, inidx1}],
-													elem_eq, real_map[{ridx, didx2, gidx2, inidx2}] });
-											body_tree = new raw_form_tree(elem::AND, body_tree,
-												new raw_form_tree(elem::IMPLIES,
+				}
+				// 4) Make the variable sameness section. These propositions
+				// ensure that is two quoted inputs labelled as variables are
+				// the same, then their corresponding real inputs are
+				// constrained to be same.
+				for(auto const& [didx1, _] : prog_tree[ridx]) {
+					for(auto const& [gidx1, _] : prog_tree[ridx][didx1]) {
+						if(didx1 == 0 ? gidx1 != hidx : didx1 != bidx) continue;
+						for(int_t inidx1 = 0; inidx1 < prog_tree[ridx][didx1][gidx1]; inidx1++) {
+							for(auto const& [didx2, _] : prog_tree[ridx]) {
+								if(didx2 < didx1) continue;
+								for(auto const& [gidx2, _] : prog_tree[ridx][didx2]) {
+									if(didx2 == 0 ? gidx2 != hidx : didx2 != bidx) continue;
+									for(int_t inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
+										// Without this, almost every formula would be
+										// constructed twice.
+										if(std::make_tuple(didx1, gidx1, inidx1) >=
+											std::make_tuple(didx2, gidx2, inidx2)) continue;
+										raw_term
+											a({ quote_sym, elem_openp, elem(1), uelem(ridx),
+												uelem(didx1), uelem(gidx1), uelem(inidx1), elem_closep }),
+											b({ quote_sym, elem_openp, elem(1), uelem(ridx),
+												uelem(didx2), uelem(gidx2), uelem(inidx2), elem_closep }),
+											c(raw_term::EQ, { quote_map[{ridx, didx1, gidx1, inidx1}],
+												elem_eq, quote_map[{ridx, didx2, gidx2, inidx2}] }),
+											d(raw_term::EQ, { real_map[{ridx, didx1, gidx1, inidx1}],
+												elem_eq, real_map[{ridx, didx2, gidx2, inidx2}] });
+										body_tree = new raw_form_tree(elem::AND, body_tree,
+											new raw_form_tree(elem::IMPLIES,
+												new raw_form_tree(elem::AND,
 													new raw_form_tree(elem::AND,
-														new raw_form_tree(elem::AND,
-															new raw_form_tree(elem::NONE, a),
-															new raw_form_tree(elem::NONE, b)),
-														new raw_form_tree(elem::NONE, c)),
-														new raw_form_tree(elem::NONE, d)));
-										}
+														new raw_form_tree(elem::NONE, a),
+														new raw_form_tree(elem::NONE, b)),
+													new raw_form_tree(elem::NONE, c)),
+													new raw_form_tree(elem::NONE, d)));
 									}
 								}
 							}
 						}
 					}
-					// 5) Make the symbol fixing section. Essentially, some of the
-					// inputs to rules in the quoted program will be literal symbols
-					// rather than variables. If this is the case, then fix the
-					// literals into the evaled program relation.
-					for(auto const [didx, _] : prog_tree[ridx]) {
-						for(auto const [gidx, _] : prog_tree[ridx][didx]) {
-							if(didx == 0 && gidx != hidx) continue;
-							for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-								raw_term
-									a({ quote_sym, elem_openp, elem(1), uelem(ridx), elem(didx),
-										uelem(gidx), uelem(inidx), elem_closep }),
-									b(raw_term::EQ, { quote_map[{ridx, didx, gidx, inidx}],
-										elem_eq, real_map[{ridx, didx, gidx, inidx}] });
-								body_tree = new raw_form_tree(elem::AND, body_tree,
-									new raw_form_tree(elem::IMPLIES,
-										new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE, a)),
-										new raw_form_tree(elem::NONE, b)));
-							}
-						}
-					}
-					// 6) Existentially quantify all the variables being used in
-					// the body. This should not be necessary (going by syntax/
-					// semantics of other relational calculus languages), but just
-					// in case.
-					for(auto const& [pos, var] : quote_map) {
-						// Only quantify variable if it is not the relation name of
-						// the head.
-						if(!(pos[1] == 0 && pos[3] == -1)) {
-							body_tree = new raw_form_tree(elem::EXISTS,
-								new raw_form_tree(elem::VAR, var), body_tree);
-						}
-					}
-					for(auto const& [pos, var] : real_map) {
-						// Only quantify variable if it is not in the head of the rule
-						if(pos[1] != 0) {
-							body_tree = new raw_form_tree(elem::EXISTS,
-								new raw_form_tree(elem::VAR, var), body_tree);
-						}
-					}
-					// 7) Put the body and head constructed above together to make a
-					// rule and add that to the program.
-					raw_rule rr;
-					rr.h.push_back(head);
-					rr.prft = std::shared_ptr<raw_form_tree>(body_tree);
-					rp.r.push_back(rr);
 				}
-			}
+				// 5) Make the symbol fixing section. Essentially, some of the
+				// inputs to rules in the quoted program will be literal symbols
+				// rather than variables. If this is the case, then fix the
+				// literals into the evaled program relation.
+				for(auto const [didx, _] : prog_tree[ridx]) {
+					for(auto const [gidx, _] : prog_tree[ridx][didx]) {
+						if(didx == 0 ? gidx != hidx : didx != bidx) continue;
+						for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
+							raw_term
+								a({ quote_sym, elem_openp, elem(1), uelem(ridx), elem(didx),
+									uelem(gidx), uelem(inidx), elem_closep }),
+								b(raw_term::EQ, { quote_map[{ridx, didx, gidx, inidx}],
+									elem_eq, real_map[{ridx, didx, gidx, inidx}] });
+							body_tree = new raw_form_tree(elem::AND, body_tree,
+								new raw_form_tree(elem::IMPLIES,
+									new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE, a)),
+									new raw_form_tree(elem::NONE, b)));
+						}
+					}
+				}
+				// 6) Existentially quantify all the variables being used in
+				// the body. This should not be necessary (going by syntax/
+				// semantics of other relational calculus languages), but just
+				// in case.
+				for(auto const& [pos, var] : quote_map) {
+					// Only quantify variable if it is not the relation name of
+					// the head.
+					if(!(pos[1] == 0 && pos[3] == -1)) {
+						body_tree = new raw_form_tree(elem::EXISTS,
+							new raw_form_tree(elem::VAR, var), body_tree);
+					}
+				}
+				for(auto const& [pos, var] : real_map) {
+					// Only quantify variable if it is not in the head of the rule
+					if(pos[1] != 0) {
+						body_tree = new raw_form_tree(elem::EXISTS,
+							new raw_form_tree(elem::VAR, var), body_tree);
+					}
+				}
+				// 7) Put the body and head constructed above together to make a
+				// rule and add that to the program.
+				raw_rule rr;
+				rr.h.push_back(head);
+				rr.prft = std::shared_ptr<raw_form_tree>(body_tree);
+				rp.r.push_back(rr);
+			}}}
 		}
 	}
 }

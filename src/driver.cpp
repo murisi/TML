@@ -194,12 +194,9 @@ void driver::transform_quotes(raw_prog &rp) {
 
 /* Generate a unique variable and update the counter. */
 
-elem driver::generate_var(int &var_counter) {
-	input *i = dynii.add_string("?" + std::to_string(var_counter++));
-	i->prog_lex();
-	elem var;
-	var.parse(i);
-	return var;
+elem driver::generate_var() {
+	dict_t &d = tbl->get_dict();
+	return elem(elem::VAR, d.get_var_lexeme_from(d.get_fresh_var(0)));
 }
 
 /* Extract the arities stored in a quote arity relation and put them
@@ -276,10 +273,10 @@ void driver::transform_evals(raw_prog &rp) {
 				// would be supplied to the rule in the quoted program. I.e.
 				// these are not meta.
 				std::vector<elem> head_elems = { out_rel, elem_openp,
-					real_map[{ridx, 0, hidx, -1}] = generate_var(var_counter) };
+					real_map[{ridx, 0, hidx, -1}] = generate_var() };
 				for(int_t inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
 					head_elems.push_back(real_map[{ridx, 0, hidx, inidx}] =
-						generate_var(var_counter));
+						generate_var());
 				}
 				head_elems.push_back(elem_closep);
 				raw_term head(head_elems);
@@ -297,10 +294,10 @@ void driver::transform_evals(raw_prog &rp) {
 							uelem(ridx), uelem(didx), uelem(gidx),
 							uelem(prog_tree[ridx][didx][gidx]),
 							quote_map[{ridx, didx, gidx, -1}] = (didx == 0 ?
-								real_map[{ridx, 0, hidx, -1}] : generate_var(var_counter)) };
+								real_map[{ridx, 0, hidx, -1}] : generate_var()) };
 						for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 							a.push_back(quote_map[{ridx, didx, gidx, inidx}] =
-								generate_var(var_counter));
+								generate_var());
 						}
 						a.push_back(elem_closep);
 						body_tree = new raw_form_tree(elem::AND, body_tree,
@@ -317,7 +314,7 @@ void driver::transform_evals(raw_prog &rp) {
 							real_map[{ridx, bidx, gidx, -1}] = quote_map[{ridx, bidx, gidx, -1}] };
 						for(int_t inidx = 0; inidx < prog_tree[ridx][bidx][gidx]; inidx++) {
 							a.push_back(real_map[{ridx, bidx, gidx, inidx}] =
-								generate_var(var_counter));
+								generate_var());
 						}
 						a.push_back(elem_closep);
 						body_tree = new raw_form_tree(elem::AND, body_tree,

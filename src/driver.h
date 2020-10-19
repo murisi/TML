@@ -103,7 +103,7 @@ class driver {
 	void transform_quotes(raw_prog &rp);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
 	raw_term quote_term(const raw_term &head, const elem &rel_name, int_t rule_idx,
-		int_t disjunct_idx, int_t goal_idx, std::vector<quote_coord> &variables);
+		int_t disjunct_idx, int_t goal_idx, std::map<elem, elem> &variables);
 	program_arity extract_prog_arity(const elem &quote_rel, const raw_prog &rp);
 	void interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
 		const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings,

@@ -275,6 +275,10 @@ struct elem {
 	static elem fresh_var(dict_t &d) {
 		return elem(elem::VAR, d.get_var_lexeme_from(d.get_fresh_var(0)));
 	}
+	// Generate a fresh symbol with respect to given dictionary.
+	static elem fresh_sym(dict_t &d) {
+		return elem(elem::SYM, d.get_sym(d.get_fresh_sym(0)));
+	}
 };
 
 /* A raw term is produced from the parsing stage. In TML source code, it

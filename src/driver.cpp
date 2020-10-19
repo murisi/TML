@@ -101,7 +101,7 @@ void driver::directives_load(raw_prog& p, lexeme& trel) {
 
 raw_term driver::quote_term(const raw_term &head, const elem &rel_name,
 		int_t rule_idx, int_t disjunct_idx, int_t goal_idx,
-		std::vector<quote_coord> &variables) {
+		std::map<elem, elem> &variables) {
 	// The elements of the term that we're building up
 	std::vector<elem> quoted_term_e;
 	// Add metadata to quoted term: term signature, rule #, disjunct #,
@@ -109,13 +109,19 @@ raw_term driver::quote_term(const raw_term &head, const elem &rel_name,
 	quoted_term_e.insert(quoted_term_e.end(),
 		{rel_name, elem_openp, elem(0), uelem(rule_idx), uelem(disjunct_idx),
 			uelem(goal_idx), uelem(ssize(head.e)-3), head.e[0] });
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	
 	for(int_t param_idx = 2; param_idx < ssize(head.e) - 1; param_idx ++) {
 		if(head.e[param_idx].type == elem::VAR) {
-			// Convert the variable to a symbol and add it to quouted term
-			elem var_sym_elem(elem::SYM, head.e[param_idx].e);
-			quoted_term_e.push_back(var_sym_elem);
-			// Log the fact that a variable occurs at this location
-			variables.push_back({rule_idx, disjunct_idx, goal_idx, param_idx-2});
+			if(variables.find(head.e[param_idx]) != variables.end()) {
+				quoted_term_e.push_back(variables[head.e[param_idx]]);
+			} else {
+				// Since the current variable lacks a designated substitute,
+				// make one and record the mapping.
+				quoted_term_e.push_back(variables[head.e[param_idx]] =
+					elem::fresh_sym(d));
+			}
 		} else {
 			quoted_term_e.push_back(head.e[param_idx]);
 		}
@@ -165,8 +171,8 @@ void driver::transform_quotes(raw_prog &rp) {
 					// Replace the whole quotation with the relation it will create.
 					curr_term.e.erase(curr_term.e.begin() + offset);
 					curr_term.calc_arity(nullptr);
-					// Maintain a list of locations where variables occur:
-					std::vector<quote_coord> variables;
+					// Maintain a list of the variable substitutions:
+					std::map<elem, elem> variables;
 					for(int_t ridx = 0; ridx < ssize(nrp.r); ridx++) {
 						for(int_t didx = 0; didx < ssize(nrp.r[ridx].b) + 1; didx++) {
 							const std::vector<raw_term> &bodie =
@@ -178,13 +184,11 @@ void driver::transform_quotes(raw_prog &rp) {
 						}
 					}
 					
-					// Now create sub-relation to store the location of variables
-					// in the quoted relation
-					for(auto const&
-							[rule_idx, disjunct_idx, goal_idx, arg_idx] : variables) {
+					// Now create sub-relation to store the names of the variable
+					// substitutes in the quoted relation
+					for(auto const& [_, var_sym] : variables) {
 						rp.r.push_back(raw_rule(raw_term({ rel_name, elem_openp,
-							elem(1), uelem(rule_idx), uelem(disjunct_idx),
-							uelem(goal_idx), uelem(arg_idx), elem_closep })));
+							elem(1), var_sym, elem_closep })));
 					}
 				}
 			}
@@ -330,10 +334,10 @@ void driver::transform_evals(raw_prog &rp) {
 										if(std::make_tuple(didx1, gidx1, inidx1) >=
 											std::make_tuple(didx2, gidx2, inidx2)) continue;
 										raw_term
-											a({ quote_sym, elem_openp, elem(1), uelem(ridx),
-												uelem(didx1), uelem(gidx1), uelem(inidx1), elem_closep }),
-											b({ quote_sym, elem_openp, elem(1), uelem(ridx),
-												uelem(didx2), uelem(gidx2), uelem(inidx2), elem_closep }),
+											a({ quote_sym, elem_openp, elem(1),
+												quote_map[{ridx, didx1, gidx1, inidx1}], elem_closep }),
+											b({ quote_sym, elem_openp, elem(1),
+												quote_map[{ridx, didx2, gidx2, inidx2}], elem_closep }),
 											c(raw_term::EQ, { quote_map[{ridx, didx1, gidx1, inidx1}],
 												elem_eq, quote_map[{ridx, didx2, gidx2, inidx2}] }),
 											d(raw_term::EQ, { real_map[{ridx, didx1, gidx1, inidx1}],
@@ -361,8 +365,8 @@ void driver::transform_evals(raw_prog &rp) {
 						if(didx == 0 ? gidx != hidx : didx != bidx) continue;
 						for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
 							raw_term
-								a({ quote_sym, elem_openp, elem(1), uelem(ridx), elem(didx),
-									uelem(gidx), uelem(inidx), elem_closep }),
+								a({ quote_sym, elem_openp, elem(1),
+									quote_map[{ridx, didx, gidx, inidx}], elem_closep }),
 								b(raw_term::EQ, { quote_map[{ridx, didx, gidx, inidx}],
 									elem_eq, real_map[{ridx, didx, gidx, inidx}] });
 							body_tree = new raw_form_tree(elem::AND, body_tree,

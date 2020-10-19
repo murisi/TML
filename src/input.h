@@ -271,6 +271,10 @@ struct elem {
 		return e == t.e;
 	}
 	bool operator!=(const elem& t) const { return !(*this == t); }
+	// Generate a fresh variable with respect to given dictionary.
+	static elem fresh_var(dict_t &d) {
+		return elem(elem::VAR, d.get_var_lexeme_from(d.get_fresh_var(0)));
+	}
 };
 
 /* A raw term is produced from the parsing stage. In TML source code, it

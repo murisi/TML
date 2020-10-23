@@ -545,6 +545,94 @@ void driver::transform_evals(raw_prog &rp) {
 	}
 }
 
+void driver::populate_free_variables(const raw_term &t,
+		std::vector<elem> &bound_vars, std::set<elem> &free_vars) {
+	for(const elem &e : t.e) {
+		if(e.type == elem::VAR) {
+			if(std::find(bound_vars.begin(), bound_vars.end(), e) ==
+					bound_vars.end()) {
+				free_vars.insert(e);
+			}
+		}
+	}
+}
+
+void driver::populate_free_variables(const raw_form_tree &t,
+		std::vector<elem> &bound_vars, std::set<elem> &free_vars) {
+	switch(t.type) {
+		case elem::IMPLIES:
+			populate_free_variables(*t.l, bound_vars, free_vars);
+			populate_free_variables(*t.r, bound_vars, free_vars);
+			break;
+		case elem::COIMPLIES:
+			populate_free_variables(*t.l, bound_vars, free_vars);
+			populate_free_variables(*t.r, bound_vars, free_vars);
+			break;
+		case elem::AND:
+			populate_free_variables(*t.l, bound_vars, free_vars);
+			populate_free_variables(*t.r, bound_vars, free_vars);
+			break;
+		case elem::ALT:
+			populate_free_variables(*t.l, bound_vars, free_vars);
+			populate_free_variables(*t.r, bound_vars, free_vars);
+			break;
+		case elem::NOT:
+			populate_free_variables(*t.l, bound_vars, free_vars);
+			break;
+		case elem::EXISTS: {
+			elem elt = *(t.l->el);
+			bound_vars.push_back(elt);
+			populate_free_variables(*t.r, bound_vars, free_vars);
+			bound_vars.pop_back();
+			break;
+		} case elem::UNIQUE: {
+			elem elt = *(t.l->el);
+			bound_vars.push_back(elt);
+			populate_free_variables(*t.r, bound_vars, free_vars);
+			bound_vars.pop_back();
+			break;
+		} case elem::NONE: {
+			populate_free_variables(*t.rt, bound_vars, free_vars);
+			break;
+		} case elem::FORALL: {
+			elem elt = *(t.l->el);
+			bound_vars.push_back(elt);
+			populate_free_variables(*t.r, bound_vars, free_vars);
+			bound_vars.pop_back();
+			break;
+		} default:
+			assert(false); //should never reach here
+	}
+}
+
+raw_form_tree *driver::with_exists(raw_form_tree *t,
+		std::vector<elem> &bound_vars) {
+	std::set<elem> free_vars;
+	populate_free_variables(*t, bound_vars, free_vars);
+	for(const elem &var : free_vars) {
+		t = new raw_form_tree(elem::EXISTS,
+			new raw_form_tree(elem::VAR, var), t);
+	}
+	return t;
+}
+
+void driver::insert_exists(raw_prog &rp) {
+	for(raw_rule &rr : rp.r) {
+		if(rr.b.empty() && rr.prft && rr.h.size() == 1) {
+			std::vector<elem> bound_vars;
+			for(const elem &e : rr.h[0].e) {
+				if(e.type == elem::VAR) {
+					bound_vars.push_back(e);
+				}
+			}
+			raw_form_tree *orft = rr.prft.get();
+			raw_form_tree *nrft = new raw_form_tree { orft->type, orft->rt, orft->el, orft->l, orft->r };
+			orft->rt = nullptr; orft->el = nullptr; orft->l = nullptr; orft->r = nullptr;
+			rr.prft.reset(with_exists(nrft, bound_vars));
+		}
+	}
+}
+
 /* Reduce the size of the universe that the given variable takes its values from
  * by statically analyzing the term and determining what is impossible. */
 
@@ -920,6 +1008,8 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 		std::cout << "Quoted Program:" << std::endl << std::endl << p << std::endl;
 		transform_evals(p);
 		std::cout << "Evaled Program:" << std::endl << std::endl << p << std::endl;
+		insert_exists(p);
+		std::cout << "Existentially Quantified Program:" << std::endl << std::endl << p << std::endl;
 		std::set<elem> universe;
 		std::set<raw_term> database;
 		naive_pfp(p, universe, database);

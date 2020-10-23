@@ -112,6 +112,13 @@ class driver {
 		const elem &rel_name, raw_prog &rp, std::map<elem, elem> &variables);
 	std::vector<elem> quote_rule(const raw_rule &rr, const elem &rel_name,
 		raw_prog &rp, std::map<elem, elem> &variables);
+	void populate_free_variables(const raw_term &t,
+		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
+	raw_form_tree *with_exists(raw_form_tree *t,
+		std::vector<elem> &bound_vars);
+	void insert_exists(raw_prog &rp);
+	void populate_free_variables(const raw_form_tree &t,
+		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	void interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
 		const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings,
 		std::set<raw_term> &database);

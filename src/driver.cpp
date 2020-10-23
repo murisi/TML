@@ -94,23 +94,17 @@ void driver::directives_load(raw_prog& p, lexeme& trel) {
 		}
 }
 
-/* Takes a raw term and its position in the program to be quoted and
- * returns its quotation within a relation of the given name. The
- * locations of variable elements within the raw term are added to the
- * variables vector. */
+/* Takes a raw term and returns its quotation within a relation of the
+ * given name. The names of variable elements within the raw term are
+ * added to the variables map. */
 
-raw_term driver::quote_term(const raw_term &head, const elem &rel_name,
-		int_t rule_idx, int_t disjunct_idx, int_t goal_idx,
-		std::map<elem, elem> &variables) {
-	// The elements of the term that we're building up
-	std::vector<elem> quoted_term_e;
-	// Add metadata to quoted term: term signature, rule #, disjunct #,
-	// goal #, total inputs, relation sym
-	quoted_term_e.insert(quoted_term_e.end(),
-		{rel_name, elem_openp, elem(0), uelem(rule_idx), uelem(disjunct_idx),
-			uelem(goal_idx), uelem(ssize(head.e)-3), head.e[0] });
+elem driver::quote_term(const raw_term &head, const elem &rel_name,
+		raw_prog &rp, std::map<elem, elem> &variables) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
+	// Add metadata to quoted term: term signature, term id, term name
+	std::vector<elem> quoted_term_e = {rel_name, elem_openp, elem(QTERM),
+		elem::fresh_sym(d), head.e[0] };
 	
 	for(int_t param_idx = 2; param_idx < ssize(head.e) - 1; param_idx ++) {
 		if(head.e[param_idx].type == elem::VAR) {
@@ -128,7 +122,70 @@ raw_term driver::quote_term(const raw_term &head, const elem &rel_name,
 	}
 	// Terminate term elements and make raw_term object
 	quoted_term_e.push_back(elem_closep);
-	return raw_term(quoted_term_e);
+	rp.r.push_back(raw_rule(raw_term(quoted_term_e)));
+	if(head.neg) {
+		// If this term is actually negated, then we'll make a parent for
+		// this node and return its id
+		elem neg_id = elem::fresh_sym(d);
+		rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QNOT),
+			neg_id, quoted_term_e[3], elem_closep})));
+		return neg_id;
+	} else {
+		return quoted_term_e[3];
+	}
+}
+
+elem driver::quote_conjunction(const std::vector<raw_term> &conj,
+		const elem &rel_name, raw_prog &rp, std::map<elem, elem> &variables) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	elem part_id;
+	for(int_t gidx = 0; gidx < ssize(conj); gidx++) {
+		const elem term_id = quote_term(conj[gidx], rel_name, rp, variables);
+		if(gidx == 0) {
+			part_id = term_id;
+		} else {
+			const elem sub_part_id = part_id;
+			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QAND),
+				part_id = elem::fresh_sym(d), term_id, sub_part_id, elem_closep })));
+		}
+	}
+	return part_id;
+}
+
+elem driver::quote_disjunction(const std::vector<std::vector<raw_term>> &disj,
+		const elem &rel_name, raw_prog &rp, std::map<elem, elem> &variables) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	elem part_id;
+	for(int_t gidx = 0; gidx < ssize(disj); gidx++) {
+		const elem term_id =
+			quote_conjunction(disj[gidx], rel_name, rp, variables);
+		if(gidx == 0) {
+			part_id = term_id;
+		} else {
+			const elem sub_part_id = part_id;
+			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QOR),
+				part_id = elem::fresh_sym(d), term_id, sub_part_id, elem_closep })));
+		}
+	}
+	return part_id;
+}
+
+std::vector<elem> driver::quote_rule(const raw_rule &rr, const elem &rel_name,
+		raw_prog &rp, std::map<elem, elem> &variables) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	std::vector<elem> rule_ids;
+	const elem body_id = quote_disjunction(rr.b, rel_name, rp, variables);
+	for(int_t gidx = 0; gidx < ssize(rr.h); gidx++) {
+		const elem head_id = quote_term(rr.h[gidx], rel_name, rp, variables);
+		const elem rule_id = elem::fresh_sym(d);
+		rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QRULE),
+			rule_id, head_id, body_id, elem_closep })));
+		rule_ids.push_back(rule_id);
+	}
+	return rule_ids;
 }
 
 /* Parse an STR elem into a raw_prog. */
@@ -146,14 +203,23 @@ raw_prog driver::read_prog(elem prog, const raw_prog &rp) {
 /* Loop through the rules of the given program checking if they use a
  * function called "quote" in their bodies. Quote's first argument is
  * the relation into which it should put the quotation it creates, and
- * it's second argument is the rule to quote. Say that the output
+ * it's second argument is the program to quote. Say that the output
  * relation name is s, quote will populate it according to the following
  * schema:
- * For each context, each N-ary term is stored as:
- * s(0 <rule #> <disjunct #> <goal #> <total inputs> <relname> <input0>
- * 	<input1> ... <inputN>)
- * The locations of the variables in the above schema are stored as:
- * s(1 <rule #> <disjunct #> <goal #> <input #>) */
+ * q(VARS <var name>)
+ * q(RULE <id> <head id> <body id>).
+ * q(TERM <id> <name>).
+ * q(TERM <id> <name> <param1 name>).
+ * q(TERM <id> <name> <param1 name> <param2 name>).
+ * q(TERM <id> <name> <param1 name> <param2 name> <param3 name>).
+ * q(TERM <id> <name> <param1 name> <param2 name> <param3 name> <param4 name>).
+ * q(EQUALS <id> <param1 name> <param2 name>).
+ * q(FORALL <id> <var name> <body id>).
+ * q(EXISTS <id> <var name> <body id>).
+ * q(NOT <id> <body id>).
+ * q(AND <id> <body1 id> <body2 id>).
+ * q(OR <id> <body1 id> <body2 id>).
+ * q(TRUE <id>). */
 
 void driver::transform_quotes(raw_prog &rp) {
 	for(size_t oridx = 0; oridx < rp.r.size(); oridx++) {
@@ -174,50 +240,18 @@ void driver::transform_quotes(raw_prog &rp) {
 					// Maintain a list of the variable substitutions:
 					std::map<elem, elem> variables;
 					for(int_t ridx = 0; ridx < ssize(nrp.r); ridx++) {
-						for(int_t didx = 0; didx < ssize(nrp.r[ridx].b) + 1; didx++) {
-							const std::vector<raw_term> &bodie =
-								didx == 0 ? nrp.r[ridx].h : nrp.r[ridx].b[didx-1];
-							for(int_t gidx = 0; gidx < ssize(bodie); gidx++) {
-								rp.r.push_back(raw_rule(quote_term(bodie[gidx], rel_name,
-									ridx, didx, gidx, variables)));
-							}
-						}
+						quote_rule(nrp.r[ridx], rel_name, rp, variables);
 					}
-					
 					// Now create sub-relation to store the names of the variable
 					// substitutes in the quoted relation
 					for(auto const& [_, var_sym] : variables) {
 						rp.r.push_back(raw_rule(raw_term({ rel_name, elem_openp,
-							elem(1), var_sym, elem_closep })));
+							elem(QVARS), var_sym, elem_closep })));
 					}
 				}
 			}
 		}
 	}
-}
-
-/* Extract the arities stored in a quote arity relation and put them
- * into a tree format. A quote arity relation has the following schema:
- * s(0 <rule #> <disjunct #> <goal #> <total inputs> ...)
- * Note that this means that every quote relation contains a quote arity
- * relation. */
-
-program_arity driver::extract_prog_arity(const elem &quote_rel,
-		const raw_prog &rp) {
-	std::vector<quote_coord> prog_shape;
-	for(const raw_rule &rr : rp.r) {
-		if(lexeme2str(rr.h[0].e[0].e) == lexeme2str(quote_rel.e) &&
-				rr.h[0].e[2].num == 0) {
-			prog_shape.push_back({ rr.h[0].e[3].num, rr.h[0].e[4].num,
-				rr.h[0].e[5].num, rr.h[0].e[6].num });
-		}
-	}
-	program_arity prog_tree;
-	// Put the program arity into the form of a tree.
-	for(auto const& pos : prog_shape) {
-		prog_tree[pos[0]][pos[1]][pos[2]] = pos[3];
-	}
-	return prog_tree;
 }
 
 /* Loop through the rules of the given program checking if they use a
@@ -244,164 +278,269 @@ void driver::transform_evals(raw_prog &rp) {
 			elem out_rel = curr_term.e[2];
 			// The relation containing the quotation arity is the second symbol
 			// between the parentheses
-			elem arity_rel = curr_term.e[3];
+			elem arity_num = curr_term.e[3];
 			// The formal symbol representing the quotation relation is the
 			// third symbol between the parentheses
 			elem quote_sym = curr_term.e[4];
-			// Get the program arity in tree form
-			program_arity prog_tree = extract_prog_arity(arity_rel, rp);
 			// Get dictionary for generating fresh variables
 			dict_t &d = tbl->get_dict();
+			// This symbol is used when the variable allocation is finished
+			elem und_sym = elem::fresh_sym(d);
+			// This relation will house most of the interpreter
+			elem aux_rel = elem::fresh_sym(d);
 			
-			for(auto const& [ridx, _] : prog_tree) {
-			for(auto const& [hidx, _] : prog_tree[ridx][0]) {
-			for(auto const& [bidx, _] : prog_tree[ridx]) {
-				if(bidx == 0 && prog_tree[ridx].size() > 1) continue;
-				// Exclusively store the variables that we have created in the
-				// following two maps.
-				std::map<quote_coord, elem> quote_map;
-				std::map<quote_coord, elem> real_map;
-				
-				// 1) Make the eval rule head. First input is the name of the
-				// rule. Needed because the quoted program most likely contains
-				// multiple rules. The rest of the inputs are the values that
-				// would be supplied to the rule in the quoted program. I.e.
-				// these are not meta.
-				std::vector<elem> head_elems = { out_rel, elem_openp,
-					real_map[{ridx, 0, hidx, -1}] = elem::fresh_var(d) };
-				for(int_t inidx = 0; inidx < prog_tree[ridx][0][hidx]; inidx++) {
-					head_elems.push_back(real_map[{ridx, 0, hidx, inidx}] =
-						elem::fresh_var(d));
+			// Make helpers for fixing variables and symbols
+			elem fs_rel = elem::fresh_sym(d), fv_rel = elem::fresh_sym(d),
+				rva = elem::fresh_var(d), rvb = elem::fresh_var(d),
+				qva = elem::fresh_var(d), qvb = elem::fresh_var(d);
+			
+			// Relation to fix the symbols
+			raw_term fs_head({fs_rel, elem_openp, qva, rva, elem_closep});
+			raw_form_tree *fs_body = new raw_form_tree(elem::IMPLIES,
+				new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE,
+					raw_term({ quote_sym, elem_openp, elem(QVARS), qva, elem_closep }))),
+				new raw_form_tree(elem::NONE,
+					raw_term(raw_term::EQ, {qva, elem_eq, rva})));
+			raw_rule fs_rule(fs_head);
+			fs_rule.prft = std::shared_ptr<raw_form_tree>(fs_body);
+			rp.r.push_back(fs_rule);
+			
+			// Relation to fix the variables
+			raw_term fv_head({fv_rel, elem_openp, qva, rva, qvb, rvb,
+				elem_closep});
+			raw_form_tree *fv_body = new raw_form_tree(elem::IMPLIES,
+				new raw_form_tree(elem::AND,
+					new raw_form_tree(elem::AND,
+						new raw_form_tree(elem::NONE, raw_term({quote_sym, elem_openp,
+							elem(QVARS), qva, elem_closep})),
+						new raw_form_tree(elem::NONE, raw_term({quote_sym, elem_openp,
+							elem(QVARS), qvb, elem_closep}))),
+					new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {qva,
+						elem_eq, qvb}))),
+				new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {rva,
+					elem_eq, rvb})));
+			raw_rule fv_rule(fv_head);
+			fv_rule.prft = std::shared_ptr<raw_form_tree>(fv_body);
+			rp.r.push_back(fv_rule);
+			
+			// Interpret the varying rule arities.
+			// Allocate rule name, rule id, head id, body id
+			elem rule_name = elem::fresh_var(d), head_id = elem::fresh_var(d),
+				body_id = elem::fresh_var(d), elt_id = elem::fresh_var(d),
+				forma_id = elem::fresh_var(d), formb_id = elem::fresh_var(d);
+			// Allocate interpreted and quoted arguments
+			std::vector<elem> iparams, qparams, iargs, qargs;
+			for(int_t a = 0; a < arity_num.num; a++) {
+				iargs.push_back(elem::fresh_var(d));
+				qargs.push_back(elem::fresh_var(d));
+				iparams.push_back(elem::fresh_var(d));
+				qparams.push_back(elem::fresh_var(d));
+			}
+			// Make the interpreters
+			for(int_t a = 0; a < arity_num.num+1; a++) {
+				// Make the head interpretation
+				std::vector<elem> rhead_e = { out_rel, elem_openp, rule_name };
+				for(int_t i = 0; i < a; i++) rhead_e.push_back(iparams[i]);
+				rhead_e.push_back(elem_closep);
+				// Make the rule quotation
+				raw_term qrule({ quote_sym, elem_openp, elem(QRULE), elt_id,
+					head_id, body_id, elem_closep });
+				// Make the head quotation
+				std::vector<elem> qhead_e = { quote_sym, elem_openp, elem(QTERM),
+					head_id, rule_name };
+				for(int_t i = 0; i < a; i++) qhead_e.push_back(qparams[i]);
+				qhead_e.push_back(elem_closep);
+				// Make the body interpretation
+				std::vector<elem> body_e = { aux_rel, elem_openp, body_id };
+				for(int_t i = 0; i < a; i++) {
+					body_e.push_back(qargs[i]);
+					body_e.push_back(iargs[i]);
 				}
-				head_elems.push_back(elem_closep);
-				raw_term head(head_elems);
-				// Start off with the true constant (0=0), and add conjunctions
-				raw_form_tree *body_tree = new raw_form_tree(elem::NONE,
-					raw_term(raw_term::EQ, {elem(0), elem_eq, elem(0)}));
-				// 2) Make the quoted term declaration section. These variables
-				// take on the parameter names and relation names of the quoted
-				// program. I.e. these are meta, describing the program as a
-				// formal object.
-				for(auto const& [didx, _] : prog_tree[ridx]) {
-					for(auto const& [gidx, _] : prog_tree[ridx][didx]) {
-						if(didx == 0 ? gidx != hidx : didx != bidx) continue;
-						std::vector<elem> a = { quote_sym, elem_openp, elem(0),
-							uelem(ridx), uelem(didx), uelem(gidx),
-							uelem(prog_tree[ridx][didx][gidx]),
-							quote_map[{ridx, didx, gidx, -1}] = (didx == 0 ?
-								real_map[{ridx, 0, hidx, -1}] : elem::fresh_var(d)) };
-						for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-							a.push_back(quote_map[{ridx, didx, gidx, inidx}] =
-								elem::fresh_var(d));
-						}
-						a.push_back(elem_closep);
-						body_tree = new raw_form_tree(elem::AND, body_tree,
-							new raw_form_tree(elem::NONE, raw_term(a)));
+				body_e.push_back(elem_closep);
+				raw_form_tree *bodie = new raw_form_tree(elem::AND,
+					new raw_form_tree(elem::AND,
+						new raw_form_tree(elem::NONE, qrule),
+						new raw_form_tree(elem::NONE, raw_term(qhead_e))),
+					new raw_form_tree(elem::NONE, raw_term(body_e)));
+				// Fix the real parameters to this rule to the quoted symbol
+				// if it is not marked as a variable.
+				for(int_t i = 0; i < a; i++) {
+					raw_term fs_term({fs_rel, elem_openp, qparams[i], iparams[i],
+						elem_closep});
+					bodie = new raw_form_tree(elem::AND, bodie,
+						new raw_form_tree(elem::NONE, fs_term));
+				}
+				// Fix the real parameters to this rule to be the same if their
+				// quotations are the same.
+				for(int_t i = 0; i < a; i++) {
+					for(int_t j = i+1; j < a; j++) {
+						raw_term fv_term({fv_rel, elem_openp, qparams[i], iparams[i],
+							qparams[j], iparams[j], elem_closep});
+						bodie = new raw_form_tree(elem::AND, bodie,
+							new raw_form_tree(elem::NONE, fv_term));
 					}
 				}
-				// 3) Make the real term declaration section. These variables
-				// take on the same values that the inputs to the quoted program
-				// would. I.e. this is not meta. Since the head is at the head,
-				// we just do the body
-				if(bidx != 0) {
-					for(auto const& [gidx, _] : prog_tree[ridx][bidx]) {
-						std::vector<elem> a = { out_rel, elem_openp,
-							real_map[{ridx, bidx, gidx, -1}] = quote_map[{ridx, bidx, gidx, -1}] };
-						for(int_t inidx = 0; inidx < prog_tree[ridx][bidx][gidx]; inidx++) {
-							a.push_back(real_map[{ridx, bidx, gidx, inidx}] =
-								elem::fresh_var(d));
-						}
-						a.push_back(elem_closep);
-						body_tree = new raw_form_tree(elem::AND, body_tree,
-							new raw_form_tree(elem::NONE, raw_term(a)));
+				// Fix the real parameters to this rule to be the same as the
+				// arguments if their corresponding quotations are the same.
+				for(int_t i = 0; i < a; i++) {
+					for(int_t j = 0; j < a; j++) {
+						raw_term fv_term({fv_rel, elem_openp, qargs[i], iargs[i],
+							qparams[j], iparams[j], elem_closep});
+						bodie = new raw_form_tree(elem::AND, bodie,
+							new raw_form_tree(elem::NONE, fv_term));
 					}
 				}
-				// 4) Make the variable sameness section. These propositions
-				// ensure that is two quoted inputs labelled as variables are
-				// the same, then their corresponding real inputs are
-				// constrained to be same.
-				for(auto const& [didx1, _] : prog_tree[ridx]) {
-					for(auto const& [gidx1, _] : prog_tree[ridx][didx1]) {
-						if(didx1 == 0 ? gidx1 != hidx : didx1 != bidx) continue;
-						for(int_t inidx1 = 0; inidx1 < prog_tree[ridx][didx1][gidx1]; inidx1++) {
-							for(auto const& [didx2, _] : prog_tree[ridx]) {
-								if(didx2 < didx1) continue;
-								for(auto const& [gidx2, _] : prog_tree[ridx][didx2]) {
-									if(didx2 == 0 ? gidx2 != hidx : didx2 != bidx) continue;
-									for(int_t inidx2 = 0; inidx2 < prog_tree[ridx][didx2][gidx2]; inidx2++) {
-										// Without this, almost every formula would be
-										// constructed twice.
-										if(std::make_tuple(didx1, gidx1, inidx1) >=
-											std::make_tuple(didx2, gidx2, inidx2)) continue;
-										raw_term
-											a({ quote_sym, elem_openp, elem(1),
-												quote_map[{ridx, didx1, gidx1, inidx1}], elem_closep }),
-											b({ quote_sym, elem_openp, elem(1),
-												quote_map[{ridx, didx2, gidx2, inidx2}], elem_closep }),
-											c(raw_term::EQ, { quote_map[{ridx, didx1, gidx1, inidx1}],
-												elem_eq, quote_map[{ridx, didx2, gidx2, inidx2}] }),
-											d(raw_term::EQ, { real_map[{ridx, didx1, gidx1, inidx1}],
-												elem_eq, real_map[{ridx, didx2, gidx2, inidx2}] });
-										body_tree = new raw_form_tree(elem::AND, body_tree,
-											new raw_form_tree(elem::IMPLIES,
-												new raw_form_tree(elem::AND,
-													new raw_form_tree(elem::AND,
-														new raw_form_tree(elem::NONE, a),
-														new raw_form_tree(elem::NONE, b)),
-													new raw_form_tree(elem::NONE, c)),
-													new raw_form_tree(elem::NONE, d)));
-									}
-								}
-							}
-						}
-					}
-				}
-				// 5) Make the symbol fixing section. Essentially, some of the
-				// inputs to rules in the quoted program will be literal symbols
-				// rather than variables. If this is the case, then fix the
-				// literals into the evaled program relation.
-				for(auto const [didx, _] : prog_tree[ridx]) {
-					for(auto const [gidx, _] : prog_tree[ridx][didx]) {
-						if(didx == 0 ? gidx != hidx : didx != bidx) continue;
-						for(int_t inidx = 0; inidx < prog_tree[ridx][didx][gidx]; inidx++) {
-							raw_term
-								a({ quote_sym, elem_openp, elem(1),
-									quote_map[{ridx, didx, gidx, inidx}], elem_closep }),
-								b(raw_term::EQ, { quote_map[{ridx, didx, gidx, inidx}],
-									elem_eq, real_map[{ridx, didx, gidx, inidx}] });
-							body_tree = new raw_form_tree(elem::AND, body_tree,
-								new raw_form_tree(elem::IMPLIES,
-									new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE, a)),
-									new raw_form_tree(elem::NONE, b)));
-						}
-					}
-				}
-				// 6) Existentially quantify all the variables being used in
-				// the body. This should not be necessary (going by syntax/
-				// semantics of other relational calculus languages), but just
-				// in case.
-				for(auto const& [pos, var] : quote_map) {
-					// Only quantify variable if it is not the relation name of
-					// the head.
-					if(!(pos[1] == 0 && pos[3] == -1)) {
-						body_tree = new raw_form_tree(elem::EXISTS,
-							new raw_form_tree(elem::VAR, var), body_tree);
-					}
-				}
-				for(auto const& [pos, var] : real_map) {
-					// Only quantify variable if it is not in the head of the rule
-					if(pos[1] != 0) {
-						body_tree = new raw_form_tree(elem::EXISTS,
-							new raw_form_tree(elem::VAR, var), body_tree);
-					}
-				}
-				// 7) Put the body and head constructed above together to make a
-				// rule and add that to the program.
-				raw_rule rr;
-				rr.h.push_back(head);
-				rr.prft = std::shared_ptr<raw_form_tree>(body_tree);
+				raw_term rt(rhead_e);
+				raw_rule rr(rt);
+				rr.prft = std::shared_ptr<raw_form_tree>(bodie);
 				rp.r.push_back(rr);
-			}}}
+			}
+			
+			// Interpret terms of each arity
+			for(int_t a = 0; a < arity_num.num+1; a++) {
+				std::vector<elem> head = { aux_rel, elem_openp, elt_id };
+				for(int_t i = 0; i < a; i++) {
+					head.push_back(qparams[i]);
+					head.push_back(iparams[i]);
+				}
+				for(int_t i = a; i < arity_num.num; i++) {
+					head.push_back(und_sym);
+					head.push_back(und_sym);
+				}
+				head.push_back(elem_closep);
+				std::vector<elem> quote_e =
+					{ aux_rel, elem_openp, elem(QTERM), elt_id, rule_name };
+				for(int_t i = 0; i < a; i++) {
+					quote_e.push_back(qparams[i]);
+				}
+				quote_e.push_back(elem_closep);
+				std::vector<elem> real_e =
+					{ aux_rel, elem_openp, rule_name };
+				for(int_t i = 0; i < a; i++) {
+					real_e.push_back(iparams[i]);
+				}
+				real_e.push_back(elem_closep);
+				raw_form_tree *bodie = new raw_form_tree(elem::AND,
+					new raw_form_tree(elem::NONE, raw_term(quote_e)),
+					new raw_form_tree(elem::NONE, raw_term(real_e)));
+				for(int_t i = 0; i < a; i++) {
+					raw_term fs_term({ fs_rel, elem_openp, qparams[i], iparams[i],
+						elem_closep });
+					bodie = new raw_form_tree(elem::AND, bodie,
+						new raw_form_tree(elem::NONE, fs_term));
+				}
+				for(int_t i = 0; i < a; i++) {
+					for(int_t j = i+1; j < a; j++) {
+						raw_term fv_term({ fv_rel, elem_openp, qparams[i], iparams[i],
+							qparams[j], iparams[j], elem_closep });
+						bodie = new raw_form_tree(elem::AND, bodie,
+							new raw_form_tree(elem::NONE, fv_term));
+					}
+				}
+				raw_rule rr(head);
+				rr.prft = std::shared_ptr<raw_form_tree>(bodie);
+				rp.r.push_back(rr);
+			}
+			
+			// Interpret conjunctions with varying allocations to each side
+			for(int_t a = 0; a < arity_num.num+1; a++) {
+				std::vector<elem> head_e = { aux_rel, elem_openp, elt_id };
+				for(int_t i = 0; i < arity_num.num; i++) {
+					head_e.push_back(qparams[i]);
+					head_e.push_back(iparams[i]);
+				}
+				head_e.push_back(elem_closep);
+				raw_term quote({quote_sym, elem_openp, elem(QAND), elt_id,
+					forma_id, formb_id, elem_closep });
+				std::vector<elem> forma_e = { aux_rel, elem_openp, forma_id };
+				for(int_t i = a; i < arity_num.num; i++) {
+					forma_e.push_back(qparams[i]);
+					forma_e.push_back(iparams[i]);
+				}
+				for(int_t i = 0; i < a; i++) {
+					forma_e.push_back(und_sym);
+					forma_e.push_back(und_sym);
+				}
+				forma_e.push_back(elem_closep);
+				std::vector<elem> formb_e = { aux_rel, elem_openp, formb_id };
+				for(int_t i = 0; i < a; i++) {
+					formb_e.push_back(qparams[i]);
+					formb_e.push_back(iparams[i]);
+				}
+				for(int_t i = a; i < arity_num.num; i++) {
+					formb_e.push_back(und_sym);
+					formb_e.push_back(und_sym);
+				}
+				formb_e.push_back(elem_closep);
+				raw_form_tree *bodie = new raw_form_tree(elem::AND,
+					new raw_form_tree(elem::NONE, quote),
+					new raw_form_tree(elem::AND,
+						new raw_form_tree(elem::NONE, forma_e),
+						new raw_form_tree(elem::NONE, formb_e)));
+				
+				for(int_t i = 0; i < a; i++) {
+					for(int_t j = a; j < arity_num.num; j++) {
+						raw_term fv_term({ fv_rel, elem_openp, qparams[i], iparams[i],
+							qparams[j], iparams[j], elem_closep });
+						bodie = new raw_form_tree(elem::AND, bodie,
+							new raw_form_tree(elem::NONE, fv_term));
+					}
+				}
+				
+				raw_rule rr(head_e);
+				rr.prft = std::shared_ptr<raw_form_tree>(bodie);
+				rp.r.push_back(rr);
+			}
+			
+			// Interpret disjunctions with varying allocations to each side
+			for(int_t a = 0; a < arity_num.num+1; a++) {
+				std::vector<elem> head_e = { aux_rel, elem_openp, elt_id };
+				for(int_t i = 0; i < arity_num.num; i++) {
+					head_e.push_back(qparams[i]);
+					head_e.push_back(iparams[i]);
+				}
+				head_e.push_back(elem_closep);
+				raw_term quote({quote_sym, elem_openp, elem(QOR), elt_id,
+					forma_id, formb_id, elem_closep });
+				std::vector<elem> forma_e = { aux_rel, elem_openp, forma_id };
+				for(int_t i = a; i < arity_num.num; i++) {
+					forma_e.push_back(qparams[i]);
+					forma_e.push_back(iparams[i]);
+				}
+				for(int_t i = 0; i < a; i++) {
+					forma_e.push_back(und_sym);
+					forma_e.push_back(und_sym);
+				}
+				forma_e.push_back(elem_closep);
+				std::vector<elem> formb_e = { aux_rel, elem_openp, formb_id };
+				for(int_t i = 0; i < a; i++) {
+					formb_e.push_back(qparams[i]);
+					formb_e.push_back(iparams[i]);
+				}
+				for(int_t i = a; i < arity_num.num; i++) {
+					formb_e.push_back(und_sym);
+					formb_e.push_back(und_sym);
+				}
+				formb_e.push_back(elem_closep);
+				raw_form_tree *bodie = new raw_form_tree(elem::AND,
+					new raw_form_tree(elem::NONE, quote),
+					new raw_form_tree(elem::ALT,
+						new raw_form_tree(elem::NONE, forma_e),
+						new raw_form_tree(elem::NONE, formb_e)));
+				
+				for(int_t i = 0; i < a; i++) {
+					for(int_t j = a; j < arity_num.num; j++) {
+						raw_term fv_term({ fv_rel, elem_openp, qparams[i], iparams[i],
+							qparams[j], iparams[j], elem_closep });
+						bodie = new raw_form_tree(elem::AND, bodie,
+							new raw_form_tree(elem::NONE, fv_term));
+					}
+				}
+				
+				raw_rule rr(head_e);
+				rr.prft = std::shared_ptr<raw_form_tree>(bodie);
+				rp.r.push_back(rr);
+			}
 		}
 	}
 }

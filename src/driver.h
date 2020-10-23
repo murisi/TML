@@ -29,14 +29,16 @@
 
 typedef enum prolog_dialect { XSB, SWIPL } prolog_dialect;
 
-#define uelem(x) elem(int_t(x))
-
-typedef int_t goal_arity;
-typedef std::map<int_t, goal_arity> disjunct_arity;
-typedef std::map<int_t, disjunct_arity> rule_arity;
-typedef std::map<int_t, rule_arity> program_arity;
-// Follows this schema: (rule #, disjunction #, goal #, elem #)
-typedef std::array<int_t, 4> quote_coord;
+#define QVARS 0
+#define QRULE 1
+#define QTERM 2
+#define QEQUALS 3
+#define QFORALL 4
+#define QEXISTS 5
+#define QNOT 6
+#define QAND 7
+#define QOR 8
+#define QTRUE 9
 
 class archive;
 
@@ -102,9 +104,14 @@ class driver {
 	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
-	raw_term quote_term(const raw_term &head, const elem &rel_name, int_t rule_idx,
-		int_t disjunct_idx, int_t goal_idx, std::map<elem, elem> &variables);
-	program_arity extract_prog_arity(const elem &quote_rel, const raw_prog &rp);
+	elem quote_term(const raw_term &head, const elem &rel_name,
+		raw_prog &rp, std::map<elem, elem> &variables);
+	elem quote_conjunction(const std::vector<raw_term> &conj,
+		const elem &rel_name, raw_prog &rp, std::map<elem, elem> &variables);
+	elem quote_disjunction(const std::vector<std::vector<raw_term>> &disj,
+		const elem &rel_name, raw_prog &rp, std::map<elem, elem> &variables);
+	std::vector<elem> quote_rule(const raw_rule &rr, const elem &rel_name,
+		raw_prog &rp, std::map<elem, elem> &variables);
 	void interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
 		const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings,
 		std::set<raw_term> &database);

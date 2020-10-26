@@ -157,19 +157,22 @@ elem driver::quote_disjunction(const std::vector<std::vector<raw_term>> &disj,
 		const elem &rel_name, raw_prog &rp, std::map<elem, elem> &variables) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
-	elem part_id;
-	for(int_t gidx = 0; gidx < ssize(disj); gidx++) {
-		const elem term_id =
-			quote_conjunction(disj[gidx], rel_name, rp, variables);
-		if(gidx == 0) {
-			part_id = term_id;
-		} else {
+	if(ssize(disj) > 0) {
+		elem part_id = quote_conjunction(disj[0], rel_name, rp, variables);
+		for(int_t gidx = 1; gidx < ssize(disj); gidx++) {
+			const elem term_id =
+				quote_conjunction(disj[gidx], rel_name, rp, variables);
 			const elem sub_part_id = part_id;
 			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QOR),
 				part_id = elem::fresh_sym(d), term_id, sub_part_id, elem_closep })));
 		}
+		return part_id;
+	} else {
+		elem part_id = elem::fresh_sym(d);
+		rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QTRUE),
+			part_id, elem_closep })));
+		return part_id;
 	}
-	return part_id;
 }
 
 std::vector<elem> driver::quote_rule(const raw_rule &rr, const elem &rel_name,

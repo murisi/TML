@@ -350,7 +350,7 @@ void driver::transform_evals(raw_prog &rp) {
 				qhead_e.push_back(elem_closep);
 				// Make the body interpretation
 				std::vector<elem> body_e = { aux_rel, elem_openp, body_id };
-				for(int_t i = 0; i < a; i++) {
+				for(int_t i = 0; i < arity_num.num; i++) {
 					body_e.push_back(qargs[i]);
 					body_e.push_back(iargs[i]);
 				}
@@ -403,13 +403,13 @@ void driver::transform_evals(raw_prog &rp) {
 				}
 				head.push_back(elem_closep);
 				std::vector<elem> quote_e =
-					{ aux_rel, elem_openp, elem(QTERM), elt_id, rule_name };
+					{ quote_sym, elem_openp, elem(QTERM), elt_id, rule_name };
 				for(int_t i = 0; i < a; i++) {
 					quote_e.push_back(qparams[i]);
 				}
 				quote_e.push_back(elem_closep);
 				std::vector<elem> real_e =
-					{ aux_rel, elem_openp, rule_name };
+					{ out_rel, elem_openp, rule_name };
 				for(int_t i = 0; i < a; i++) {
 					real_e.push_back(iparams[i]);
 				}
@@ -431,6 +431,17 @@ void driver::transform_evals(raw_prog &rp) {
 				raw_rule rr(head);
 				rr.prft = std::shared_ptr<raw_form_tree>(bodie);
 				rp.r.push_back(rr);
+			}
+			
+			{
+				std::vector<elem> head_e = { aux_rel, elem_openp, elt_id };
+				for(int_t i = 0; i < arity_num.num; i++) {
+					head_e.push_back(und_sym);
+					head_e.push_back(und_sym);
+				}
+				head_e.push_back(elem_closep);
+				raw_term quote({quote_sym, elem_openp, elem(QTRUE), elt_id, elem_closep});
+				rp.r.push_back(raw_rule(raw_term(head_e), quote));
 			}
 			
 			// Interpret conjunctions with varying allocations to each side
@@ -466,8 +477,8 @@ void driver::transform_evals(raw_prog &rp) {
 				raw_form_tree *bodie = new raw_form_tree(elem::AND,
 					new raw_form_tree(elem::NONE, quote),
 					new raw_form_tree(elem::AND,
-						new raw_form_tree(elem::NONE, forma_e),
-						new raw_form_tree(elem::NONE, formb_e)));
+						new raw_form_tree(elem::NONE, raw_term(forma_e)),
+						new raw_form_tree(elem::NONE, raw_term(formb_e))));
 				
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = a; j < arity_num.num; j++) {
@@ -515,8 +526,8 @@ void driver::transform_evals(raw_prog &rp) {
 				raw_form_tree *bodie = new raw_form_tree(elem::AND,
 					new raw_form_tree(elem::NONE, quote),
 					new raw_form_tree(elem::ALT,
-						new raw_form_tree(elem::NONE, forma_e),
-						new raw_form_tree(elem::NONE, formb_e)));
+						new raw_form_tree(elem::NONE, raw_term(forma_e)),
+						new raw_form_tree(elem::NONE, raw_term(formb_e))));
 				
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = a; j < arity_num.num; j++) {

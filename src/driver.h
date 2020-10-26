@@ -124,6 +124,10 @@ class driver {
 		std::set<raw_term> &database);
 	bool evaluate_term(const raw_term &rt, std::map<elem, elem> &bindings,
 		std::set<raw_term> &database);
+	raw_form_tree *fix_variables(const elem &quote_sym, const elem &qva,
+		const elem &rva, const elem &qvb, const elem &rvb);
+	raw_form_tree *fix_symbols(const elem &quote_sym, const elem &qva,
+		const elem &rva);
 	bool evaluate_form_tree(const raw_form_tree &rft,
 		const std::map<elem, std::set<elem>> &universes,
 		std::map<elem, elem> &bindings, std::set<raw_term> &database);

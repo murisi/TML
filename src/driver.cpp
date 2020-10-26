@@ -254,6 +254,30 @@ void driver::transform_quotes(raw_prog &rp) {
 	}
 }
 
+raw_form_tree *driver::fix_variables(const elem &quote_sym,
+		const elem &qva, const elem &rva, const elem &qvb, const elem &rvb) {
+	return new raw_form_tree(elem::IMPLIES,
+		new raw_form_tree(elem::AND,
+			new raw_form_tree(elem::AND,
+				new raw_form_tree(elem::NONE, raw_term({quote_sym, elem_openp,
+					elem(QVARS), qva, elem_closep})),
+				new raw_form_tree(elem::NONE, raw_term({quote_sym, elem_openp,
+					elem(QVARS), qvb, elem_closep}))),
+			new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {qva,
+				elem_eq, qvb}))),
+		new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {rva,
+			elem_eq, rvb})));
+}
+
+raw_form_tree *driver::fix_symbols(const elem &quote_sym,
+		const elem &qva, const elem &rva) {
+	return new raw_form_tree(elem::IMPLIES,
+		new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE,
+			raw_term({ quote_sym, elem_openp, elem(QVARS), qva, elem_closep }))),
+		new raw_form_tree(elem::NONE,
+			raw_term(raw_term::EQ, {qva, elem_eq, rva})));
+}
+
 /* Loop through the rules of the given program checking if they use a
  * relation called "eval" in their bodies. If eval is used, take its
  * three arguments: the name of the relation that will contain the
@@ -293,35 +317,6 @@ void driver::transform_evals(raw_prog &rp) {
 			elem fs_rel = elem::fresh_sym(d), fv_rel = elem::fresh_sym(d),
 				rva = elem::fresh_var(d), rvb = elem::fresh_var(d),
 				qva = elem::fresh_var(d), qvb = elem::fresh_var(d);
-			
-			// Relation to fix the symbols
-			raw_term fs_head({fs_rel, elem_openp, qva, rva, elem_closep});
-			raw_form_tree *fs_body = new raw_form_tree(elem::IMPLIES,
-				new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE,
-					raw_term({ quote_sym, elem_openp, elem(QVARS), qva, elem_closep }))),
-				new raw_form_tree(elem::NONE,
-					raw_term(raw_term::EQ, {qva, elem_eq, rva})));
-			raw_rule fs_rule(fs_head);
-			fs_rule.prft = std::shared_ptr<raw_form_tree>(fs_body);
-			rp.r.push_back(fs_rule);
-			
-			// Relation to fix the variables
-			raw_term fv_head({fv_rel, elem_openp, qva, rva, qvb, rvb,
-				elem_closep});
-			raw_form_tree *fv_body = new raw_form_tree(elem::IMPLIES,
-				new raw_form_tree(elem::AND,
-					new raw_form_tree(elem::AND,
-						new raw_form_tree(elem::NONE, raw_term({quote_sym, elem_openp,
-							elem(QVARS), qva, elem_closep})),
-						new raw_form_tree(elem::NONE, raw_term({quote_sym, elem_openp,
-							elem(QVARS), qvb, elem_closep}))),
-					new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {qva,
-						elem_eq, qvb}))),
-				new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {rva,
-					elem_eq, rvb})));
-			raw_rule fv_rule(fv_head);
-			fv_rule.prft = std::shared_ptr<raw_form_tree>(fv_body);
-			rp.r.push_back(fv_rule);
 			
 			// Interpret the varying rule arities.
 			// Allocate rule name, rule id, head id, body id
@@ -365,29 +360,25 @@ void driver::transform_evals(raw_prog &rp) {
 				// Fix the real parameters to this rule to the quoted symbol
 				// if it is not marked as a variable.
 				for(int_t i = 0; i < a; i++) {
-					raw_term fs_term({fs_rel, elem_openp, qparams[i], iparams[i],
-						elem_closep});
 					bodie = new raw_form_tree(elem::AND, bodie,
-						new raw_form_tree(elem::NONE, fs_term));
+						fix_symbols(quote_sym, qparams[i], iparams[i]));
 				}
 				// Fix the real parameters to this rule to be the same if their
 				// quotations are the same.
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = i+1; j < a; j++) {
-						raw_term fv_term({fv_rel, elem_openp, qparams[i], iparams[i],
-							qparams[j], iparams[j], elem_closep});
 						bodie = new raw_form_tree(elem::AND, bodie,
-							new raw_form_tree(elem::NONE, fv_term));
+							fix_variables(quote_sym, qparams[i], iparams[i],
+								qparams[j], iparams[j]));
 					}
 				}
 				// Fix the real parameters to this rule to be the same as the
 				// arguments if their corresponding quotations are the same.
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = 0; j < a; j++) {
-						raw_term fv_term({fv_rel, elem_openp, qargs[i], iargs[i],
-							qparams[j], iparams[j], elem_closep});
 						bodie = new raw_form_tree(elem::AND, bodie,
-							new raw_form_tree(elem::NONE, fv_term));
+							fix_variables(quote_sym, qargs[i], iargs[i], qparams[j],
+								iparams[j]));
 					}
 				}
 				raw_term rt(rhead_e);
@@ -424,17 +415,14 @@ void driver::transform_evals(raw_prog &rp) {
 					new raw_form_tree(elem::NONE, raw_term(quote_e)),
 					new raw_form_tree(elem::NONE, raw_term(real_e)));
 				for(int_t i = 0; i < a; i++) {
-					raw_term fs_term({ fs_rel, elem_openp, qparams[i], iparams[i],
-						elem_closep });
 					bodie = new raw_form_tree(elem::AND, bodie,
-						new raw_form_tree(elem::NONE, fs_term));
+						fix_symbols(quote_sym, qparams[i], iparams[i]));
 				}
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = i+1; j < a; j++) {
-						raw_term fv_term({ fv_rel, elem_openp, qparams[i], iparams[i],
-							qparams[j], iparams[j], elem_closep });
 						bodie = new raw_form_tree(elem::AND, bodie,
-							new raw_form_tree(elem::NONE, fv_term));
+							fix_variables(quote_sym, qparams[i], iparams[i],
+								qparams[j], iparams[j]));
 					}
 				}
 				raw_rule rr(head);
@@ -480,10 +468,9 @@ void driver::transform_evals(raw_prog &rp) {
 				
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = a; j < arity_num.num; j++) {
-						raw_term fv_term({ fv_rel, elem_openp, qparams[i], iparams[i],
-							qparams[j], iparams[j], elem_closep });
 						bodie = new raw_form_tree(elem::AND, bodie,
-							new raw_form_tree(elem::NONE, fv_term));
+							fix_variables(quote_sym, qparams[i], iparams[i],
+								qparams[j], iparams[j]));
 					}
 				}
 				
@@ -530,10 +517,9 @@ void driver::transform_evals(raw_prog &rp) {
 				
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = a; j < arity_num.num; j++) {
-						raw_term fv_term({ fv_rel, elem_openp, qparams[i], iparams[i],
-							qparams[j], iparams[j], elem_closep });
 						bodie = new raw_form_tree(elem::AND, bodie,
-							new raw_form_tree(elem::NONE, fv_term));
+							fix_variables(quote_sym, qparams[i], iparams[i],
+								qparams[j], iparams[j]));
 					}
 				}
 				

@@ -104,6 +104,7 @@ class driver {
 	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
+	elem quote_elem(const elem &e, std::map<elem, elem> &variables);
 	elem quote_term(const raw_term &head, const elem &rel_name,
 		raw_prog &rp, std::map<elem, elem> &variables);
 	elem quote_conjunction(const std::vector<raw_term> &conj,

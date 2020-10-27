@@ -94,6 +94,22 @@ void driver::directives_load(raw_prog& p, lexeme& trel) {
 		}
 }
 
+elem driver::quote_elem(const elem &e, std::map<elem, elem> &variables) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	if(e.type == elem::VAR) {
+		if(variables.find(e) != variables.end()) {
+			return variables[e];
+		} else {
+			// Since the current variable lacks a designated substitute,
+			// make one and record the mapping.
+			return variables[e] = elem::fresh_sym(d);
+		}
+	} else {
+		return e;
+	}
+}
+
 /* Takes a raw term and returns its quotation within a relation of the
  * given name. The names of variable elements within the raw term are
  * added to the variables map. */
@@ -102,36 +118,33 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
 		raw_prog &rp, std::map<elem, elem> &variables) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
-	// Add metadata to quoted term: term signature, term id, term name
-	std::vector<elem> quoted_term_e = {rel_name, elem_openp, elem(QTERM),
-		elem::fresh_sym(d), head.e[0] };
-	
-	for(int_t param_idx = 2; param_idx < ssize(head.e) - 1; param_idx ++) {
-		if(head.e[param_idx].type == elem::VAR) {
-			if(variables.find(head.e[param_idx]) != variables.end()) {
-				quoted_term_e.push_back(variables[head.e[param_idx]]);
-			} else {
-				// Since the current variable lacks a designated substitute,
-				// make one and record the mapping.
-				quoted_term_e.push_back(variables[head.e[param_idx]] =
-					elem::fresh_sym(d));
-			}
-		} else {
-			quoted_term_e.push_back(head.e[param_idx]);
+	elem term_id = elem::fresh_sym(d);
+	if(head.extype == raw_term::REL) {
+		// Add metadata to quoted term: term signature, term id, term name
+		std::vector<elem> quoted_term_e = {rel_name, elem_openp, elem(QTERM),
+			term_id, head.e[0] };
+		
+		for(int_t param_idx = 2; param_idx < ssize(head.e) - 1; param_idx ++) {
+			quoted_term_e.push_back(quote_elem(head.e[param_idx], variables));
 		}
+		// Terminate term elements and make raw_term object
+		quoted_term_e.push_back(elem_closep);
+		rp.r.push_back(raw_rule(raw_term(quoted_term_e)));
+	} else if(head.extype == raw_term::EQ) {
+		// Add metadata to quoted term: term signature, term id, term name
+		std::vector<elem> quoted_term_e = {rel_name, elem_openp, elem(QEQUALS),
+			term_id, quote_elem(head.e[0], variables), quote_elem(head.e[2], variables) };
+		rp.r.push_back(raw_rule(raw_term(quoted_term_e)));
 	}
-	// Terminate term elements and make raw_term object
-	quoted_term_e.push_back(elem_closep);
-	rp.r.push_back(raw_rule(raw_term(quoted_term_e)));
 	if(head.neg) {
 		// If this term is actually negated, then we'll make a parent for
 		// this node and return its id
 		elem neg_id = elem::fresh_sym(d);
 		rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QNOT),
-			neg_id, quoted_term_e[3], elem_closep})));
+			neg_id, term_id, elem_closep})));
 		return neg_id;
 	} else {
-		return quoted_term_e[3];
+		return term_id;
 	}
 }
 
@@ -316,11 +329,6 @@ void driver::transform_evals(raw_prog &rp) {
 			// This relation will house most of the interpreter
 			elem aux_rel = elem::fresh_sym(d);
 			
-			// Make helpers for fixing variables and symbols
-			elem fs_rel = elem::fresh_sym(d), fv_rel = elem::fresh_sym(d),
-				rva = elem::fresh_var(d), rvb = elem::fresh_var(d),
-				qva = elem::fresh_var(d), qvb = elem::fresh_var(d);
-			
 			// Interpret the varying rule arities.
 			// Allocate rule name, rule id, head id, body id
 			elem rule_name = elem::fresh_var(d), head_id = elem::fresh_var(d),
@@ -433,6 +441,54 @@ void driver::transform_evals(raw_prog &rp) {
 				rp.r.push_back(rr);
 			}
 			
+			// Interpret equals
+			if(arity_num.num >= 2) {
+				std::vector<elem> head_e = { aux_rel, elem_openp, elt_id,
+					qparams[0], iparams[0], qparams[1], iparams[1] };
+				for(int_t i = 2; i < arity_num.num; i++) {
+					head_e.push_back(und_sym);
+					head_e.push_back(und_sym);
+				}
+				head_e.push_back(elem_closep);
+				raw_term quote({quote_sym, elem_openp, elem(QEQUALS), elt_id,
+					qparams[0], qparams[1], elem_closep});
+				raw_term equals(raw_term::EQ, {iparams[0], elem_eq, iparams[1]});
+				raw_rule rr(head_e);
+				rr.prft = std::shared_ptr<raw_form_tree>(new raw_form_tree(elem::AND,
+					new raw_form_tree(elem::AND,
+						new raw_form_tree(elem::NONE, quote),
+						new raw_form_tree(elem::NONE, equals)),
+					new raw_form_tree(elem::AND,
+						fix_symbols(quote_sym, qparams[0], iparams[0]),
+						fix_symbols(quote_sym, qparams[1], iparams[1]))));
+				rp.r.push_back(rr);
+			}
+			
+			// Interpret not
+			{
+				std::vector<elem> head_e = { aux_rel, elem_openp, elt_id };
+				for(int_t i = 0; i < arity_num.num; i++) {
+					head_e.push_back(qparams[i]);
+					head_e.push_back(iparams[i]);
+				}
+				head_e.push_back(elem_closep);
+				raw_term quote({quote_sym, elem_openp, elem(QNOT), elt_id,
+					forma_id, elem_closep });
+				std::vector<elem> neg_e = { aux_rel, elem_openp, forma_id };
+				for(int_t i = 0; i < arity_num.num; i++) {
+					neg_e.push_back(qparams[i]);
+					neg_e.push_back(iparams[i]);
+				}
+				neg_e.push_back(elem_closep);
+				raw_rule rr(head_e);
+				rr.prft = std::shared_ptr<raw_form_tree>(new raw_form_tree(elem::AND,
+					new raw_form_tree(elem::NONE, quote),
+					new raw_form_tree(elem::NOT,
+						new raw_form_tree(elem::NONE, neg_e))));
+				rp.r.push_back(rr);
+			}
+			
+			// Interpret the true constant
 			{
 				std::vector<elem> head_e = { aux_rel, elem_openp, elt_id };
 				for(int_t i = 0; i < arity_num.num; i++) {

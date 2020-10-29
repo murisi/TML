@@ -115,7 +115,7 @@ class driver {
 		raw_prog &rp, std::map<elem, elem> &variables);
 	void populate_free_variables(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
-	raw_form_tree *with_exists(raw_form_tree *t,
+	sprawformtree with_exists(sprawformtree t,
 		std::vector<elem> &bound_vars);
 	void insert_exists(raw_prog &rp);
 	void populate_free_variables(const raw_form_tree &t,
@@ -125,9 +125,9 @@ class driver {
 		std::set<raw_term> &database);
 	bool evaluate_term(const raw_term &rt, std::map<elem, elem> &bindings,
 		std::set<raw_term> &database);
-	raw_form_tree *fix_variables(const elem &quote_sym, const elem &qva,
+	sprawformtree fix_variables(const elem &quote_sym, const elem &qva,
 		const elem &rva, const elem &qvb, const elem &rvb);
-	raw_form_tree *fix_symbols(const elem &quote_sym, const elem &qva,
+	sprawformtree fix_symbols(const elem &quote_sym, const elem &qva,
 		const elem &rva);
 	bool evaluate_form_tree(const raw_form_tree &rft,
 		const std::map<elem, std::set<elem>> &universes,

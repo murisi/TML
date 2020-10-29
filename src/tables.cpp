@@ -487,7 +487,7 @@ It is caller's responsibility to manage the memory of froot. If the function,
 returns false or the froot is not needed any more, the caller should delete the froot pointer.
 For a null input argument rfm, it returns true and makes froot null as well.
 	*/
-bool tables::from_raw_form(const raw_form_tree *rfm, form *&froot, bool &is_sol) {
+bool tables::from_raw_form(const sprawformtree rfm, form *&froot, bool &is_sol) {
 
 	form::ftype ft = form::NONE;
 	bool ret =false;
@@ -956,7 +956,7 @@ flat_prog tables::to_terms(const raw_prog& p) {
 			bool is_sol = false;
 			form* froot = 0;
 
-			from_raw_form(r.prft.get(), froot, is_sol);
+			from_raw_form(r.prft, froot, is_sol);
 			/*
 			DBG(COUT << "\n ........... \n";)
 			DBG(r.prft.get()->printTree();)

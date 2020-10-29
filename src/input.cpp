@@ -526,7 +526,7 @@ head:	h.emplace_back();
 
 	if(is_form) {
 		raw_sof rsof(prog);
-		raw_form_tree * root = NULL;
+		sprawformtree root = NULL;
 		bool ret = rsof.parse(in, root);
 		sprawformtree temp(root);
 		this->prft = temp;
@@ -563,11 +563,11 @@ bool raw_prefix::parse(input* in) {
 	return true;
 }
 
-bool raw_sof::parsematrix(input* in, raw_form_tree *&matroot) {
+bool raw_sof::parsematrix(input* in, sprawformtree &matroot) {
 	const lexemes& l = in->l;
 	size_t& pos = in->pos;
 	size_t curr = pos;
-	raw_form_tree * root = NULL;
+	sprawformtree root = NULL;
 	bool isneg = false;
 
 	if (pos == l.size()) return false;
@@ -576,7 +576,7 @@ bool raw_sof::parsematrix(input* in, raw_form_tree *&matroot) {
 		++pos;
 		if( ! parseform(in, root, 0) ) goto Cleanup;
 		if( isneg)
-			root = new raw_form_tree(elem::NOT, NULL, NULL, root);
+			root = std::make_shared<raw_form_tree>(elem::NOT, nullptr, nullptr, root);
 
 		if( pos == l.size() && *l[pos][0] != '}') goto Cleanup;
 		++pos;
@@ -591,8 +591,8 @@ bool raw_sof::parsematrix(input* in, raw_form_tree *&matroot) {
 		if(next.type == elem::SYM) {
 			raw_term tm;
 			if( !tm.parse(in, prog, true)) goto Cleanup;
-			root = new raw_form_tree(elem::NONE, &tm);
-			if( isneg ) root = new raw_form_tree(elem::NOT, NULL, NULL, root);
+			root = std::make_shared<raw_form_tree>(elem::NONE, &tm);
+			if( isneg ) root = std::make_shared<raw_form_tree>(elem::NOT, nullptr, nullptr, root);
 			matroot = root;
 			return true;
 		}
@@ -600,12 +600,12 @@ bool raw_sof::parsematrix(input* in, raw_form_tree *&matroot) {
 		else if(next.type == elem::VAR) {
 			raw_term tm;
 			if( !tm.parse(in, prog, false)) goto Cleanup;
-			root = new raw_form_tree(elem::NONE, &tm);
-			if( isneg ) root = new raw_form_tree(elem::NOT, NULL, NULL, root);
+			root = std::make_shared<raw_form_tree>(elem::NONE, &tm);
+			if( isneg ) root = std::make_shared<raw_form_tree>(elem::NOT, nullptr, nullptr, root);
 			matroot = root;
 			return true;
 		} else {
-			raw_form_tree *cur = NULL;
+			sprawformtree cur = NULL;
 			while(next.type == elem::FORALL ||
 				next.type == elem::UNIQUE ||
 				next.type == elem::EXISTS )
@@ -614,13 +614,13 @@ bool raw_sof::parsematrix(input* in, raw_form_tree *&matroot) {
 
 				if( !rpfx.parse(in) ) goto Cleanup;
 
-				if(!cur) root = cur = new raw_form_tree(
-					rpfx.qtype.type, NULL, &rpfx.qtype);
-				else cur->r = new raw_form_tree(
-					rpfx.qtype.type, NULL, &rpfx.qtype),
+				if(!cur) root = cur = std::make_shared<raw_form_tree>(
+					rpfx.qtype.type, nullptr, &rpfx.qtype);
+				else cur->r = std::make_shared<raw_form_tree>(
+					rpfx.qtype.type, nullptr, &rpfx.qtype),
 					cur = cur->r;
-				cur->l = new raw_form_tree(rpfx.ident.type,
-					NULL, &rpfx.ident);
+				cur->l = std::make_shared<raw_form_tree>(rpfx.ident.type,
+					nullptr, &rpfx.ident);
 				next.peek(in);
 			}
 
@@ -633,8 +633,8 @@ bool raw_sof::parsematrix(input* in, raw_form_tree *&matroot) {
 			if (pos == l.size() || *l[pos][0] != '}') goto Cleanup;
 
 			++pos;
-			if (isneg) root = new raw_form_tree(elem::NOT,
-				NULL, NULL, root);
+			if (isneg) root = std::make_shared<raw_form_tree>(elem::NOT,
+				nullptr, nullptr, root);
 
 			matroot = root;
 			return true;
@@ -646,11 +646,11 @@ bool raw_sof::parsematrix(input* in, raw_form_tree *&matroot) {
 	matroot = root;
 	return pos=curr, false;
 }
-bool raw_sof::parseform(input* in, raw_form_tree *&froot, int_t prec ) {
+bool raw_sof::parseform(input* in, sprawformtree &froot, int_t prec ) {
 
 	size_t curr = in->pos;
-	raw_form_tree* root = NULL;
-	raw_form_tree* cur = NULL;
+	sprawformtree root = NULL;
+	sprawformtree cur = NULL;
 
 	bool ret = parsematrix(in, root);
 	elem nxt;
@@ -661,7 +661,7 @@ bool raw_sof::parseform(input* in, raw_form_tree *&froot, int_t prec ) {
 		(nxt.type == elem::IMPLIES || nxt.type == elem::COIMPLIES))
 	{
 		nxt.parse(in);
-		cur = new raw_form_tree(nxt.type, NULL, &nxt, root);
+		cur = std::make_shared<raw_form_tree>(nxt.type, nullptr, &nxt, root);
 		root = cur;
 		if (!parseform(in, root->r, 2)) goto Cleanup ;
 		nxt.peek(in);
@@ -670,7 +670,7 @@ bool raw_sof::parseform(input* in, raw_form_tree *&froot, int_t prec ) {
 	nxt.peek(in);
 	while( prec <= 0 && (nxt.type == elem::AND || nxt.type == elem::ALT) ) {
 		nxt.parse(in);
-		cur = new raw_form_tree(nxt.type, NULL, &nxt, root);
+		cur = std::make_shared<raw_form_tree>(nxt.type, nullptr, &nxt, root);
 		root = cur;
 		if (!parseform(in, root->r, 1) ) goto Cleanup;
 		nxt.peek(in);
@@ -688,7 +688,7 @@ bool raw_sof::parseform(input* in, raw_form_tree *&froot, int_t prec ) {
 	It is caller's responsibility to manage the memory of root. If the parse function,
 	returns false or the root is not needed any more, the caller should delete the root pointer.
 	*/
-bool raw_sof::parse(input* in, raw_form_tree *&root) {
+bool raw_sof::parse(input* in, sprawformtree &root) {
 
 	root = NULL;
 	bool ret = parseform(in, root );

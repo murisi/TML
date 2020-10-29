@@ -270,27 +270,28 @@ void driver::transform_quotes(raw_prog &rp) {
 	}
 }
 
-raw_form_tree *driver::fix_variables(const elem &quote_sym,
+sprawformtree driver::fix_variables(const elem &quote_sym,
 		const elem &qva, const elem &rva, const elem &qvb, const elem &rvb) {
-	return new raw_form_tree(elem::IMPLIES,
-		new raw_form_tree(elem::AND,
-			new raw_form_tree(elem::AND,
-				new raw_form_tree(elem::NONE, raw_term({quote_sym, elem_openp,
-					elem(QVARS), qva, elem_closep})),
-				new raw_form_tree(elem::NONE, raw_term({quote_sym, elem_openp,
-					elem(QVARS), qvb, elem_closep}))),
-			new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {qva,
-				elem_eq, qvb}))),
-		new raw_form_tree(elem::NONE, raw_term(raw_term::EQ, {rva,
-			elem_eq, rvb})));
+	return std::make_shared<raw_form_tree>(elem::IMPLIES,
+		std::make_shared<raw_form_tree>(elem::AND,
+			std::make_shared<raw_form_tree>(elem::AND,
+				std::make_shared<raw_form_tree>(elem::NONE,
+					raw_term({quote_sym, elem_openp, elem(QVARS), qva, elem_closep})),
+				std::make_shared<raw_form_tree>(elem::NONE,
+					raw_term({quote_sym, elem_openp, elem(QVARS), qvb, elem_closep}))),
+			std::make_shared<raw_form_tree>(elem::NONE,
+				raw_term(raw_term::EQ, {qva, elem_eq, qvb}))),
+		std::make_shared<raw_form_tree>(elem::NONE, raw_term(raw_term::EQ,
+			{rva, elem_eq, rvb})));
 }
 
-raw_form_tree *driver::fix_symbols(const elem &quote_sym,
+sprawformtree driver::fix_symbols(const elem &quote_sym,
 		const elem &qva, const elem &rva) {
-	return new raw_form_tree(elem::IMPLIES,
-		new raw_form_tree(elem::NOT, new raw_form_tree(elem::NONE,
-			raw_term({ quote_sym, elem_openp, elem(QVARS), qva, elem_closep }))),
-		new raw_form_tree(elem::NONE,
+	return std::make_shared<raw_form_tree>(elem::IMPLIES,
+		std::make_shared<raw_form_tree>(elem::NOT,
+			std::make_shared<raw_form_tree>(elem::NONE,
+				raw_term({ quote_sym, elem_openp, elem(QVARS), qva, elem_closep }))),
+		std::make_shared<raw_form_tree>(elem::NONE,
 			raw_term(raw_term::EQ, {qva, elem_eq, rva})));
 }
 
@@ -363,22 +364,23 @@ void driver::transform_evals(raw_prog &rp) {
 					body_e.push_back(iargs[i]);
 				}
 				body_e.push_back(elem_closep);
-				raw_form_tree *bodie = new raw_form_tree(elem::AND,
-					new raw_form_tree(elem::AND,
-						new raw_form_tree(elem::NONE, qrule),
-						new raw_form_tree(elem::NONE, raw_term(qhead_e))),
-					new raw_form_tree(elem::NONE, raw_term(body_e)));
+				std::shared_ptr<raw_form_tree> bodie =
+					std::make_shared<raw_form_tree>(elem::AND,
+						std::make_shared<raw_form_tree>(elem::AND,
+							std::make_shared<raw_form_tree>(elem::NONE, qrule),
+							std::make_shared<raw_form_tree>(elem::NONE, raw_term(qhead_e))),
+						std::make_shared<raw_form_tree>(elem::NONE, raw_term(body_e)));
 				// Fix the real parameters to this rule to the quoted symbol
 				// if it is not marked as a variable.
 				for(int_t i = 0; i < a; i++) {
-					bodie = new raw_form_tree(elem::AND, bodie,
+					bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
 						fix_symbols(quote_sym, qparams[i], iparams[i]));
 				}
 				// Fix the real parameters to this rule to be the same if their
 				// quotations are the same.
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = i+1; j < a; j++) {
-						bodie = new raw_form_tree(elem::AND, bodie,
+						bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
 							fix_variables(quote_sym, qparams[i], iparams[i],
 								qparams[j], iparams[j]));
 					}
@@ -387,14 +389,14 @@ void driver::transform_evals(raw_prog &rp) {
 				// arguments if their corresponding quotations are the same.
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = 0; j < a; j++) {
-						bodie = new raw_form_tree(elem::AND, bodie,
+						bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
 							fix_variables(quote_sym, qargs[i], iargs[i], qparams[j],
 								iparams[j]));
 					}
 				}
 				raw_term rt(rhead_e);
 				raw_rule rr(rt);
-				rr.prft = std::shared_ptr<raw_form_tree>(bodie);
+				rr.prft = bodie;
 				rp.r.push_back(rr);
 			}
 			
@@ -422,22 +424,23 @@ void driver::transform_evals(raw_prog &rp) {
 					real_e.push_back(iparams[i]);
 				}
 				real_e.push_back(elem_closep);
-				raw_form_tree *bodie = new raw_form_tree(elem::AND,
-					new raw_form_tree(elem::NONE, raw_term(quote_e)),
-					new raw_form_tree(elem::NONE, raw_term(real_e)));
+				std::shared_ptr<raw_form_tree> bodie =
+					std::make_shared<raw_form_tree>(elem::AND,
+						std::make_shared<raw_form_tree>(elem::NONE, raw_term(quote_e)),
+						std::make_shared<raw_form_tree>(elem::NONE, raw_term(real_e)));
 				for(int_t i = 0; i < a; i++) {
-					bodie = new raw_form_tree(elem::AND, bodie,
+					bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
 						fix_symbols(quote_sym, qparams[i], iparams[i]));
 				}
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = i+1; j < a; j++) {
-						bodie = new raw_form_tree(elem::AND, bodie,
+						bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
 							fix_variables(quote_sym, qparams[i], iparams[i],
 								qparams[j], iparams[j]));
 					}
 				}
 				raw_rule rr(head);
-				rr.prft = std::shared_ptr<raw_form_tree>(bodie);
+				rr.prft = bodie;
 				rp.r.push_back(rr);
 			}
 			
@@ -454,13 +457,13 @@ void driver::transform_evals(raw_prog &rp) {
 					qparams[0], qparams[1], elem_closep});
 				raw_term equals(raw_term::EQ, {iparams[0], elem_eq, iparams[1]});
 				raw_rule rr(head_e);
-				rr.prft = std::shared_ptr<raw_form_tree>(new raw_form_tree(elem::AND,
-					new raw_form_tree(elem::AND,
-						new raw_form_tree(elem::NONE, quote),
-						new raw_form_tree(elem::NONE, equals)),
-					new raw_form_tree(elem::AND,
+				rr.prft = std::make_shared<raw_form_tree>(elem::AND,
+					std::make_shared<raw_form_tree>(elem::AND,
+						std::make_shared<raw_form_tree>(elem::NONE, quote),
+						std::make_shared<raw_form_tree>(elem::NONE, equals)),
+					std::make_shared<raw_form_tree>(elem::AND,
 						fix_symbols(quote_sym, qparams[0], iparams[0]),
-						fix_symbols(quote_sym, qparams[1], iparams[1]))));
+						fix_symbols(quote_sym, qparams[1], iparams[1])));
 				rp.r.push_back(rr);
 			}
 			
@@ -481,10 +484,10 @@ void driver::transform_evals(raw_prog &rp) {
 				}
 				neg_e.push_back(elem_closep);
 				raw_rule rr(head_e);
-				rr.prft = std::shared_ptr<raw_form_tree>(new raw_form_tree(elem::AND,
-					new raw_form_tree(elem::NONE, quote),
-					new raw_form_tree(elem::NOT,
-						new raw_form_tree(elem::NONE, neg_e))));
+				rr.prft = std::make_shared<raw_form_tree>(elem::AND,
+					std::make_shared<raw_form_tree>(elem::NONE, quote),
+					std::make_shared<raw_form_tree>(elem::NOT,
+						std::make_shared<raw_form_tree>(elem::NONE, neg_e)));
 				rp.r.push_back(rr);
 			}
 			
@@ -530,15 +533,16 @@ void driver::transform_evals(raw_prog &rp) {
 					formb_e.push_back(und_sym);
 				}
 				formb_e.push_back(elem_closep);
-				raw_form_tree *bodie = new raw_form_tree(elem::AND,
-					new raw_form_tree(elem::NONE, quote),
-					new raw_form_tree(elem::AND,
-						new raw_form_tree(elem::NONE, raw_term(forma_e)),
-						new raw_form_tree(elem::NONE, raw_term(formb_e))));
+				std::shared_ptr<raw_form_tree> bodie =
+					std::make_shared<raw_form_tree>(elem::AND,
+						std::make_shared<raw_form_tree>(elem::NONE, quote),
+						std::make_shared<raw_form_tree>(elem::AND,
+							std::make_shared<raw_form_tree>(elem::NONE, raw_term(forma_e)),
+							std::make_shared<raw_form_tree>(elem::NONE, raw_term(formb_e))));
 				
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = a; j < arity_num.num; j++) {
-						bodie = new raw_form_tree(elem::AND, bodie,
+						bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
 							fix_variables(quote_sym, qparams[i], iparams[i],
 								qparams[j], iparams[j]));
 					}
@@ -579,15 +583,16 @@ void driver::transform_evals(raw_prog &rp) {
 					formb_e.push_back(und_sym);
 				}
 				formb_e.push_back(elem_closep);
-				raw_form_tree *bodie = new raw_form_tree(elem::AND,
-					new raw_form_tree(elem::NONE, quote),
-					new raw_form_tree(elem::ALT,
-						new raw_form_tree(elem::NONE, raw_term(forma_e)),
-						new raw_form_tree(elem::NONE, raw_term(formb_e))));
+				std::shared_ptr<raw_form_tree> bodie =
+					std::make_shared<raw_form_tree>(elem::AND,
+						std::make_shared<raw_form_tree>(elem::NONE, quote),
+						std::make_shared<raw_form_tree>(elem::ALT,
+							std::make_shared<raw_form_tree>(elem::NONE, raw_term(forma_e)),
+							std::make_shared<raw_form_tree>(elem::NONE, raw_term(formb_e))));
 				
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = a; j < arity_num.num; j++) {
-						bodie = new raw_form_tree(elem::AND, bodie,
+						bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
 							fix_variables(quote_sym, qparams[i], iparams[i],
 								qparams[j], iparams[j]));
 					}
@@ -661,13 +666,13 @@ void driver::populate_free_variables(const raw_form_tree &t,
 	}
 }
 
-raw_form_tree *driver::with_exists(raw_form_tree *t,
+sprawformtree driver::with_exists(sprawformtree t,
 		std::vector<elem> &bound_vars) {
 	std::set<elem> free_vars;
 	populate_free_variables(*t, bound_vars, free_vars);
 	for(const elem &var : free_vars) {
-		t = new raw_form_tree(elem::EXISTS,
-			new raw_form_tree(elem::VAR, var), t);
+		t = std::make_shared<raw_form_tree>(elem::EXISTS,
+			std::make_shared<raw_form_tree>(elem::VAR, var), t);
 	}
 	return t;
 }
@@ -681,10 +686,7 @@ void driver::insert_exists(raw_prog &rp) {
 					bound_vars.push_back(e);
 				}
 			}
-			raw_form_tree *orft = rr.prft.get();
-			raw_form_tree *nrft = new raw_form_tree { orft->type, orft->rt, orft->el, orft->l, orft->r };
-			orft->rt = nullptr; orft->el = nullptr; orft->l = nullptr; orft->r = nullptr;
-			rr.prft.reset(with_exists(nrft, bound_vars));
+			rr.prft = with_exists(rr.prft, bound_vars);
 		}
 	}
 }

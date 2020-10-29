@@ -380,7 +380,7 @@ private:
 	std::basic_ostream<T>& decompress_update(std::basic_ostream<T>&, spbdd_handle& x,
 		const rule& r); // decompress for --print-updates and tml_update
 
-	bool from_raw_form(const raw_form_tree *rs, form *&froot, bool &is_sol);
+	bool from_raw_form(const sprawformtree rs, form *&froot, bool &is_sol);
 	bool to_pnf( form *&froot);
 
 	//-------------------------------------------------------------------------

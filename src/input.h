@@ -397,14 +397,14 @@ struct raw_form_tree {
 	raw_term *rt = nullptr; // elem::NONE is used to identify it
 	elem * el = nullptr;
 
-	raw_form_tree *l = nullptr;
-	raw_form_tree *r = nullptr;
+	sprawformtree l = nullptr;
+	sprawformtree r = nullptr;
 
 	raw_form_tree (elem::etype _type, const raw_term &_rt) : type(_type), rt(new raw_term(_rt)) {}
 	raw_form_tree (elem::etype _type, const elem &_el) : type(_type), el(new elem(_el)) {}
-	raw_form_tree (elem::etype _type, raw_form_tree *_l = nullptr, raw_form_tree *_r = nullptr) : type(_type), l(_l), r(_r) {}
+	raw_form_tree (elem::etype _type, sprawformtree _l = nullptr, sprawformtree _r = nullptr) : type(_type), l(_l), r(_r) {}
 	raw_form_tree (elem::etype _type, const raw_term* _rt = NULL, const elem *_el =NULL,
-		raw_form_tree *_l = NULL, raw_form_tree *_r = NULL)
+		sprawformtree _l = NULL, sprawformtree _r = NULL)
 	{
 		type = _type;
 		if(_rt) rt = new raw_term(*_rt);
@@ -414,8 +414,6 @@ struct raw_form_tree {
 		l = _l, r = _r;
 	}
 	~raw_form_tree() {
-		if (l)  delete l,  l  = NULL;
-		if (r)  delete r,  r  = NULL;
 		if (rt) delete rt, rt = NULL;
 		if (el) delete el, el = NULL;
 	}
@@ -425,10 +423,10 @@ struct raw_sof {
 	const raw_prog& prog;
 	raw_sof(const raw_prog& prog) :prog(prog) {}
 private:
-	bool parseform(input* in, raw_form_tree *&root, int precd= 0);
-	bool parsematrix(input* in, raw_form_tree *&root);
+	bool parseform(input* in, sprawformtree &root, int precd= 0);
+	bool parsematrix(input* in, sprawformtree &root);
 public:
-	bool parse(input* in, raw_form_tree *&root);
+	bool parse(input* in, sprawformtree &root);
 
 };
 

@@ -103,6 +103,14 @@ class driver {
 	void transform_grammar(raw_prog& r, lexeme rel, size_t len);
 	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
+	void unfold_tree(sprawformtree &rft, const std::vector<raw_rule> &inlines);
+	sprawformtree inline_rule(const raw_term &rt1, const raw_term &rt2,
+		const raw_rule &rr);
+	elem hygienic_copy(const elem &e, std::map<elem, elem> &vars);
+	sprawformtree hygienic_copy(sprawformtree &rft, std::map<elem, elem> vars);
+	sprawformtree inline_rule(const raw_term &rt,
+		const std::vector<raw_rule> &inlines);
+	raw_term hygienic_copy(raw_term rt, std::map<elem, elem> vars);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
 	elem quote_elem(const elem &e, std::map<elem, elem> &variables);
 	elem quote_term(const raw_term &head, const elem &rel_name,

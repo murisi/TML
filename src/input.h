@@ -297,7 +297,7 @@ struct elem {
 struct raw_term {
 
 	bool neg = false;
-	enum rtextype { REL, EQ, LEQ, BLTIN, ARITH, CONSTRAINT } extype = raw_term::REL;
+	enum rtextype { REL, EQ, LEQ, BLTIN, ARITH, CONSTRAINT, TRUE } extype = raw_term::REL;
 
 	//NOTE: we can add FORM1, FORM2 etc to rtextype
 	// and replace t_arith_op by a form (once we do parse for compound arithmetic formulas)
@@ -375,6 +375,7 @@ struct raw_rule {
 	raw_rule(const raw_term& h, const std::vector<raw_term>& _b) : h({h}) {
 		if (!_b.empty()) b = {_b};
 	}
+	sprawformtree rawformtree() const;
 	static raw_rule getdel(const raw_term& t) {
 		raw_rule r(t, t);
 		return r.h[0].neg = true, r;

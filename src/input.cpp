@@ -61,7 +61,7 @@ lexeme input::lex(pccs s) {
 				return PE(parse_error(*s, err_escape));
 		return { t, ++(*s) };
 	}
-  if (**s == '`') {
+	if (**s == '`') {
 		while (*++*s != '`')
 			if (!**s) return PE(parse_error(t, unmatched_quotes));
 			else if (**s == '\\' && !strchr("\\`", *++*s))
@@ -341,7 +341,7 @@ bool raw_term::parse(input* in, const raw_prog& prog, bool is_form,
 	t_arith_op arith_op_aux = NOP;
 
 	while ((!strchr(".:,;{}", *l[pos][0]) && !is_form) ||
-		   (!strchr(".:,;{}|&-<", *l[pos][0]) && is_form)) {
+			 (!strchr(".:,;{}|&-<", *l[pos][0]) && is_form)) {
 		if (e.emplace_back(), !e.back().parse(in)) return false;
 		else if (pos == l.size()) return
 			in->parse_error(l[pos-1][1], err_eof, s[0]);
@@ -496,6 +496,35 @@ bool macro::parse(input* in, const raw_prog& prog){
 	}
 
 	fail: return pos = curr , false;
+}
+/* Return the body of this rule as a sprawformtree. This means that if
+ * the body is stored in b as a std::vector<std::vector<raw_term>>, a
+ * corresponding sprawformtree is created. */
+ 
+sprawformtree raw_rule::rawformtree() const {
+	if(prft) {
+		return prft;
+	} else if(b.empty()) {
+		return std::make_shared<raw_form_tree>(elem::NONE,
+			raw_term(raw_term::TRUE, {}));
+	} else {
+		sprawformtree disj;
+		for(size_t i = 0; i < b.size(); i++) {
+			sprawformtree conj =
+				std::make_shared<raw_form_tree>(elem::NONE, b[i][0]);
+			for(size_t j = 0; j < b[i].size(); j++) {
+				sprawformtree tm =
+					std::make_shared<raw_form_tree>(elem::NONE, b[i][j]);
+				if(b[i][j].neg) {
+					tm = std::make_shared<raw_form_tree>(elem::NOT, tm);
+				}
+				conj = std::make_shared<raw_form_tree>(elem::AND, conj, tm);
+			}
+			disj = (i == 0 ? conj :
+				std::make_shared<raw_form_tree>(elem::ALT, disj, conj));
+		}
+		return disj;
+	}
 }
 bool raw_rule::parse(input* in, const raw_prog& prog) {
 	const lexemes& l = in->l;

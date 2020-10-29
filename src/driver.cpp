@@ -94,6 +94,141 @@ void driver::directives_load(raw_prog& p, lexeme& trel) {
 		}
 }
 
+/* Copys the given elem taking care to change its variable name
+ * according to the supplied map if it is a variable. If the variable is
+ * not found in the map, then a fresh one is generated. */
+
+elem driver::hygienic_copy(const elem &e, std::map<elem, elem> &vars) {
+	// Get dictionary for generating fresh variables
+	dict_t &d = tbl->get_dict();
+	if(e.type == elem::VAR) {
+		if(vars.find(e) != vars.end()) {
+			return vars[e];
+		} else {
+			// Since the current variable lacks a designated substitute,
+			// make one and record the mapping.
+			return vars[e] = elem::fresh_var(d);
+		}
+	} else {
+		return e;
+	}
+}
+
+/* Copys the given raw_term taking care to change all variable names
+ * according to the supplied map. If a variable is not found in the map,
+ * then a fresh one is generated. */
+
+raw_term driver::hygienic_copy(raw_term rt, std::map<elem, elem> vars) {
+	for(elem &e : rt.e) {
+		e = hygienic_copy(e, vars);
+	}
+	return rt;
+}
+
+/* Copys the given sprawformtree taking care to change all variable names
+ * according to the supplied map. If a variable is not found in the map,
+ * then a fresh one is generated. */
+
+sprawformtree driver::hygienic_copy(sprawformtree &rft,
+		std::map<elem, elem> vars) {
+	switch(rft->type) {
+		case elem::IMPLIES:
+			return std::make_shared<raw_form_tree>(elem::IMPLIES,
+				hygienic_copy(rft->l, vars), hygienic_copy(rft->r, vars));
+		case elem::COIMPLIES:
+			return std::make_shared<raw_form_tree>(elem::COIMPLIES,
+				hygienic_copy(rft->l, vars), hygienic_copy(rft->r, vars));
+		case elem::AND:
+			return std::make_shared<raw_form_tree>(elem::AND,
+				hygienic_copy(rft->l, vars), hygienic_copy(rft->r, vars));
+		case elem::ALT:
+			return std::make_shared<raw_form_tree>(elem::ALT,
+				hygienic_copy(rft->l, vars), hygienic_copy(rft->r, vars));
+		case elem::NOT:
+			return std::make_shared<raw_form_tree>(elem::NOT,
+				hygienic_copy(rft->l, vars));
+		case elem::EXISTS: {
+			elem elt = hygienic_copy(*(rft->l->el), vars);
+			return std::make_shared<raw_form_tree>(elem::EXISTS,
+				std::make_shared<raw_form_tree>(elem::VAR, elt), 
+				hygienic_copy(rft->r, vars));
+		} case elem::UNIQUE: {
+			elem elt = hygienic_copy(*(rft->l->el), vars);
+			return std::make_shared<raw_form_tree>(elem::UNIQUE,
+				std::make_shared<raw_form_tree>(elem::VAR, elt), 
+				hygienic_copy(rft->r, vars));
+		} case elem::NONE:
+			return std::make_shared<raw_form_tree>(elem::NONE,
+				hygienic_copy(*rft->rt, vars));
+		case elem::FORALL: {
+			elem elt = hygienic_copy(*(rft->l->el), vars);
+			return std::make_shared<raw_form_tree>(elem::FORALL,
+				std::make_shared<raw_form_tree>(elem::VAR, elt), 
+				hygienic_copy(rft->r, vars));
+		} default:
+			assert(false); //should never reach here
+	}
+}
+
+/* Takes a term to be expanded, the rule that is to be inlined at its
+ * location, the specific head of the rule that is to be applied, and
+ * uses the rule's body to generate a formula equivalent (if we ignore
+ * the possiblity of other substitutions) to the unexpanded term. */
+
+sprawformtree driver::inline_rule(const raw_term &rt1, const raw_term &rt2,
+		const raw_rule &rr) {
+	if(rt1.e.size() == rt2.e.size()) {
+		std::set<std::tuple<elem, elem>> constraints;
+		for(size_t i = 0; i < rt1.e.size(); i++) {
+			if(rt1.e[i].type != elem::VAR || rt2.e[i].type == elem::VAR) {
+				constraints.insert({rt1.e[i], rt2.e[i]});
+			} else if(rt1.e[i] != rt2.e[i]) {
+				return nullptr;
+			}
+		}
+		std::map<elem, elem> var_map;
+		sprawformtree tmp = rr.rawformtree();
+		sprawformtree copy = hygienic_copy(tmp, var_map);
+		for(const auto &[el1, el2] : constraints) {
+			copy = std::make_shared<raw_form_tree>(elem::AND, copy,
+				std::make_shared<raw_form_tree>(elem::NONE,
+					raw_term({el1, elem_eq, var_map[el2]})));
+		}
+		return copy;
+	} else {
+		return nullptr;
+	}
+}
+
+/* If the relation in the given term is in the set of inlines, then
+ * substitute this term with the body of the corresponding rule with
+ * sufficient variable hygiene. If there is more than one possible rule,
+ * then disjunct them together. */
+
+sprawformtree driver::inline_rule(const raw_term &rt,
+		const std::vector<raw_rule> &inlines) {
+	sprawformtree unfolded_tree = nullptr;
+	for(const raw_rule &idb : inlines) {
+		for(const raw_term &hd : idb.h) {
+			sprawformtree tree_disj = inline_rule(rt, hd, idb);
+			if(unfolded_tree && tree_disj) {
+				unfolded_tree = std::make_shared<raw_form_tree>(elem::ALT,
+					unfolded_tree, tree_disj);
+			} else if(tree_disj) {
+				unfolded_tree = tree_disj;
+			}
+		}
+	}
+	return unfolded_tree;
+}
+
+void driver::unfold_tree(sprawformtree &rft,
+		const std::vector<raw_rule> &inlines) {
+	if(rft->type == elem::NONE && rft->rt->extype == raw_term::REL) {
+		sprawformtree inlined = inline_rule(*rft->rt, inlines);
+	}
+}
+
 elem driver::quote_elem(const elem &e, std::map<elem, elem> &variables) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();

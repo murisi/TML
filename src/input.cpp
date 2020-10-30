@@ -501,17 +501,17 @@ bool macro::parse(input* in, const raw_prog& prog){
  * the body is stored in b as a std::vector<std::vector<raw_term>>, a
  * corresponding sprawformtree is created. */
  
-sprawformtree raw_rule::rawformtree() const {
+sprawformtree raw_rule::rawformtree(dict_t &d) const {
 	if(prft) {
 		return prft;
 	} else if(b.empty()) {
-		return std::make_shared<raw_form_tree>(elem::NONE,
-			raw_term(raw_term::TRUE, {}));
+		return std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true(d));
 	} else {
-		sprawformtree disj;
+		sprawformtree disj =
+			std::make_shared<raw_form_tree>(elem::NONE, raw_term::_false(d));
 		for(size_t i = 0; i < b.size(); i++) {
 			sprawformtree conj =
-				std::make_shared<raw_form_tree>(elem::NONE, b[i][0]);
+				std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true(d));
 			for(size_t j = 0; j < b[i].size(); j++) {
 				sprawformtree tm =
 					std::make_shared<raw_form_tree>(elem::NONE, b[i][j]);
@@ -520,8 +520,7 @@ sprawformtree raw_rule::rawformtree() const {
 				}
 				conj = std::make_shared<raw_form_tree>(elem::AND, conj, tm);
 			}
-			disj = (i == 0 ? conj :
-				std::make_shared<raw_form_tree>(elem::ALT, disj, conj));
+			disj = std::make_shared<raw_form_tree>(elem::ALT, disj, conj);
 		}
 		return disj;
 	}

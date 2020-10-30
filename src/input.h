@@ -297,7 +297,7 @@ struct elem {
 struct raw_term {
 
 	bool neg = false;
-	enum rtextype { REL, EQ, LEQ, BLTIN, ARITH, CONSTRAINT, TRUE } extype = raw_term::REL;
+	enum rtextype { REL, EQ, LEQ, BLTIN, ARITH, CONSTRAINT } extype = raw_term::REL;
 
 	//NOTE: we can add FORM1, FORM2 etc to rtextype
 	// and replace t_arith_op by a form (once we do parse for compound arithmetic formulas)
@@ -321,6 +321,22 @@ struct raw_term {
 			extype == t.extype;
 			//iseq == t.iseq && isleq == t.isleq && islt == t.islt;
 		//return neg == t.neg && e == t.e && arity == t.arity;
+	}
+	static raw_term _true(dict_t &d) {
+		return raw_term(raw_term::EQ,
+			{elem(0), elem(elem::EQ, d.get_lexeme("=")), elem(0)});
+	}
+	static raw_term _false(dict_t &d) {
+		return raw_term(raw_term::EQ,
+			{elem(0), elem(elem::EQ, d.get_lexeme("=")), elem(1)});
+	}
+	static bool is_true(const raw_term &t) {
+		return t.extype == raw_term::EQ && t.e.size() == 3 &&
+			t.e[0] == t.e[2] && t.e[1].type == elem::EQ;
+	}
+	static bool is_false(const raw_term &t) {
+		return t.extype == raw_term::EQ && t.e.size() == 3 &&
+			t.e[0] != t.e[2] && t.e[1].type == elem::EQ;
 	}
 };
 
@@ -375,7 +391,7 @@ struct raw_rule {
 	raw_rule(const raw_term& h, const std::vector<raw_term>& _b) : h({h}) {
 		if (!_b.empty()) b = {_b};
 	}
-	sprawformtree rawformtree() const;
+	sprawformtree rawformtree(dict_t &d) const;
 	static raw_rule getdel(const raw_term& t) {
 		raw_rule r(t, t);
 		return r.h[0].neg = true, r;

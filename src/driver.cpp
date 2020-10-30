@@ -177,6 +177,9 @@ sprawformtree driver::hygienic_copy(sprawformtree &rft,
 
 sprawformtree driver::inline_rule(const raw_term &rt1, const raw_term &rt2,
 		const raw_rule &rr) {
+	// Get dictionary for generating lexemes
+	dict_t &d = tbl->get_dict();
+	
 	if(rt1.e.size() == rt2.e.size()) {
 		std::set<std::tuple<elem, elem>> constraints;
 		for(size_t i = 0; i < rt1.e.size(); i++) {
@@ -187,7 +190,7 @@ sprawformtree driver::inline_rule(const raw_term &rt1, const raw_term &rt2,
 			}
 		}
 		std::map<elem, elem> var_map;
-		sprawformtree tmp = rr.rawformtree();
+		sprawformtree tmp = rr.rawformtree(d);
 		sprawformtree copy = hygienic_copy(tmp, var_map);
 		for(const auto &[el1, el2] : constraints) {
 			copy = std::make_shared<raw_form_tree>(elem::AND, copy,
@@ -222,12 +225,121 @@ sprawformtree driver::inline_rule(const raw_term &rt,
 	return unfolded_tree;
 }
 
-void driver::unfold_tree(sprawformtree &rft,
-		const std::vector<raw_rule> &inlines) {
-	if(rft->type == elem::NONE && rft->rt->extype == raw_term::REL) {
-		sprawformtree inlined = inline_rule(*rft->rt, inlines);
+/* Checks if the given formula is conjunctive, that is, ultimately a
+ * tree of conjunctions of terms. If so, then put the terms that are
+ * ultimately conjuncted into the list. Note that if the body of a query
+ * is a conjunctive formula, then the query is also conjunctive. */
+
+bool driver::is_formula_conjunctive(const sprawformtree &tree,
+		std::vector<raw_term> &tms) {
+	if(tree->type == elem::NONE) {
+		// If we have a true literal, omit it.
+		if(!raw_term::is_true(*tree->rt)) {
+			tms.push_back(*tree->rt);
+		}
+		return true;
+	} else if(tree->type == elem::AND) {
+		return is_formula_conjunctive(tree->l, tms) &&
+			is_formula_conjunctive(tree->r, tms);
+	} else if(tree->type == elem::ALT) {
+		// If we have a disjunction and one branch is the false literal,
+		// then go down the other branch.
+		if(tree->l->type == elem::NONE && raw_term::is_false(*tree->l->rt)) {
+			return is_formula_conjunctive(tree->r, tms);
+		} else if(tree->r->type == elem::NONE && raw_term::is_false(*tree->r->rt)) {
+			return is_formula_conjunctive(tree->l, tms);
+		} else {
+			return false;
+		}
+	} else {
+		return false;
 	}
 }
+
+/* Checks if the body of the given rule is conjunctive. If so, then
+ * return the terms that are ultimately conjuncted into a list. */
+
+bool driver::is_rule_conjunctive(const raw_rule &rr,
+		std::vector<raw_term> &tms) {
+	// Get dictionary for generating lexemes
+	dict_t &d = tbl->get_dict();
+	return is_formula_conjunctive(rr.rawformtree(d), tms);
+}
+
+sprawformtree driver::make_cqc_constraints(std::vector<raw_term> terms1,
+		std::map<elem, elem> map1, std::vector<raw_term> terms2,
+		std::map<elem, elem> map2) {
+	sprawformtree conj = std::make_shared<raw_form_tree>(elem::NONE, ttrue);
+	for(const raw_term &tm2 : terms2) {
+		sprawformtree disj =
+			std::make_shared<raw_form_tree>(elem::NONE, tfalse);
+		for(const raw_term &tm1 : terms1) {
+			if(tm1.e[0] == tm2.e[0] && tm1.e.size() == tm2.e.size()) {
+				sprawformtree constraint =
+					std::make_shared<raw_form_tree>(elem::NONE, ttrue);
+				for(size_t i = 2; i < tm1.e.size() - 1; i++) {
+					constraint = std::make_shared<raw_form_tree>(elem::AND,
+						constraint,
+						std::make_shared<raw_form_tree>(elem::NONE,
+							raw_term(raw_term::EQ,
+								{at_default(map2, tm2.e[i], tm2.e[i]), elem_eq,
+									at_default(map1, tm1.e[i], tm1.e[i])})));
+				}
+				disj = std::make_shared<raw_form_tree>(elem::ALT, disj,
+					constraint);
+			}
+		}
+		conj = std::make_shared<raw_form_tree>(elem::AND, conj, disj);
+	}
+	return conj;
+}
+
+std::vector<std::map<elem, elem>> driver::cqc(const raw_rule &rr1,
+		const raw_rule &rr2) {
+	dict_t &d = tbl->get_dict();
+	std::vector<raw_term> terms1, terms2;
+	// The rules must be conjunctive as per precondition
+	if(is_rule_conjunctive(rr1, terms1) && is_rule_conjunctive(rr2, terms2)) {
+		// The terms of the conjunctive queries must also be uninterpreted
+		for(const raw_term &rt : terms1) {
+			if(rt.extype != raw_term::REL) return {};
+		}
+		for(const raw_term &rt : terms2) {
+			if(rt.extype != raw_term::REL) return {};
+		}
+		// Freeze the variables and symbols of the rule we are checking the
+		// containment of
+		std::map<elem, elem> freeze_map;
+		freeze_vars(rr1.h, freeze_map);
+		freeze_vars(terms1, freeze_map);
+		
+		// Encode the constraint that there is a homomorphism from rule 2
+		// to the frozen rule 1
+		sprawformtree constraints =
+			std::make_shared<raw_form_tree>(elem::AND,
+				make_cqc_constraints(terms1, freeze_map, terms2, {}),
+				make_cqc_constraints(rr2.h, {}, rr1.h, freeze_map));
+		
+		std::vector<elem> head_e = { elem::fresh_sym(d), elem_openp };
+		for(const raw_term &rt : terms2) {
+			for(const elem &e : rt.e) {
+				if(e.type == elem::VAR) {
+					head_e.push_back(e);
+				}
+			}
+		}
+		head_e.push_back(elem_closep);
+		raw_rule cqc_rule = raw_rule(raw_term(head_e));
+		cqc_rule.prft = constraints;
+		return {};
+	} else {
+		return {};
+	}
+}
+
+/* In the case that the argument is a variable, get the symbol
+ * associated with it and return that. If there is no such association,
+ * make one. */
 
 elem driver::quote_elem(const elem &e, std::map<elem, elem> &variables) {
 	// Get dictionary for generating fresh symbols
@@ -242,6 +354,18 @@ elem driver::quote_elem(const elem &e, std::map<elem, elem> &variables) {
 		}
 	} else {
 		return e;
+	}
+}
+
+/* Iterate through terms and associate each unique variable with unique
+ * fresh symbol. */
+
+void driver::freeze_vars(const std::vector<raw_term> &terms,
+		std::map<elem, elem> &freeze_map) {
+	for(const raw_term &tm : terms) {
+		for(const elem &el : tm.e) {
+			quote_elem(el, freeze_map);
+		}
 	}
 }
 
@@ -1203,6 +1327,9 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 		std::cout << "Evaled Program:" << std::endl << std::endl << p << std::endl;
 		insert_exists(p);
 		std::cout << "Existentially Quantified Program:" << std::endl << std::endl << p << std::endl;
+		for(const raw_rule &rr : p.r) {
+			cqc(rr, rr);
+		}
 		std::set<elem> universe;
 		std::set<raw_term> database;
 		naive_pfp(p, universe, database);

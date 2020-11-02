@@ -482,7 +482,9 @@ basic_ostream<T>& operator<<(basic_ostream<T>& os, const raw_rule& r) {
 	}
 	for (size_t n = 0; n < r.h.size(); ++n)
 		if ((os << r.h[n]), n != r.h.size() - 1) os << ',';
-	if (!r.b.size() && r.prft == NULL) return os << '.';
+	if (!r.b.size() && (r.prft == NULL ||
+      (r.prft->type == elem::NONE && r.prft->rt->is_true())))
+    return os << '.';
 	os << " :- " << endl;
 	if(!r.b.empty()) {
 		for (size_t n = 0; n < r.b.size(); ++n) {

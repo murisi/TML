@@ -37,8 +37,10 @@ typedef enum prolog_dialect { XSB, SWIPL } prolog_dialect;
 #define QEXISTS 5
 #define QNOT 6
 #define QAND 7
-#define QOR 8
-#define QTRUE 9
+#define QALT 8
+#define QIMPLIES 9
+#define QUNIQUE 10
+#define QCOIMPLIES 11
 
 class archive;
 
@@ -121,13 +123,13 @@ class driver {
 	std::vector<std::map<elem, elem>> cqc(const raw_rule &rr1,
 		const raw_rule &rr2);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
+	void simplify_formula(sprawformtree &t);
+	void simplify_formulas(raw_prog &rp);
 	elem quote_elem(const elem &e, std::map<elem, elem> &variables);
 	elem quote_term(const raw_term &head, const elem &rel_name,
 		raw_prog &rp, std::map<elem, elem> &variables);
-	elem quote_conjunction(const std::vector<raw_term> &conj,
-		const elem &rel_name, raw_prog &rp, std::map<elem, elem> &variables);
-	elem quote_disjunction(const std::vector<std::vector<raw_term>> &disj,
-		const elem &rel_name, raw_prog &rp, std::map<elem, elem> &variables);
+	elem quote_formula(const sprawformtree &t, const elem &rel_name,
+		raw_prog &rp, std::map<elem, elem> &variables);
 	std::vector<elem> quote_rule(const raw_rule &rr, const elem &rel_name,
 		raw_prog &rp, std::map<elem, elem> &variables);
 	void populate_free_variables(const raw_term &t,

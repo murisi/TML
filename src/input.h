@@ -355,13 +355,13 @@ struct raw_term {
 	static raw_term _false() {
 		return raw_term(raw_term::EQ, {elem(0), elem(elem::EQ), elem(1)});
 	}
-	static bool is_true(const raw_term &t) {
-		return t.extype == raw_term::EQ && t.e.size() == 3 &&
-			t.e[1].type == elem::EQ && (t.e[0] == t.e[2]) != t.neg;
+	bool is_true() {
+		return extype == raw_term::EQ && e.size() == 3 &&
+			e[1].type == elem::EQ && (e[0] == e[2]) != neg;
 	}
-	static bool is_false(const raw_term &t) {
-		return t.extype == raw_term::EQ && t.e.size() == 3 &&
-			t.e[1].type == elem::EQ && (t.e[0] != t.e[2]) != t.neg;
+	bool is_false() {
+		return extype == raw_term::EQ && e.size() == 3 &&
+			e[1].type == elem::EQ && (e[0] != e[2]) != neg;
 	}
 };
 
@@ -407,15 +407,25 @@ struct raw_rule {
 
 	enum etype { NONE, GOAL, TREE };
 	etype type = NONE;
+	void calc_rawformterm();
 	bool parse(input* in, const raw_prog& prog);
 	bool parse_aux(input* in, const raw_prog& prog);
 	void clear() { h.clear(), b.clear(), type = NONE; }
-	raw_rule(){}
-	raw_rule(etype type, const raw_term& t) : h({t}), type(type) {}
-	raw_rule(const raw_term& t) : raw_rule(NONE, t) {}
-	raw_rule(const raw_term& h, const raw_term& b) : h({h}), b({{b}}) {}
+	raw_rule(){
+		calc_rawformterm();
+	}
+	raw_rule(etype type, const raw_term& t) : h({t}), type(type) {
+		calc_rawformterm();
+	}
+	raw_rule(const raw_term& t) : raw_rule(NONE, t) {
+		calc_rawformterm();
+	}
+	raw_rule(const raw_term& h, const raw_term& b) : h({h}), b({{b}}) {
+		calc_rawformterm();
+	}
 	raw_rule(const raw_term& h, const std::vector<raw_term>& _b) : h({h}) {
 		if (!_b.empty()) b = {_b};
+		calc_rawformterm();
 	}
 	static raw_rule getdel(const raw_term& t) {
 		raw_rule r(t, t);

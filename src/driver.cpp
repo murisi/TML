@@ -177,9 +177,6 @@ sprawformtree driver::hygienic_copy(sprawformtree &rft,
 
 sprawformtree driver::inline_rule(const raw_term &rt1, const raw_term &rt2,
 		const raw_rule &rr) {
-	// Get dictionary for generating lexemes
-	dict_t &d = tbl->get_dict();
-	
 	if(rt1.e.size() == rt2.e.size()) {
 		std::set<std::tuple<elem, elem>> constraints;
 		for(size_t i = 0; i < rt1.e.size(); i++) {
@@ -233,24 +230,11 @@ sprawformtree driver::inline_rule(const raw_term &rt,
 bool driver::is_formula_conjunctive(const sprawformtree &tree,
 		std::vector<raw_term> &tms) {
 	if(tree->type == elem::NONE) {
-		// If we have a true literal, omit it.
-		if(!raw_term::is_true(*tree->rt)) {
-			tms.push_back(*tree->rt);
-		}
+		tms.push_back(*tree->rt);
 		return true;
 	} else if(tree->type == elem::AND) {
 		return is_formula_conjunctive(tree->l, tms) &&
 			is_formula_conjunctive(tree->r, tms);
-	} else if(tree->type == elem::ALT) {
-		// If we have a disjunction and one branch is the false literal,
-		// then go down the other branch.
-		if(tree->l->type == elem::NONE && raw_term::is_false(*tree->l->rt)) {
-			return is_formula_conjunctive(tree->r, tms);
-		} else if(tree->r->type == elem::NONE && raw_term::is_false(*tree->r->rt)) {
-			return is_formula_conjunctive(tree->l, tms);
-		} else {
-			return false;
-		}
 	} else {
 		return false;
 	}
@@ -261,8 +245,6 @@ bool driver::is_formula_conjunctive(const sprawformtree &tree,
 
 bool driver::is_rule_conjunctive(const raw_rule &rr,
 		std::vector<raw_term> &tms) {
-	// Get dictionary for generating lexemes
-	dict_t &d = tbl->get_dict();
 	return is_formula_conjunctive(rr.prft, tms);
 }
 
@@ -337,6 +319,59 @@ std::vector<std::map<elem, elem>> driver::cqc(const raw_rule &rr1,
 	}
 }
 
+void driver::simplify_formula(sprawformtree &t) {
+	switch(t->type) {
+		case elem::IMPLIES:
+			simplify_formula(t->l);
+			simplify_formula(t->r);
+			break;
+		case elem::COIMPLIES:
+			simplify_formula(t->l);
+			simplify_formula(t->r);
+			break;
+		case elem::AND:
+			simplify_formula(t->l);
+			simplify_formula(t->r);
+			if(t->l->type == elem::NONE && t->l->rt->is_true()) {
+				t = t->r;
+			} else if(t->r->type == elem::NONE && t->r->rt->is_true()) {
+				t = t->l;
+			}
+			break;
+		case elem::ALT:
+			simplify_formula(t->l);
+			simplify_formula(t->r);
+			if(t->l->type == elem::NONE && t->l->rt->is_false()) {
+				t = t->r;
+			} else if(t->r->type == elem::NONE && t->r->rt->is_false()) {
+				t = t->l;
+			}
+			break;
+		case elem::NOT:
+			simplify_formula(t->l);
+			break;
+		case elem::EXISTS: {
+			simplify_formula(t->r);
+			break;
+		} case elem::UNIQUE: {
+			simplify_formula(t->r);
+			break;
+		} case elem::NONE: {
+			break;
+		} case elem::FORALL: {
+			simplify_formula(t->r);
+			break;
+		} default:
+			assert(false); //should never reach here
+	}
+}
+
+void driver::simplify_formulas(raw_prog &rp) {
+	for(raw_rule &rr : rp.r) {
+		simplify_formula(rr.prft);
+	}
+}
+
 /* In the case that the argument is a variable, get the symbol
  * associated with it and return that. If there is no such association,
  * make one. */
@@ -392,7 +427,8 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
 	} else if(head.extype == raw_term::EQ) {
 		// Add metadata to quoted term: term signature, term id, term name
 		std::vector<elem> quoted_term_e = {rel_name, elem_openp, elem(QEQUALS),
-			term_id, quote_elem(head.e[0], variables), quote_elem(head.e[2], variables) };
+			term_id, quote_elem(head.e[0], variables),
+			quote_elem(head.e[2], variables), elem_closep };
 		rp.r.push_back(raw_rule(raw_term(quoted_term_e)));
 	}
 	if(head.neg) {
@@ -407,44 +443,62 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
 	}
 }
 
-elem driver::quote_conjunction(const std::vector<raw_term> &conj,
-		const elem &rel_name, raw_prog &rp, std::map<elem, elem> &variables) {
+elem driver::quote_formula(const sprawformtree &t, const elem &rel_name,
+		raw_prog &rp, std::map<elem, elem> &variables) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
-	elem part_id;
-	for(int_t gidx = 0; gidx < ssize(conj); gidx++) {
-		const elem term_id = quote_term(conj[gidx], rel_name, rp, variables);
-		if(gidx == 0) {
-			part_id = term_id;
-		} else {
-			const elem sub_part_id = part_id;
+	const elem part_id = elem::fresh_sym(d);
+	switch(t->type) {
+		case elem::IMPLIES:
+			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QIMPLIES),
+				part_id, quote_formula(t->l, rel_name, rp, variables),
+				quote_formula(t->r, rel_name, rp, variables), elem_closep })));
+			break;
+		case elem::COIMPLIES:
+			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QCOIMPLIES),
+				part_id, quote_formula(t->l, rel_name, rp, variables),
+				quote_formula(t->r, rel_name, rp, variables), elem_closep })));
+			break;
+		case elem::AND:
 			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QAND),
-				part_id = elem::fresh_sym(d), term_id, sub_part_id, elem_closep })));
-		}
+				part_id, quote_formula(t->l, rel_name, rp, variables),
+				quote_formula(t->r, rel_name, rp, variables), elem_closep })));
+			break;
+		case elem::ALT:
+			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QALT),
+				part_id, quote_formula(t->l, rel_name, rp, variables),
+				quote_formula(t->r, rel_name, rp, variables), elem_closep })));
+			break;
+		case elem::NOT:
+			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QNOT),
+				part_id, quote_formula(t->l, rel_name, rp, variables),
+				elem_closep })));
+			break;
+		case elem::EXISTS: {
+			elem qvar = quote_elem(*(t->l->el), variables);
+			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp,
+				elem(QEXISTS), part_id, qvar,
+				quote_formula(t->r, rel_name, rp, variables), elem_closep })));
+			break;
+		} case elem::UNIQUE: {
+			elem qvar = quote_elem(*(t->l->el), variables);
+			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp,
+				elem(QUNIQUE), part_id, qvar,
+				quote_formula(t->r, rel_name, rp, variables), elem_closep })));
+			break;
+		} case elem::NONE: {
+			return quote_term(*t->rt, rel_name, rp, variables);
+			break;
+		} case elem::FORALL: {
+			elem qvar = quote_elem(*(t->l->el), variables);
+			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp,
+				elem(QFORALL), part_id, qvar,
+				quote_formula(t->r, rel_name, rp, variables), elem_closep })));
+			break;
+		} default:
+			assert(false); //should never reach here
 	}
 	return part_id;
-}
-
-elem driver::quote_disjunction(const std::vector<std::vector<raw_term>> &disj,
-		const elem &rel_name, raw_prog &rp, std::map<elem, elem> &variables) {
-	// Get dictionary for generating fresh symbols
-	dict_t &d = tbl->get_dict();
-	if(ssize(disj) > 0) {
-		elem part_id = quote_conjunction(disj[0], rel_name, rp, variables);
-		for(int_t gidx = 1; gidx < ssize(disj); gidx++) {
-			const elem term_id =
-				quote_conjunction(disj[gidx], rel_name, rp, variables);
-			const elem sub_part_id = part_id;
-			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QOR),
-				part_id = elem::fresh_sym(d), term_id, sub_part_id, elem_closep })));
-		}
-		return part_id;
-	} else {
-		elem part_id = elem::fresh_sym(d);
-		rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QTRUE),
-			part_id, elem_closep })));
-		return part_id;
-	}
 }
 
 std::vector<elem> driver::quote_rule(const raw_rule &rr, const elem &rel_name,
@@ -452,7 +506,7 @@ std::vector<elem> driver::quote_rule(const raw_rule &rr, const elem &rel_name,
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	std::vector<elem> rule_ids;
-	const elem body_id = quote_disjunction(rr.b, rel_name, rp, variables);
+	const elem body_id = quote_formula(rr.prft, rel_name, rp, variables);
 	for(int_t gidx = 0; gidx < ssize(rr.h); gidx++) {
 		const elem head_id = quote_term(rr.h[gidx], rel_name, rp, variables);
 		const elem rule_id = elem::fresh_sym(d);
@@ -750,18 +804,6 @@ void driver::transform_evals(raw_prog &rp) {
 				rp.r.push_back(rr);
 			}
 			
-			// Interpret the true constant
-			{
-				std::vector<elem> head_e = { aux_rel, elem_openp, elt_id };
-				for(int_t i = 0; i < arity_num.num; i++) {
-					head_e.push_back(und_sym);
-					head_e.push_back(und_sym);
-				}
-				head_e.push_back(elem_closep);
-				raw_term quote({quote_sym, elem_openp, elem(QTRUE), elt_id, elem_closep});
-				rp.r.push_back(raw_rule(raw_term(head_e), quote));
-			}
-			
 			// Interpret conjunctions with varying allocations to each side
 			for(int_t a = 0; a < arity_num.num+1; a++) {
 				std::vector<elem> head_e = { aux_rel, elem_openp, elt_id };
@@ -820,7 +862,7 @@ void driver::transform_evals(raw_prog &rp) {
 					head_e.push_back(iparams[i]);
 				}
 				head_e.push_back(elem_closep);
-				raw_term quote({quote_sym, elem_openp, elem(QOR), elt_id,
+				raw_term quote({quote_sym, elem_openp, elem(QALT), elt_id,
 					forma_id, formb_id, elem_closep });
 				std::vector<elem> forma_e = { aux_rel, elem_openp, forma_id };
 				for(int_t i = a; i < arity_num.num; i++) {
@@ -938,7 +980,7 @@ sprawformtree driver::with_exists(sprawformtree t,
 
 void driver::insert_exists(raw_prog &rp) {
 	for(raw_rule &rr : rp.r) {
-		if(rr.b.empty() && rr.prft && rr.h.size() == 1) {
+		if(rr.prft && rr.h.size() == 1) {
 			std::vector<elem> bound_vars;
 			for(const elem &e : rr.h[0].e) {
 				if(e.type == elem::VAR) {
@@ -1108,9 +1150,7 @@ void driver::populate_universes(const raw_rule &rul, std::set<elem> &universe,
 			}
 		}
 	}
-	if(rul.b.empty() && rul.prft) {
-		populate_universes(*rul.prft, universe, universes, database);
-	}
+	populate_universes(*rul.prft, universe, universes, database);
 }
 
 /* Evaluate the given logical term over the given database in the context
@@ -1345,6 +1385,8 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 //		for (raw_prog& p : rp.p)
 //			p = transform_sdt(move(p));
 	for (raw_prog& p : rp.p) {
+		simplify_formulas(p);
+		std::cout << "Simplified Program:" << std::endl << std::endl << p << std::endl;
 		transform_quotes(p);
 		std::cout << "Quoted Program:" << std::endl << std::endl << p << std::endl;
 		transform_evals(p);

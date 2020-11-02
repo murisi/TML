@@ -190,7 +190,7 @@ sprawformtree driver::inline_rule(const raw_term &rt1, const raw_term &rt2,
 			}
 		}
 		std::map<elem, elem> var_map;
-		sprawformtree tmp = rr.rawformtree(d);
+		sprawformtree tmp = rr.prft;
 		sprawformtree copy = hygienic_copy(tmp, var_map);
 		for(const auto &[el1, el2] : constraints) {
 			copy = std::make_shared<raw_form_tree>(elem::AND, copy,
@@ -263,7 +263,7 @@ bool driver::is_rule_conjunctive(const raw_rule &rr,
 		std::vector<raw_term> &tms) {
 	// Get dictionary for generating lexemes
 	dict_t &d = tbl->get_dict();
-	return is_formula_conjunctive(rr.rawformtree(d), tms);
+	return is_formula_conjunctive(rr.prft, tms);
 }
 
 sprawformtree driver::make_cqc_constraints(std::vector<raw_term> terms1,
@@ -1221,22 +1221,7 @@ void driver::interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
 			interpret_rule(hd_idx, inp_idx + 1, rul, universes, bindings, database);
 		}
 	} else {
-		bool succ;
-		if(!rul.b.empty()) {
-			succ = false;
-			for(const std::vector<raw_term> &bodie : rul.b) {
-				bool and_succ = true;
-				for(const raw_term &rt : bodie) {
-					and_succ &= evaluate_term(rt, bindings, database);
-				}
-				succ |= and_succ;
-			}
-		} else if(rul.prft) {
-			succ = evaluate_form_tree(*rul.prft, universes, bindings, database);
-		} else {
-			succ = true;
-		}
-		if(succ) {
+		if(evaluate_form_tree(*rul.prft, universes, bindings, database)) {
 			raw_term fact = head;
 			for(elem &e : fact.e) {
 				if(e.type == elem::VAR) {
@@ -1248,28 +1233,67 @@ void driver::interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
 	}
 }
 
-void driver::naive_pfp(const raw_prog &rp, std::set<elem> &universe,
-		std::set<raw_term> &database) {
-	// Populate our universe
-	for(const raw_rule &rr : rp.r) {
-		for(const raw_term &rt : rr.h) {
-			for(size_t i = 2; i < rt.e.size() - 1; i++) {
-				if(rt.e[i].type != elem::VAR) {
-					universe.insert(rt.e[i]);
-				}
-			}
-		}
-		for(const std::vector<raw_term> &bodie : rr.b) {
-			for(const raw_term &rt : bodie) {
-				for(size_t i = 2; i < rt.e.size() - 1; i++) {
-					if(rt.e[i].type != elem::VAR) {
-						universe.insert(rt.e[i]);
-					}
-				}
-			}
+void driver::populate_universe(const raw_term &rt,
+		std::set<elem> &universe) {
+	for(size_t i = 2; i < rt.e.size() - 1; i++) {
+		if(rt.e[i].type != elem::VAR) {
+			universe.insert(rt.e[i]);
 		}
 	}
-	
+}
+
+void driver::populate_universe(const sprawformtree &t,
+		std::set<elem> &universe) {
+	switch(t->type) {
+		case elem::IMPLIES:
+			populate_universe(t->l, universe);
+			populate_universe(t->r, universe);
+			break;
+		case elem::COIMPLIES:
+			populate_universe(t->l, universe);
+			populate_universe(t->r, universe);
+			break;
+		case elem::AND:
+			populate_universe(t->l, universe);
+			populate_universe(t->r, universe);
+			break;
+		case elem::ALT:
+			populate_universe(t->l, universe);
+			populate_universe(t->r, universe);
+			break;
+		case elem::NOT:
+			populate_universe(t->l, universe);
+			break;
+		case elem::EXISTS: {
+			populate_universe(t->r, universe);
+			break;
+		} case elem::UNIQUE: {
+			populate_universe(t->r, universe);
+			break;
+		} case elem::NONE:
+			populate_universe(*t->rt, universe);
+			break;
+		case elem::FORALL: {
+			populate_universe(t->r, universe);
+			break;
+		} default:
+			assert(false); //should never reach here
+	}
+}
+
+void driver::populate_universe(const raw_prog &rp,
+		std::set<elem> &universe) {
+	for(const raw_rule &rr : rp.r) {
+		for(const raw_term &rt : rr.h) {
+			populate_universe(rt, universe);
+		}
+		populate_universe(rr.prft, universe);
+	}
+}
+
+void driver::naive_pfp(const raw_prog &rp, std::set<elem> &universe,
+		std::set<raw_term> &database) {
+	populate_universe(rp, universe);
 	std::set<raw_term> prev_database;
 	// Interpret program
 	do {

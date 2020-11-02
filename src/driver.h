@@ -132,6 +132,11 @@ class driver {
 		raw_prog &rp, std::map<elem, elem> &variables);
 	void populate_free_variables(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
+	void populate_universe(const raw_term &rt, std::set<elem> &universe);
+	void populate_universe(const sprawformtree &rft,
+		std::set<elem> &universe);
+	void populate_universe(const raw_prog &rp,
+		std::set<elem> &universe);
 	sprawformtree with_exists(sprawformtree t,
 		std::vector<elem> &bound_vars);
 	void insert_exists(raw_prog &rp);

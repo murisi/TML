@@ -238,6 +238,8 @@ static const std::set<std::string> str_bltins =
 		"rnd", "print", "lprint", "halt", "fail",
 		"bw_and", "bw_or", "bw_xor", "bw_not", "pw_add", "pw_mult"};
 
+#define STR_TO_LEXEME(str) { (unsigned char *) (str), (unsigned char *) (str) + sizeof(str) - 1 }
+
 struct elem {
 	enum etype {
 		NONE, SYM, NUM, CHR, VAR, OPENP, CLOSEP, ALT, STR, EQ, NEQ, LEQ, GT, LT,
@@ -252,6 +254,31 @@ struct elem {
 	elem() {}
 	elem(int_t num) : type(NUM), num(num) {}
 	elem(char32_t ch) : type(CHR), ch(ch) {}
+	elem(etype type) : type(type) {
+		switch(type) {
+			case EQ: e = STR_TO_LEXEME("="); break;
+			case OPENP: e = STR_TO_LEXEME("("); break;
+			case CLOSEP: e = STR_TO_LEXEME(")"); break;
+			case ALT: e = STR_TO_LEXEME("||"); break;
+			case NEQ: e = STR_TO_LEXEME("!="); break;
+			case LEQ: e = STR_TO_LEXEME("<="); break;
+			case GT: e = STR_TO_LEXEME(">"); break;
+			case LT: e = STR_TO_LEXEME("<"); break;
+			case GEQ: e = STR_TO_LEXEME(">="); break;
+			case NOT: e = STR_TO_LEXEME("~"); break;
+			case AND: e = STR_TO_LEXEME("&&"); break;
+			case FORALL: e = STR_TO_LEXEME("forall"); break;
+			case EXISTS: e = STR_TO_LEXEME("exists"); break;
+			case UNIQUE: e = STR_TO_LEXEME("unique"); break;
+			case IMPLIES: e = STR_TO_LEXEME("->"); break;
+			case COIMPLIES: e = STR_TO_LEXEME("<->"); break;
+			case OPENB: e = STR_TO_LEXEME("{"); break;
+			case CLOSEB: e = STR_TO_LEXEME("}"); break;
+			case OPENSB: e = STR_TO_LEXEME("["); break;
+			case CLOSESB: e = STR_TO_LEXEME("]"); break;
+			default: assert(false); //should never reach here
+		}
+	}
 	elem(etype type, lexeme e) : type(type), e(e) {
 		DBG(assert(type!=NUM&&type!=CHR&&(type!=SYM||(e[0]&&e[1])));)
 	}
@@ -322,21 +349,19 @@ struct raw_term {
 			//iseq == t.iseq && isleq == t.isleq && islt == t.islt;
 		//return neg == t.neg && e == t.e && arity == t.arity;
 	}
-	static raw_term _true(dict_t &d) {
-		return raw_term(raw_term::EQ,
-			{elem(0), elem(elem::EQ, d.get_lexeme("=")), elem(0)});
+	static raw_term _true() {
+		return raw_term(raw_term::EQ, {elem(0), elem(elem::EQ), elem(0)});
 	}
-	static raw_term _false(dict_t &d) {
-		return raw_term(raw_term::EQ,
-			{elem(0), elem(elem::EQ, d.get_lexeme("=")), elem(1)});
+	static raw_term _false() {
+		return raw_term(raw_term::EQ, {elem(0), elem(elem::EQ), elem(1)});
 	}
 	static bool is_true(const raw_term &t) {
 		return t.extype == raw_term::EQ && t.e.size() == 3 &&
-			t.e[0] == t.e[2] && t.e[1].type == elem::EQ;
+			t.e[1].type == elem::EQ && (t.e[0] == t.e[2]) != t.neg;
 	}
 	static bool is_false(const raw_term &t) {
 		return t.extype == raw_term::EQ && t.e.size() == 3 &&
-			t.e[0] != t.e[2] && t.e[1].type == elem::EQ;
+			t.e[1].type == elem::EQ && (t.e[0] != t.e[2]) != t.neg;
 	}
 };
 
@@ -383,6 +408,7 @@ struct raw_rule {
 	enum etype { NONE, GOAL, TREE };
 	etype type = NONE;
 	bool parse(input* in, const raw_prog& prog);
+	bool parse_aux(input* in, const raw_prog& prog);
 	void clear() { h.clear(), b.clear(), type = NONE; }
 	raw_rule(){}
 	raw_rule(etype type, const raw_term& t) : h({t}), type(type) {}
@@ -391,7 +417,6 @@ struct raw_rule {
 	raw_rule(const raw_term& h, const std::vector<raw_term>& _b) : h({h}) {
 		if (!_b.empty()) b = {_b};
 	}
-	sprawformtree rawformtree(dict_t &d) const;
 	static raw_rule getdel(const raw_term& t) {
 		raw_rule r(t, t);
 		return r.h[0].neg = true, r;

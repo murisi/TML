@@ -498,28 +498,30 @@ bool macro::parse(input* in, const raw_prog& prog){
 	fail: return pos = curr , false;
 }
 void raw_rule::calc_rawformterm() {
-	if(prft) {
-		// prft is already initialized
-	} else if(b.empty()) {
-		prft = std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
-	} else {
-		sprawformtree disj =
-			std::make_shared<raw_form_tree>(elem::NONE, raw_term::_false());
-		for(size_t i = 0; i < b.size(); i++) {
-			sprawformtree conj =
-				std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
-			for(size_t j = 0; j < b[i].size(); j++) {
-				sprawformtree tm =
-					std::make_shared<raw_form_tree>(elem::NONE, b[i][j]);
-				if(b[i][j].neg) {
-					tm = std::make_shared<raw_form_tree>(elem::NOT, tm);
+	if(!prft || (prft->type == elem::NONE && prft->rt->is_true())) {
+		if(b.empty()) {
+			prft = std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
+		} else {
+			sprawformtree disj =
+				std::make_shared<raw_form_tree>(elem::NONE, raw_term::_false());
+			for(size_t i = 0; i < b.size(); i++) {
+				sprawformtree conj =
+					std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
+				for(size_t j = 0; j < b[i].size(); j++) {
+					bool negated = b[i][j].neg;
+					b[i][j].neg = false;
+					sprawformtree tm =
+						std::make_shared<raw_form_tree>(elem::NONE, b[i][j]);
+					if(negated) {
+						tm = std::make_shared<raw_form_tree>(elem::NOT, tm);
+					}
+					conj = std::make_shared<raw_form_tree>(elem::AND, conj, tm);
 				}
-				conj = std::make_shared<raw_form_tree>(elem::AND, conj, tm);
+				disj = std::make_shared<raw_form_tree>(elem::ALT, disj, conj);
 			}
-			disj = std::make_shared<raw_form_tree>(elem::ALT, disj, conj);
+			prft = disj;
+			b.clear();
 		}
-		prft = disj;
-		b.clear();
 	}
 }
 /* Return the body of this rule as a sprawformtree. This means that if

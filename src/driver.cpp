@@ -526,6 +526,8 @@ raw_prog driver::read_prog(elem prog, const raw_prog &rp) {
 	raw_prog nrp;
 	nrp.builtins = rp.builtins;
 	nrp.parse(prog_in, tbl->get_dict());
+	simplify_formulas(nrp);
+	std::cout << nrp;
 	return nrp;
 }
 
@@ -606,6 +608,104 @@ sprawformtree driver::fix_symbols(const elem &quote_sym,
 				raw_term({ quote_sym, elem_openp, elem(QVARS), qva, elem_closep }))),
 		std::make_shared<raw_form_tree>(elem::NONE,
 			raw_term(raw_term::EQ, {qva, elem_eq, rva})));
+}
+
+// Interpret conjunctions with varying allocations to each side
+void driver::generate_binary_eval(raw_prog &rp, const int_t qtype,
+		const elem::etype &eltype, const elem &quote_sym,
+		const elem &und_sym, const elem &aux_rel,
+		const std::vector<elem> &iparams, const std::vector<elem> &qparams) {
+	// Get dictionary for generating fresh variables
+	dict_t &d = tbl->get_dict();
+	
+	int_t arity_num = qparams.size();
+	elem elt_id = elem::fresh_var(d), forma_id = elem::fresh_var(d),
+		formb_id = elem::fresh_var(d);
+	for(int_t a = 0; a < arity_num+1; a++) {
+		std::vector<elem> head_e = { aux_rel, elem_openp, elt_id };
+		for(int_t i = 0; i < arity_num; i++) {
+			head_e.push_back(qparams[i]);
+			head_e.push_back(iparams[i]);
+		}
+		head_e.push_back(elem_closep);
+		raw_term quote({quote_sym, elem_openp, elem(qtype), elt_id,
+			forma_id, formb_id, elem_closep });
+		std::vector<elem> forma_e = { aux_rel, elem_openp, forma_id };
+		for(int_t i = a; i < arity_num; i++) {
+			forma_e.push_back(qparams[i]);
+			forma_e.push_back(iparams[i]);
+		}
+		for(int_t i = 0; i < a; i++) {
+			forma_e.push_back(und_sym);
+			forma_e.push_back(und_sym);
+		}
+		forma_e.push_back(elem_closep);
+		std::vector<elem> formb_e = { aux_rel, elem_openp, formb_id };
+		for(int_t i = 0; i < a; i++) {
+			formb_e.push_back(qparams[i]);
+			formb_e.push_back(iparams[i]);
+		}
+		for(int_t i = a; i < arity_num; i++) {
+			formb_e.push_back(und_sym);
+			formb_e.push_back(und_sym);
+		}
+		formb_e.push_back(elem_closep);
+		std::shared_ptr<raw_form_tree> bodie =
+			std::make_shared<raw_form_tree>(elem::AND,
+				std::make_shared<raw_form_tree>(elem::NONE, quote),
+				std::make_shared<raw_form_tree>(eltype,
+					std::make_shared<raw_form_tree>(elem::NONE, raw_term(forma_e)),
+					std::make_shared<raw_form_tree>(elem::NONE, raw_term(formb_e))));
+		
+		for(int_t i = 0; i < a; i++) {
+			for(int_t j = a; j < arity_num; j++) {
+				bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
+					fix_variables(quote_sym, qparams[i], iparams[i],
+						qparams[j], iparams[j]));
+			}
+		}
+		rp.r.push_back(raw_rule(head_e, bodie));
+	}
+}
+
+void driver::generate_quantified_eval(raw_prog &rp, const int_t qtype,
+		const elem::etype &eltype, const elem &quote_sym, const elem &aux_rel,
+		const std::vector<elem> &iparams, const std::vector<elem> &qparams) {
+	// Get dictionary for generating fresh variables
+	dict_t &d = tbl->get_dict();
+	
+	int_t arity_num = qparams.size();
+	const elem quantified_var = elem::fresh_var(d),
+		elt_id = elem::fresh_var(d), forma_id = elem::fresh_var(d),
+		formb_id = elem::fresh_var(d);
+	std::vector<elem> head_e = { aux_rel, elem_openp, elt_id };
+	for(int_t i = 0; i < arity_num; i++) {
+		head_e.push_back(qparams[i]);
+		head_e.push_back(iparams[i]);
+	}
+	head_e.push_back(elem_closep);
+	raw_term quote({quote_sym, elem_openp, elem(qtype), elt_id,
+		forma_id, formb_id, elem_closep });
+	std::vector<elem> quant_e = { aux_rel, elem_openp, formb_id };
+	for(int_t i = 0; i < arity_num; i++) {
+		quant_e.push_back(qparams[i]);
+		quant_e.push_back(iparams[i]);
+	}
+	quant_e.push_back(elem_closep);
+	sprawformtree quant =
+		std::make_shared<raw_form_tree>(elem::NONE, quant_e);
+	for(int_t i = 0; i < arity_num; i++) {
+		quant = std::make_shared<raw_form_tree>(elem::AND, quant,
+			fix_variables(quote_sym, forma_id, quantified_var,
+				qparams[i], iparams[i]));
+	}
+	raw_rule rr(head_e);
+	rr.prft = std::make_shared<raw_form_tree>(elem::AND,
+		std::make_shared<raw_form_tree>(elem::NONE, quote),
+		std::make_shared<raw_form_tree>(eltype,
+			std::make_shared<raw_form_tree>(elem::VAR, quantified_var),
+			quant));
+	rp.r.push_back(rr);
 }
 
 /* Loop through the rules of the given program checking if they use a
@@ -804,105 +904,28 @@ void driver::transform_evals(raw_prog &rp) {
 				rp.r.push_back(rr);
 			}
 			
-			// Interpret conjunctions with varying allocations to each side
-			for(int_t a = 0; a < arity_num.num+1; a++) {
-				std::vector<elem> head_e = { aux_rel, elem_openp, elt_id };
-				for(int_t i = 0; i < arity_num.num; i++) {
-					head_e.push_back(qparams[i]);
-					head_e.push_back(iparams[i]);
-				}
-				head_e.push_back(elem_closep);
-				raw_term quote({quote_sym, elem_openp, elem(QAND), elt_id,
-					forma_id, formb_id, elem_closep });
-				std::vector<elem> forma_e = { aux_rel, elem_openp, forma_id };
-				for(int_t i = a; i < arity_num.num; i++) {
-					forma_e.push_back(qparams[i]);
-					forma_e.push_back(iparams[i]);
-				}
-				for(int_t i = 0; i < a; i++) {
-					forma_e.push_back(und_sym);
-					forma_e.push_back(und_sym);
-				}
-				forma_e.push_back(elem_closep);
-				std::vector<elem> formb_e = { aux_rel, elem_openp, formb_id };
-				for(int_t i = 0; i < a; i++) {
-					formb_e.push_back(qparams[i]);
-					formb_e.push_back(iparams[i]);
-				}
-				for(int_t i = a; i < arity_num.num; i++) {
-					formb_e.push_back(und_sym);
-					formb_e.push_back(und_sym);
-				}
-				formb_e.push_back(elem_closep);
-				std::shared_ptr<raw_form_tree> bodie =
-					std::make_shared<raw_form_tree>(elem::AND,
-						std::make_shared<raw_form_tree>(elem::NONE, quote),
-						std::make_shared<raw_form_tree>(elem::AND,
-							std::make_shared<raw_form_tree>(elem::NONE, raw_term(forma_e)),
-							std::make_shared<raw_form_tree>(elem::NONE, raw_term(formb_e))));
-				
-				for(int_t i = 0; i < a; i++) {
-					for(int_t j = a; j < arity_num.num; j++) {
-						bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
-							fix_variables(quote_sym, qparams[i], iparams[i],
-								qparams[j], iparams[j]));
-					}
-				}
-				
-				raw_rule rr(head_e);
-				rr.prft = std::shared_ptr<raw_form_tree>(bodie);
-				rp.r.push_back(rr);
-			}
+			// Interpret conjunctions
+			generate_binary_eval(rp, QAND, elem::AND, quote_sym, und_sym,
+				aux_rel, iparams, qparams);
+			// Interpret disjunctions
+			generate_binary_eval(rp, QALT, elem::ALT, quote_sym, und_sym,
+				aux_rel, iparams, qparams);
+			// Interpret implies
+			generate_binary_eval(rp, QIMPLIES, elem::IMPLIES, quote_sym, und_sym,
+				aux_rel, iparams, qparams);
+			// Interpret coimplies
+			generate_binary_eval(rp, QCOIMPLIES, elem::COIMPLIES, quote_sym, und_sym,
+				aux_rel, iparams, qparams);
 			
-			// Interpret disjunctions with varying allocations to each side
-			for(int_t a = 0; a < arity_num.num+1; a++) {
-				std::vector<elem> head_e = { aux_rel, elem_openp, elt_id };
-				for(int_t i = 0; i < arity_num.num; i++) {
-					head_e.push_back(qparams[i]);
-					head_e.push_back(iparams[i]);
-				}
-				head_e.push_back(elem_closep);
-				raw_term quote({quote_sym, elem_openp, elem(QALT), elt_id,
-					forma_id, formb_id, elem_closep });
-				std::vector<elem> forma_e = { aux_rel, elem_openp, forma_id };
-				for(int_t i = a; i < arity_num.num; i++) {
-					forma_e.push_back(qparams[i]);
-					forma_e.push_back(iparams[i]);
-				}
-				for(int_t i = 0; i < a; i++) {
-					forma_e.push_back(und_sym);
-					forma_e.push_back(und_sym);
-				}
-				forma_e.push_back(elem_closep);
-				std::vector<elem> formb_e = { aux_rel, elem_openp, formb_id };
-				for(int_t i = 0; i < a; i++) {
-					formb_e.push_back(qparams[i]);
-					formb_e.push_back(iparams[i]);
-				}
-				for(int_t i = a; i < arity_num.num; i++) {
-					formb_e.push_back(und_sym);
-					formb_e.push_back(und_sym);
-				}
-				formb_e.push_back(elem_closep);
-				std::shared_ptr<raw_form_tree> bodie =
-					std::make_shared<raw_form_tree>(elem::AND,
-						std::make_shared<raw_form_tree>(elem::NONE, quote),
-						std::make_shared<raw_form_tree>(elem::ALT,
-							std::make_shared<raw_form_tree>(elem::NONE, raw_term(forma_e)),
-							std::make_shared<raw_form_tree>(elem::NONE, raw_term(formb_e))));
-				
-				for(int_t i = 0; i < a; i++) {
-					for(int_t j = a; j < arity_num.num; j++) {
-						bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
-							fix_variables(quote_sym, qparams[i], iparams[i],
-								qparams[j], iparams[j]));
-					}
-				}
-				
-				raw_rule rr(head_e);
-				rr.prft = std::shared_ptr<raw_form_tree>(bodie);
-				rp.r.push_back(rr);
-			}
+			// Interpret forall
+			generate_quantified_eval(rp, QFORALL, elem::FORALL, quote_sym,
+				aux_rel, iparams, qparams);
+			// Interpret exists
+			generate_quantified_eval(rp, QEXISTS, elem::EXISTS, quote_sym,
+				aux_rel, iparams, qparams);
+			// Interpret unique
+			generate_quantified_eval(rp, QUNIQUE, elem::UNIQUE, quote_sym,
+				aux_rel, iparams, qparams);
 		}
 	}
 }

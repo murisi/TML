@@ -403,7 +403,7 @@ struct raw_rule {
 	// prft != nullptr, otherwise it signifies that this rule is a fact.
 	std::vector<std::vector<raw_term>> b;
 	// Contains a tree representing the logical formula.
-	sprawformtree prft;
+	sprawformtree prft = nullptr;
 
 	enum etype { NONE, GOAL, TREE };
 	etype type = NONE;
@@ -427,6 +427,7 @@ struct raw_rule {
 		if (!_b.empty()) b = {_b};
 		calc_rawformterm();
 	}
+	raw_rule(const raw_term& h, sprawformtree &prft) : h({h}), prft(prft) {}
 	static raw_rule getdel(const raw_term& t) {
 		raw_rule r(t, t);
 		return r.h[0].neg = true, r;

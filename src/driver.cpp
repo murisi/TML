@@ -240,18 +240,11 @@ bool driver::is_formula_conjunctive(const sprawformtree &tree,
 			is_formula_conjunctive(tree->r, tms, variables);
 	} else if(tree->type == elem::EXISTS) {
 		elem elt = *(tree->l->el);
-		if(variables.find(elt) != variables.end()) {
-			elem prev_map = variables[elt];
-			variables[elt] = elem::fresh_var(d);
-			bool ans = is_formula_conjunctive(tree->r, tms, variables);
-			variables[elt] = prev_map;
-			return ans;
-		} else {
-			variables[elt] = elem::fresh_var(d);
-			bool ans = is_formula_conjunctive(tree->r, tms, variables);
-			variables.erase(elt);
-			return ans;
-		}
+		std::optional<elem> prev_map = at_optional(variables, elt);
+		variables[elt] = elem::fresh_var(d);
+		bool ans = is_formula_conjunctive(tree->r, tms, variables);
+		insert_optional(variables, elt, prev_map);
+		return ans;
 	} else {
 		return false;
 	}
@@ -338,6 +331,7 @@ std::vector<std::map<elem, elem>> driver::cqc(const raw_rule &rr1,
 		raw_prog nrp;
 		nrp.r = {cqc_rule};
 		simplify_formulas(nrp);
+		insert_exists(nrp);
 		std::cout << "Rule: " << nrp.r[0] << std::endl;
 		std::set<elem> universe;
 		std::set<raw_term> database;
@@ -582,8 +576,7 @@ raw_prog driver::read_prog(elem prog, const raw_prog &rp) {
  * q(EXISTS <id> <var name> <body id>).
  * q(NOT <id> <body id>).
  * q(AND <id> <body1 id> <body2 id>).
- * q(OR <id> <body1 id> <body2 id>).
- * q(TRUE <id>). */
+ * q(OR <id> <body1 id> <body2 id>). */
 
 void driver::transform_quotes(raw_prog &rp) {
 	for(size_t oridx = 0; oridx < rp.r.size(); oridx++) {
@@ -1141,8 +1134,10 @@ void driver::reduce_universe(const elem &var, const raw_rule &rul,
  * the logical formulas to remove from the universe of each quantification,
  * elements that could never satisfy their inner formula. */
 
-void driver::populate_universes(const raw_form_tree &t, std::set<elem> &universe,
-		std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database) {
+void driver::populate_universes(const raw_form_tree &t,
+		std::set<elem> &universe,
+		std::map<const elem*, std::set<elem>> &universes,
+		std::set<raw_term> &database) {
 	switch(t.type) {
 		case elem::IMPLIES:
 			populate_universes(*t.l, universe, universes, database);
@@ -1166,25 +1161,25 @@ void driver::populate_universes(const raw_form_tree &t, std::set<elem> &universe
 		case elem::EXISTS: {
 			populate_universes(*t.r, universe, universes, database);
 			std::set<elem> universe2 = universe;
-			elem elt = *(t.l->el);
+			const elem &elt = *(t.l->el);
 			reduce_universe(elt, *t.r, universe2, database);
-			universes[elt] = universe2;
+			universes[&elt] = universe2;
 			break;
 		} case elem::UNIQUE: {
 			populate_universes(*t.r, universe, universes, database);
 			std::set<elem> universe2 = universe;
-			elem elt = *(t.l->el);
+			const elem &elt = *(t.l->el);
 			reduce_universe(elt, *t.r, universe2, database);
-			universes[elt] = universe2;
+			universes[&elt] = universe2;
 			break;
 		} case elem::NONE:
 			break;
 		case elem::FORALL: {
 			populate_universes(*t.r, universe, universes, database);
 			std::set<elem> universe2 = universe;
-			elem elt = *(t.l->el);
+			const elem &elt = *(t.l->el);
 			reduce_universe(elt, *t.r, universe2, database);
-			universes[elt] = universe2;
+			universes[&elt] = universe2;
 			break;
 		} default:
 			assert(false); //should never reach here
@@ -1195,14 +1190,16 @@ void driver::populate_universes(const raw_form_tree &t, std::set<elem> &universe
  * the logical formulas to remove from the universe of each quantification,
  * elements that could never satisfy their inner formula. */
 
-void driver::populate_universes(const raw_rule &rul, std::set<elem> &universe,
-		std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database) {
+void driver::populate_universes(const raw_rule &rul,
+		std::set<elem> &universe,
+		std::map<const elem*, std::set<elem>> &universes,
+		std::set<raw_term> &database) {
 	for(const raw_term &head : rul.h) {
 		for(const elem &elt : head.e) {
 			if(elt.type == elem::VAR) {
 				std::set<elem> universe2 = universe;
 				reduce_universe(elt, rul, universe2, database);
-				universes[elt] = universe2;
+				universes[&elt] = universe2;
 			}
 		}
 	}
@@ -1243,7 +1240,7 @@ bool driver::evaluate_term(const raw_term &query, std::map<elem, elem> &bindings
  * quantification. */
 
 bool driver::evaluate_form_tree(const raw_form_tree &t,
-		const std::map<elem, std::set<elem>> &universes,
+		const std::map<const elem*, std::set<elem>> &universes,
 		std::map<elem, elem> &bindings, std::set<raw_term> &database) {
 	switch(t.type) {
 		case elem::IMPLIES:
@@ -1265,33 +1262,41 @@ bool driver::evaluate_form_tree(const raw_form_tree &t,
 			return !evaluate_form_tree(*t.l, universes, bindings, database);
 		case elem::EXISTS: {
 			const elem &var = *(t.l->el);
-			for(const elem &elt : universes.at(var)) {
+			std::optional<elem> prev_map = at_optional(bindings, var);
+			for(const elem &elt : universes.at(&var)) {
 				bindings[var] = elt;
 				if(evaluate_form_tree(*t.r, universes, bindings, database)) {
+					insert_optional(bindings, var, prev_map);
 					return true;
 				}
 			}
+			insert_optional(bindings, var, prev_map);
 			return false;
 		} case elem::UNIQUE: {
 			size_t count = 0;
 			const elem &var = *(t.l->el);
-			for(const elem &elt : universes.at(var)) {
+			std::optional<elem> prev_map = at_optional(bindings, var);
+			for(const elem &elt : universes.at(&var)) {
 				bindings[var] = elt;
 				if(evaluate_form_tree(*t.r, universes, bindings, database)) {
 					count++;
 				}
 			}
+			insert_optional(bindings, var, prev_map);
 			return count == 1;
 		} case elem::NONE:
 			return evaluate_term(*t.rt, bindings, database);
 		case elem::FORALL: {
 			const elem &var = *(t.l->el);
-			for(const elem &elt : universes.at(var)) {
+			std::optional<elem> prev_map = at_optional(bindings, var);
+			for(const elem &elt : universes.at(&var)) {
 				bindings[var] = elt;
 				if(!evaluate_form_tree(*t.r, universes, bindings, database)) {
+					insert_optional(bindings, var, prev_map);
 					return false;
 				}
 			}
+			insert_optional(bindings, var, prev_map);
 			return true;
 		} default:
 			assert(false); //should never reach here
@@ -1302,14 +1307,15 @@ bool driver::evaluate_form_tree(const raw_form_tree &t,
 /* Interpret a rule. That is, run a rule over the current databaseand add the
  * discovered facts to the database. */
 
-void driver::interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
-		const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings,
-		std::set<raw_term> &database) {
+void driver::interpret_rule(size_t hd_idx, size_t inp_idx,
+		const raw_rule &rul,
+		const std::map<const elem*, std::set<elem>> &universes,
+		std::map<elem, elem> &bindings, std::set<raw_term> &database) {
 	const raw_term &head = rul.h[hd_idx];
 	if(inp_idx < head.e.size() - 3) {
 		if(head.e[inp_idx + 2].type == elem::VAR) {
 			const elem &var = head.e[inp_idx + 2];
-			for(const elem &elt : universes.at(var)) {
+			for(const elem &elt : universes.at(&var)) {
 				bindings[var] = elt;
 				interpret_rule(hd_idx, inp_idx + 1, rul, universes, bindings, database);
 			}
@@ -1405,7 +1411,7 @@ void driver::naive_pfp(const raw_prog &rp, std::set<elem> &universe,
 		prev_database = database;
 		for(const raw_rule &rr : rp.r) {
 			for(size_t hd_idx = 0; hd_idx < rr.h.size(); hd_idx++) {
-				std::map<elem, std::set<elem>> universes;
+				std::map<const elem*, std::set<elem>> universes;
 				populate_universes(rr, universe, universes, database);
 				std::map<elem, elem> bindings;
 				interpret_rule(hd_idx, 0, rr, universes, bindings, database);

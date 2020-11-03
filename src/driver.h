@@ -153,8 +153,8 @@ class driver {
 	void populate_free_variables(const raw_form_tree &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	void interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
-		const std::map<elem, std::set<elem>> &universes, std::map<elem, elem> &bindings,
-		std::set<raw_term> &database);
+		const std::map<const elem*, std::set<elem>> &universes,
+		std::map<elem, elem> &bindings, std::set<raw_term> &database);
 	bool evaluate_term(const raw_term &rt, std::map<elem, elem> &bindings,
 		std::set<raw_term> &database);
 	sprawformtree fix_variables(const elem &quote_sym, const elem &qva,
@@ -162,7 +162,7 @@ class driver {
 	sprawformtree fix_symbols(const elem &quote_sym, const elem &qva,
 		const elem &rva);
 	bool evaluate_form_tree(const raw_form_tree &rft,
-		const std::map<elem, std::set<elem>> &universes,
+		const std::map<const elem*, std::set<elem>> &universes,
 		std::map<elem, elem> &bindings, std::set<raw_term> &database);
 	void reduce_universe(const elem &var, const raw_form_tree &t,
 		std::set<elem> &universe, std::set<raw_term> &database);
@@ -171,9 +171,12 @@ class driver {
 	void reduce_universe(const elem &var, const raw_rule &rul,
 		std::set<elem> &universe, std::set<raw_term> &database);
 	void populate_universes(const raw_rule &rul, std::set<elem> &universe,
-		std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database);
-	void populate_universes(const raw_form_tree &rft, std::set<elem> &universe,
-		std::map<elem, std::set<elem>> &universes, std::set<raw_term> &database);
+		std::map<const elem*, std::set<elem>> &universes,
+		std::set<raw_term> &database);
+	void populate_universes(const raw_form_tree &rft,
+		std::set<elem> &universe,
+		std::map<const elem*, std::set<elem>> &universes,
+		std::set<raw_term> &database);
 	void naive_pfp(const raw_prog &rp, std::set<elem> &universe,
 		std::set<raw_term> &database);
 	raw_prog reify(const raw_prog& p);

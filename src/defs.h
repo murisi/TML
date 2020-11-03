@@ -85,6 +85,25 @@ template<template<class, class, class ...> class M, typename K, typename V, type
 	}
 }
 
+template<template<class, class, class ...> class M, typename K, typename V, typename ... Args>
+		std::optional<V> at_optional(const M<K, V, Args ...> &m, const K &k) {
+	auto it = m.find(k);
+	if(it != m.end()) {
+		return it->second;
+	} else {
+		return std::nullopt;
+	}
+}
+
+template<template<class, class, class ...> class M, typename K, typename V, typename ... Args>
+		void insert_optional(M<K, V, Args ...> &m, const K &k, const std::optional<V> &v) {
+  if(v) {
+    m[k] = *v;
+  } else {
+    m.erase(k);
+  }
+}
+
 #ifdef _WIN32
 std::string temp_filename();
 #else

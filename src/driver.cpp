@@ -527,7 +527,6 @@ raw_prog driver::read_prog(elem prog, const raw_prog &rp) {
 	nrp.builtins = rp.builtins;
 	nrp.parse(prog_in, tbl->get_dict());
 	simplify_formulas(nrp);
-	std::cout << nrp;
 	return nrp;
 }
 
@@ -650,7 +649,7 @@ void driver::generate_binary_eval(raw_prog &rp, const int_t qtype,
 			formb_e.push_back(und_sym);
 		}
 		formb_e.push_back(elem_closep);
-		std::shared_ptr<raw_form_tree> bodie =
+		sprawformtree bodie =
 			std::make_shared<raw_form_tree>(elem::AND,
 				std::make_shared<raw_form_tree>(elem::NONE, quote),
 				std::make_shared<raw_form_tree>(eltype,
@@ -777,7 +776,7 @@ void driver::transform_evals(raw_prog &rp) {
 					body_e.push_back(iargs[i]);
 				}
 				body_e.push_back(elem_closep);
-				std::shared_ptr<raw_form_tree> bodie =
+				sprawformtree bodie =
 					std::make_shared<raw_form_tree>(elem::AND,
 						std::make_shared<raw_form_tree>(elem::AND,
 							std::make_shared<raw_form_tree>(elem::NONE, qrule),
@@ -837,7 +836,7 @@ void driver::transform_evals(raw_prog &rp) {
 					real_e.push_back(iparams[i]);
 				}
 				real_e.push_back(elem_closep);
-				std::shared_ptr<raw_form_tree> bodie =
+				sprawformtree bodie =
 					std::make_shared<raw_form_tree>(elem::AND,
 						std::make_shared<raw_form_tree>(elem::NONE, raw_term(quote_e)),
 						std::make_shared<raw_form_tree>(elem::NONE, raw_term(real_e)));

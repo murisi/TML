@@ -235,6 +235,8 @@ bool driver::is_formula_conjunctive(const sprawformtree &tree,
 	} else if(tree->type == elem::AND) {
 		return is_formula_conjunctive(tree->l, tms) &&
 			is_formula_conjunctive(tree->r, tms);
+	} else if(tree->type == elem::EXISTS) {
+		return is_formula_conjunctive(tree->r, tms);
 	} else {
 		return false;
 	}
@@ -313,6 +315,9 @@ std::vector<std::map<elem, elem>> driver::cqc(const raw_rule &rr1,
 		head_e.push_back(elem_closep);
 		raw_rule cqc_rule = raw_rule(raw_term(head_e));
 		cqc_rule.prft = constraints;
+		raw_prog nrp;
+		nrp.r = {cqc_rule};
+		simplify_formulas(nrp);
 		return {};
 	} else {
 		return {};
@@ -1297,9 +1302,18 @@ void driver::interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
 
 void driver::populate_universe(const raw_term &rt,
 		std::set<elem> &universe) {
-	for(size_t i = 2; i < rt.e.size() - 1; i++) {
-		if(rt.e[i].type != elem::VAR) {
-			universe.insert(rt.e[i]);
+	if(rt.extype == raw_term::REL) {
+		for(size_t i = 2; i < rt.e.size() - 1; i++) {
+			if(rt.e[i].type != elem::VAR) {
+				universe.insert(rt.e[i]);
+			}
+		}
+	} else if(rt.extype == raw_term::EQ) {
+		if(rt.e[0].type != elem::VAR) {
+			universe.insert(rt.e[0]);
+		}
+		if(rt.e[2].type != elem::VAR) {
+			universe.insert(rt.e[2]);
 		}
 	}
 }

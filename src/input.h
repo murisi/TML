@@ -357,11 +357,13 @@ struct raw_term {
 	}
 	bool is_true() {
 		return extype == raw_term::EQ && e.size() == 3 &&
-			e[1].type == elem::EQ && (e[0] == e[2]) != neg;
+			e[1].type == elem::EQ && e[0].type != elem::VAR &&
+			e[2].type != elem::VAR && (e[0] == e[2]) != neg;
 	}
 	bool is_false() {
 		return extype == raw_term::EQ && e.size() == 3 &&
-			e[1].type == elem::EQ && (e[0] != e[2]) != neg;
+			e[1].type == elem::EQ && e[0].type != elem::VAR &&
+			e[2].type != elem::VAR && (e[0] != e[2]) != neg;
 	}
 };
 

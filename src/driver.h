@@ -115,13 +115,14 @@ class driver {
 	sprawformtree inline_rule(const raw_term &rt1, const raw_term &rt2,
 		const raw_rule &rr);
 	elem hygienic_copy(const elem &e, std::map<elem, elem> &vars);
-	sprawformtree hygienic_copy(sprawformtree &rft, std::map<elem, elem> vars);
+	raw_term hygienic_copy(raw_term rt, std::map<elem, elem> &vars);
+	sprawformtree hygienic_copy(sprawformtree &rft, std::map<elem, elem> &vars);
 	sprawformtree inline_rule(const raw_term &rt,
 		const std::vector<raw_rule> &inlines);
-	raw_term hygienic_copy(raw_term rt, std::map<elem, elem> vars);
 	bool is_formula_conjunctive(const sprawformtree &tree,
-		std::vector<raw_term> &tms);
-	bool is_rule_conjunctive(const raw_rule &rr, std::vector<raw_term> &tms);
+		std::vector<raw_term> &tms, std::map<elem, elem> &variables);
+	bool is_rule_conjunctive(const raw_rule &rr, std::vector<raw_term> &hds,
+		std::vector<raw_term> &tms, std::map<elem, elem> &variables);
 	sprawformtree make_cqc_constraints(std::vector<raw_term> terms1,
 		std::map<elem, elem> map1, std::vector<raw_term> terms2,
 		std::map<elem, elem> map2);

@@ -118,7 +118,7 @@ elem driver::hygienic_copy(const elem &e, std::map<elem, elem> &vars) {
  * according to the supplied map. If a variable is not found in the map,
  * then a fresh one is generated. */
 
-raw_term driver::hygienic_copy(raw_term rt, std::map<elem, elem> vars) {
+raw_term driver::hygienic_copy(raw_term rt, std::map<elem, elem> &vars) {
 	for(elem &e : rt.e) {
 		e = hygienic_copy(e, vars);
 	}
@@ -130,7 +130,7 @@ raw_term driver::hygienic_copy(raw_term rt, std::map<elem, elem> vars) {
  * then a fresh one is generated. */
 
 sprawformtree driver::hygienic_copy(sprawformtree &rft,
-		std::map<elem, elem> vars) {
+		std::map<elem, elem> &vars) {
 	switch(rft->type) {
 		case elem::IMPLIES:
 			return std::make_shared<raw_form_tree>(elem::IMPLIES,
@@ -228,15 +228,30 @@ sprawformtree driver::inline_rule(const raw_term &rt,
  * is a conjunctive formula, then the query is also conjunctive. */
 
 bool driver::is_formula_conjunctive(const sprawformtree &tree,
-		std::vector<raw_term> &tms) {
+		std::vector<raw_term> &tms, std::map<elem, elem> &variables) {
+	// Get dictionary for generating fresh variables
+	dict_t &d = tbl->get_dict();
+	
 	if(tree->type == elem::NONE) {
-		tms.push_back(*tree->rt);
+		tms.push_back(hygienic_copy(*tree->rt, variables));
 		return true;
 	} else if(tree->type == elem::AND) {
-		return is_formula_conjunctive(tree->l, tms) &&
-			is_formula_conjunctive(tree->r, tms);
+		return is_formula_conjunctive(tree->l, tms, variables) &&
+			is_formula_conjunctive(tree->r, tms, variables);
 	} else if(tree->type == elem::EXISTS) {
-		return is_formula_conjunctive(tree->r, tms);
+		elem elt = *(tree->l->el);
+		if(variables.find(elt) != variables.end()) {
+			elem prev_map = variables[elt];
+			variables[elt] = elem::fresh_var(d);
+			bool ans = is_formula_conjunctive(tree->r, tms, variables);
+			variables[elt] = prev_map;
+			return ans;
+		} else {
+			variables[elt] = elem::fresh_var(d);
+			bool ans = is_formula_conjunctive(tree->r, tms, variables);
+			variables.erase(elt);
+			return ans;
+		}
 	} else {
 		return false;
 	}
@@ -246,8 +261,12 @@ bool driver::is_formula_conjunctive(const sprawformtree &tree,
  * return the terms that are ultimately conjuncted into a list. */
 
 bool driver::is_rule_conjunctive(const raw_rule &rr,
-		std::vector<raw_term> &tms) {
-	return is_formula_conjunctive(rr.prft, tms);
+		std::vector<raw_term> &hds, std::vector<raw_term> &tms,
+		std::map<elem, elem> &variables) {
+	for(const raw_term &rt : rr.h) {
+		hds.push_back(hygienic_copy(rt, variables));
+	}
+	return is_formula_conjunctive(rr.prft, tms, variables);
 }
 
 sprawformtree driver::make_cqc_constraints(std::vector<raw_term> terms1,
@@ -281,31 +300,33 @@ sprawformtree driver::make_cqc_constraints(std::vector<raw_term> terms1,
 std::vector<std::map<elem, elem>> driver::cqc(const raw_rule &rr1,
 		const raw_rule &rr2) {
 	dict_t &d = tbl->get_dict();
-	std::vector<raw_term> terms1, terms2;
+	std::vector<raw_term> heads1, bodie1, heads2, bodie2;
+	std::map<elem, elem> hyg1, hyg2;
 	// The rules must be conjunctive as per precondition
-	if(is_rule_conjunctive(rr1, terms1) && is_rule_conjunctive(rr2, terms2)) {
+	if(is_rule_conjunctive(rr1, heads1, bodie1, hyg1) &&
+			is_rule_conjunctive(rr2, heads2, bodie2, hyg2)) {
 		// The terms of the conjunctive queries must also be uninterpreted
-		for(const raw_term &rt : terms1) {
+		for(const raw_term &rt : bodie1) {
 			if(rt.extype != raw_term::REL) return {};
 		}
-		for(const raw_term &rt : terms2) {
+		for(const raw_term &rt : bodie2) {
 			if(rt.extype != raw_term::REL) return {};
 		}
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
 		std::map<elem, elem> freeze_map;
-		freeze_vars(rr1.h, freeze_map);
-		freeze_vars(terms1, freeze_map);
+		freeze_vars(heads1, freeze_map);
+		freeze_vars(bodie1, freeze_map);
 		
 		// Encode the constraint that there is a homomorphism from rule 2
 		// to the frozen rule 1
 		sprawformtree constraints =
 			std::make_shared<raw_form_tree>(elem::AND,
-				make_cqc_constraints(terms1, freeze_map, terms2, {}),
-				make_cqc_constraints(rr2.h, {}, rr1.h, freeze_map));
+				make_cqc_constraints(bodie1, freeze_map, bodie2, {}),
+				make_cqc_constraints(heads2, {}, heads1, freeze_map));
 		
 		std::vector<elem> head_e = { elem::fresh_sym(d), elem_openp };
-		for(const raw_term &rt : terms2) {
+		for(const raw_term &rt : bodie2) {
 			for(const elem &e : rt.e) {
 				if(e.type == elem::VAR) {
 					head_e.push_back(e);
@@ -313,11 +334,19 @@ std::vector<std::map<elem, elem>> driver::cqc(const raw_rule &rr1,
 			}
 		}
 		head_e.push_back(elem_closep);
-		raw_rule cqc_rule = raw_rule(raw_term(head_e));
-		cqc_rule.prft = constraints;
+		raw_rule cqc_rule = raw_rule(raw_term(head_e), constraints);
 		raw_prog nrp;
 		nrp.r = {cqc_rule};
 		simplify_formulas(nrp);
+		std::cout << "Rule: " << nrp.r[0] << std::endl;
+		std::set<elem> universe;
+		std::set<raw_term> database;
+		naive_pfp(nrp, universe, database);
+		std::cout << "Fixed Point:" << std::endl << std::endl;
+		for(const raw_term &entry : database) {
+			std::cout << entry << "." << std::endl;
+		}
+		std::cout << std::endl << std::endl;
 		return {};
 	} else {
 		return {};

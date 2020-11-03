@@ -132,40 +132,22 @@ raw_term driver::hygienic_copy(raw_term rt, std::map<elem, elem> &vars) {
 sprawformtree driver::hygienic_copy(sprawformtree &rft,
 		std::map<elem, elem> &vars) {
 	switch(rft->type) {
-		case elem::IMPLIES:
-			return std::make_shared<raw_form_tree>(elem::IMPLIES,
-				hygienic_copy(rft->l, vars), hygienic_copy(rft->r, vars));
-		case elem::COIMPLIES:
-			return std::make_shared<raw_form_tree>(elem::COIMPLIES,
-				hygienic_copy(rft->l, vars), hygienic_copy(rft->r, vars));
-		case elem::AND:
-			return std::make_shared<raw_form_tree>(elem::AND,
-				hygienic_copy(rft->l, vars), hygienic_copy(rft->r, vars));
+		case elem::IMPLIES: case elem::COIMPLIES: case elem::AND:
 		case elem::ALT:
-			return std::make_shared<raw_form_tree>(elem::ALT,
+			return std::make_shared<raw_form_tree>(rft->type,
 				hygienic_copy(rft->l, vars), hygienic_copy(rft->r, vars));
 		case elem::NOT:
 			return std::make_shared<raw_form_tree>(elem::NOT,
 				hygienic_copy(rft->l, vars));
-		case elem::EXISTS: {
+		case elem::EXISTS: case elem::UNIQUE: case elem::FORALL:  {
 			elem elt = hygienic_copy(*(rft->l->el), vars);
-			return std::make_shared<raw_form_tree>(elem::EXISTS,
-				std::make_shared<raw_form_tree>(elem::VAR, elt), 
-				hygienic_copy(rft->r, vars));
-		} case elem::UNIQUE: {
-			elem elt = hygienic_copy(*(rft->l->el), vars);
-			return std::make_shared<raw_form_tree>(elem::UNIQUE,
+			return std::make_shared<raw_form_tree>(rft->type,
 				std::make_shared<raw_form_tree>(elem::VAR, elt), 
 				hygienic_copy(rft->r, vars));
 		} case elem::NONE:
 			return std::make_shared<raw_form_tree>(elem::NONE,
 				hygienic_copy(*rft->rt, vars));
-		case elem::FORALL: {
-			elem elt = hygienic_copy(*(rft->l->el), vars);
-			return std::make_shared<raw_form_tree>(elem::FORALL,
-				std::make_shared<raw_form_tree>(elem::VAR, elt), 
-				hygienic_copy(rft->r, vars));
-		} default:
+		default:
 			assert(false); //should never reach here
 	}
 }
@@ -254,8 +236,8 @@ bool driver::is_formula_conjunctive(const sprawformtree &tree,
  * return the terms that are ultimately conjuncted into a list. */
 
 bool driver::is_rule_conjunctive(const raw_rule &rr,
-		std::vector<raw_term> &hds, std::vector<raw_term> &tms,
-		std::map<elem, elem> &variables) {
+		std::vector<raw_term> &hds, std::vector<raw_term> &tms) {
+	std::map<elem, elem> variables;
 	for(const raw_term &rt : rr.h) {
 		hds.push_back(hygienic_copy(rt, variables));
 	}
@@ -290,20 +272,18 @@ sprawformtree driver::make_cqc_constraints(std::vector<raw_term> terms1,
 	return conj;
 }
 
-std::vector<std::map<elem, elem>> driver::cqc(const raw_rule &rr1,
-		const raw_rule &rr2) {
+bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 	dict_t &d = tbl->get_dict();
 	std::vector<raw_term> heads1, bodie1, heads2, bodie2;
-	std::map<elem, elem> hyg1, hyg2;
 	// The rules must be conjunctive as per precondition
-	if(is_rule_conjunctive(rr1, heads1, bodie1, hyg1) &&
-			is_rule_conjunctive(rr2, heads2, bodie2, hyg2)) {
+	if(is_rule_conjunctive(rr1, heads1, bodie1) &&
+			is_rule_conjunctive(rr2, heads2, bodie2)) {
 		// The terms of the conjunctive queries must also be uninterpreted
 		for(const raw_term &rt : bodie1) {
-			if(rt.extype != raw_term::REL) return {};
+			if(rt.extype != raw_term::REL) return false;
 		}
 		for(const raw_term &rt : bodie2) {
-			if(rt.extype != raw_term::REL) return {};
+			if(rt.extype != raw_term::REL) return false;
 		}
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
@@ -318,6 +298,8 @@ std::vector<std::map<elem, elem>> driver::cqc(const raw_rule &rr1,
 				make_cqc_constraints(bodie1, freeze_map, bodie2, {}),
 				make_cqc_constraints(heads2, {}, heads1, freeze_map));
 		
+		// Make a head for these constrain equations that exports the
+		// homomorphism
 		std::vector<elem> head_e = { elem::fresh_sym(d), elem_openp };
 		for(const raw_term &rt : bodie2) {
 			for(const elem &e : rt.e) {
@@ -327,23 +309,18 @@ std::vector<std::map<elem, elem>> driver::cqc(const raw_rule &rr1,
 			}
 		}
 		head_e.push_back(elem_closep);
+		// Make the constraint rule and solve it
 		raw_rule cqc_rule = raw_rule(raw_term(head_e), constraints);
 		raw_prog nrp;
 		nrp.r = {cqc_rule};
 		simplify_formulas(nrp);
 		insert_exists(nrp);
-		std::cout << "Rule: " << nrp.r[0] << std::endl;
 		std::set<elem> universe;
 		std::set<raw_term> database;
 		naive_pfp(nrp, universe, database);
-		std::cout << "Fixed Point:" << std::endl << std::endl;
-		for(const raw_term &entry : database) {
-			std::cout << entry << "." << std::endl;
-		}
-		std::cout << std::endl << std::endl;
-		return {};
+		return !database.empty();
 	} else {
-		return {};
+		return false;
 	}
 }
 
@@ -1076,9 +1053,7 @@ void driver::reduce_universe(const elem &var, const raw_term &rt,
 void driver::reduce_universe(const elem &var, const raw_form_tree &t,
 		std::set<elem> &universe, std::set<raw_term> &database) {
 	switch(t.type) {
-		case elem::IMPLIES:
-			break;
-		case elem::COIMPLIES:
+		case elem::IMPLIES: case elem::COIMPLIES: case elem::NOT:
 			break;
 		case elem::AND:
 			reduce_universe(var, *t.l, universe, database);
@@ -1090,19 +1065,14 @@ void driver::reduce_universe(const elem &var, const raw_form_tree &t,
 			reduce_universe(var, *t.r, universe, database);
 			universe.insert(universe2.begin(), universe2.end());
 			break;
-		} case elem::NOT:
+		}	case elem::EXISTS: case elem::UNIQUE: case elem::FORALL: {
+			const elem &qvar = *(t.l->el);
+			if(qvar != var) {
+				reduce_universe(var, *t.r, universe, database);
+			}
 			break;
-		case elem::EXISTS:
-			reduce_universe(var, *t.r, universe, database);
-			break;
-		case elem::UNIQUE:
-			reduce_universe(var, *t.r, universe, database);
-			break;
-		case elem::NONE:
+		} case elem::NONE:
 			reduce_universe(var, *t.rt, universe, database);
-			break;
-		case elem::FORALL:
-			reduce_universe(var, *t.r, universe, database);
 			break;
 		default:
 			assert(false); //should never reach here

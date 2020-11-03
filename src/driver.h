@@ -122,14 +122,13 @@ class driver {
 	bool is_formula_conjunctive(const sprawformtree &tree,
 		std::vector<raw_term> &tms, std::map<elem, elem> &variables);
 	bool is_rule_conjunctive(const raw_rule &rr, std::vector<raw_term> &hds,
-		std::vector<raw_term> &tms, std::map<elem, elem> &variables);
+		std::vector<raw_term> &tms);
 	sprawformtree make_cqc_constraints(std::vector<raw_term> terms1,
 		std::map<elem, elem> map1, std::vector<raw_term> terms2,
 		std::map<elem, elem> map2);
 	void freeze_vars(const std::vector<raw_term> &terms,
 		std::map<elem, elem> &freeze_map);
-	std::vector<std::map<elem, elem>> cqc(const raw_rule &rr1,
-		const raw_rule &rr2);
+	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
 	void simplify_formula(sprawformtree &t);
 	void simplify_formulas(raw_prog &rp);

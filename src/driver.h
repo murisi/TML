@@ -123,9 +123,9 @@ class driver {
 		std::vector<raw_term> &tms, std::map<elem, elem> &variables);
 	bool is_rule_conjunctive(const raw_rule &rr, std::vector<raw_term> &hds,
 		std::vector<raw_term> &tms);
-	sprawformtree make_cqc_constraints(std::vector<raw_term> terms1,
-		std::map<elem, elem> map1, std::vector<raw_term> terms2,
-		std::map<elem, elem> map2);
+	sprawformtree make_cqc_constraints(const std::vector<raw_term> &terms1,
+		const std::map<elem, elem> &map1, const std::vector<raw_term> &terms2,
+		const std::map<elem, elem> &map2);
 	bool try_cqc_minimize(raw_rule &rr);
 	void cqc_minimize(raw_prog &rp);
 	void freeze_vars(const std::vector<raw_term> &terms,
@@ -149,7 +149,7 @@ class driver {
 	void populate_universe(const raw_prog &rp,
 		std::set<elem> &universe);
 	sprawformtree with_exists(sprawformtree t,
-		std::vector<elem> &bound_vars);
+		const std::vector<elem> &bound_vars);
 	void insert_exists(raw_rule &rr);
 	void insert_exists(raw_prog &rp);
 	void populate_free_variables(const raw_form_tree &t,

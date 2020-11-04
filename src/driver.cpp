@@ -244,9 +244,9 @@ bool driver::is_rule_conjunctive(const raw_rule &rr,
 	return is_formula_conjunctive(rr.prft, tms, variables);
 }
 
-sprawformtree driver::make_cqc_constraints(std::vector<raw_term> terms1,
-		std::map<elem, elem> map1, std::vector<raw_term> terms2,
-		std::map<elem, elem> map2) {
+sprawformtree driver::make_cqc_constraints(const std::vector<raw_term> &terms1,
+		const std::map<elem, elem> &map1, const std::vector<raw_term> &terms2,
+		const std::map<elem, elem> &map2) {
 	sprawformtree conj = std::make_shared<raw_form_tree>(elem::NONE, ttrue);
 	for(const raw_term &tm2 : terms2) {
 		sprawformtree disj =
@@ -293,18 +293,27 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 		
 		// Encode the constraint that there is a homomorphism from rule 2
 		// to the frozen rule 1
-		sprawformtree constraints =
-			std::make_shared<raw_form_tree>(elem::AND,
-				make_cqc_constraints(bodie1, freeze_map, bodie2, {}),
-				make_cqc_constraints(heads2, {}, heads1, freeze_map));
+		sprawformtree
+			constraints = std::make_shared<raw_form_tree>(elem::NONE, ttrue),
+			body_constraints = make_cqc_constraints(bodie1, freeze_map, bodie2, {});
+		for(const raw_term head1 : heads1) {
+			// Need to make sure that each frozen head of rule 1 corresponds
+			// to a head of rule 2, but not all at the same time - hence the
+			// existential quantifier insertion.
+			constraints = std::make_shared<raw_form_tree>(elem::AND,
+				constraints,
+				with_exists(std::make_shared<raw_form_tree>(elem::AND,
+					body_constraints,
+					make_cqc_constraints(heads2, {}, {head1}, freeze_map)), {}));
+		}
 		
 		// Make a head for these constrain equations. We don't actually need
 		// the homomorphism though, so an empty head is fine.
-		std::vector<elem> head_e =
-			{ elem::fresh_sym(d), elem_openp, elem_closep };
+		raw_term constraint_head
+			({ elem::fresh_sym(d), elem_openp, elem_closep });
 		
 		// Make the constraint rule and solve it
-		raw_rule cqc_rule = raw_rule(raw_term(head_e), constraints);
+		raw_rule cqc_rule = raw_rule(constraint_head, constraints);
 		raw_prog nrp;
 		nrp.r = {cqc_rule};
 		simplify_formulas(nrp);
@@ -331,6 +340,8 @@ bool driver::try_cqc_minimize(raw_rule &rr) {
 	if(is_rule_conjunctive(rr, heads1, bodie1)) {
 		heads2 = heads1;
 		bodie2 = bodie1;
+		// Let's see if we can remove a body term from the rule without
+		// affecting its behavior
 		for(size_t i = 0; i < bodie1.size(); i++) {
 			// bodie2 is currently equal to bodie1
 			bodie2.erase(bodie2.begin() + i);
@@ -347,6 +358,19 @@ bool driver::try_cqc_minimize(raw_rule &rr) {
 			}
 			bodie2.insert(bodie2.begin() + i, bodie1[i]);
 			// bodie2 is currently equal to bodie1
+		}
+		// Let's see if we can remove a head term from the rule without
+		// affecting its behavior. Operations are analogous to above.
+		for(size_t i = 0; i < heads1.size(); i++) {
+			heads2.erase(heads2.begin() + i);
+			raw_rule rr2(heads2, bodie2);
+			simplify_formula(rr2.prft);
+			insert_exists(rr2);
+			if(cqc(rr, rr2)) {
+				rr = rr2;
+				return true;
+			}
+			heads2.insert(heads2.begin() + i, heads1[i]);
 		}
 	}
 	return false;
@@ -985,18 +1009,7 @@ void driver::populate_free_variables(const raw_term &t,
 void driver::populate_free_variables(const raw_form_tree &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars) {
 	switch(t.type) {
-		case elem::IMPLIES:
-			populate_free_variables(*t.l, bound_vars, free_vars);
-			populate_free_variables(*t.r, bound_vars, free_vars);
-			break;
-		case elem::COIMPLIES:
-			populate_free_variables(*t.l, bound_vars, free_vars);
-			populate_free_variables(*t.r, bound_vars, free_vars);
-			break;
-		case elem::AND:
-			populate_free_variables(*t.l, bound_vars, free_vars);
-			populate_free_variables(*t.r, bound_vars, free_vars);
-			break;
+		case elem::IMPLIES: case elem::COIMPLIES: case elem::AND:
 		case elem::ALT:
 			populate_free_variables(*t.l, bound_vars, free_vars);
 			populate_free_variables(*t.r, bound_vars, free_vars);
@@ -1004,13 +1017,7 @@ void driver::populate_free_variables(const raw_form_tree &t,
 		case elem::NOT:
 			populate_free_variables(*t.l, bound_vars, free_vars);
 			break;
-		case elem::EXISTS: {
-			elem elt = *(t.l->el);
-			bound_vars.push_back(elt);
-			populate_free_variables(*t.r, bound_vars, free_vars);
-			bound_vars.pop_back();
-			break;
-		} case elem::UNIQUE: {
+		case elem::EXISTS: case elem::UNIQUE: case elem::FORALL: {
 			elem elt = *(t.l->el);
 			bound_vars.push_back(elt);
 			populate_free_variables(*t.r, bound_vars, free_vars);
@@ -1019,20 +1026,15 @@ void driver::populate_free_variables(const raw_form_tree &t,
 		} case elem::NONE: {
 			populate_free_variables(*t.rt, bound_vars, free_vars);
 			break;
-		} case elem::FORALL: {
-			elem elt = *(t.l->el);
-			bound_vars.push_back(elt);
-			populate_free_variables(*t.r, bound_vars, free_vars);
-			bound_vars.pop_back();
-			break;
 		} default:
 			assert(false); //should never reach here
 	}
 }
 
 sprawformtree driver::with_exists(sprawformtree t,
-		std::vector<elem> &bound_vars) {
+		const std::vector<elem> &bound_vars_tmp) {
 	std::set<elem> free_vars;
+	std::vector<elem> bound_vars = bound_vars_tmp;
 	populate_free_variables(*t, bound_vars, free_vars);
 	for(const elem &var : free_vars) {
 		t = std::make_shared<raw_form_tree>(elem::EXISTS,

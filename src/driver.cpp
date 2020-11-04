@@ -221,6 +221,9 @@ bool driver::is_formula_conjunctive(const sprawformtree &tree,
 		return is_formula_conjunctive(tree->l, tms, variables) &&
 			is_formula_conjunctive(tree->r, tms, variables);
 	} else if(tree->type == elem::EXISTS) {
+		// In the case of existence, we want to make sure that uses of the
+		// quantified variable receives new names as we put the formula into
+		// PNF.
 		elem elt = *(tree->l->el);
 		std::optional<elem> prev_map = at_optional(variables, elt);
 		variables[elt] = elem::fresh_var(d);
@@ -228,6 +231,8 @@ bool driver::is_formula_conjunctive(const sprawformtree &tree,
 		insert_optional(variables, elt, prev_map);
 		return ans;
 	} else {
+		// If tree is not a conjunction, existence, or term, then it cannot
+		// be a conjunctive formula.
 		return false;
 	}
 }
@@ -238,23 +243,34 @@ bool driver::is_formula_conjunctive(const sprawformtree &tree,
 bool driver::is_rule_conjunctive(const raw_rule &rr,
 		std::vector<raw_term> &hds, std::vector<raw_term> &tms) {
 	std::map<elem, elem> variables;
+	// Hygienic copies of head terms are made here so that the variables
+	// in the body receive the same names.
 	for(const raw_term &rt : rr.h) {
 		hds.push_back(hygienic_copy(rt, variables));
 	}
 	return is_formula_conjunctive(rr.prft, tms, variables);
 }
 
+/* Make an SAT formula encoding a homomorphism from terms2 to terms1
+ * through the given variable translation maps. Specifically, it is
+ * meant that each elem is looked up in the corresponding map before
+ * being used. */
+
 sprawformtree driver::make_cqc_constraints(const std::vector<raw_term> &terms1,
 		const std::map<elem, elem> &map1, const std::vector<raw_term> &terms2,
 		const std::map<elem, elem> &map2) {
 	sprawformtree conj = std::make_shared<raw_form_tree>(elem::NONE, ttrue);
+	// Each term2 should map to something
 	for(const raw_term &tm2 : terms2) {
 		sprawformtree disj =
 			std::make_shared<raw_form_tree>(elem::NONE, tfalse);
+		// And the mapping should be to some term1 with matching relation
+		// name and arity.
 		for(const raw_term &tm1 : terms1) {
 			if(tm1.e[0] == tm2.e[0] && tm1.e.size() == tm2.e.size()) {
 				sprawformtree constraint =
 					std::make_shared<raw_form_tree>(elem::NONE, ttrue);
+				// And each elem should correspond through the maps.
 				for(size_t i = 2; i < tm1.e.size() - 1; i++) {
 					constraint = std::make_shared<raw_form_tree>(elem::AND,
 						constraint,
@@ -263,14 +279,21 @@ sprawformtree driver::make_cqc_constraints(const std::vector<raw_term> &terms1,
 								{at_default(map2, tm2.e[i], tm2.e[i]), elem_eq,
 									at_default(map1, tm1.e[i], tm1.e[i])})));
 				}
+				// Disjunction is used since only one mapping for each term2
+				// is needed
 				disj = std::make_shared<raw_form_tree>(elem::ALT, disj,
 					constraint);
 			}
 		}
+		// Conjunction is used since no term1 should be without partner
 		conj = std::make_shared<raw_form_tree>(elem::AND, conj, disj);
 	}
 	return conj;
 }
+
+/* If rr1 and rr2 are both conjunctive queries, check if there is a
+ * homomorphism rr2 to rr1. By the homomorphism theorem, the existence
+ * of a homomorphism implies that rr1 is contained by rr2. */
 
 bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 	dict_t &d = tbl->get_dict();
@@ -1152,18 +1175,7 @@ void driver::populate_universes(const raw_form_tree &t,
 		std::map<const elem*, std::set<elem>> &universes,
 		std::set<raw_term> &database) {
 	switch(t.type) {
-		case elem::IMPLIES:
-			populate_universes(*t.l, universe, universes, database);
-			populate_universes(*t.r, universe, universes, database);
-			break;
-		case elem::COIMPLIES:
-			populate_universes(*t.l, universe, universes, database);
-			populate_universes(*t.r, universe, universes, database);
-			break;
-		case elem::AND:
-			populate_universes(*t.l, universe, universes, database);
-			populate_universes(*t.r, universe, universes, database);
-			break;
+		case elem::IMPLIES: case elem::COIMPLIES: case elem::AND:
 		case elem::ALT:
 			populate_universes(*t.l, universe, universes, database);
 			populate_universes(*t.r, universe, universes, database);
@@ -1171,14 +1183,7 @@ void driver::populate_universes(const raw_form_tree &t,
 		case elem::NOT:
 			populate_universes(*t.l, universe, universes, database);
 			break;
-		case elem::EXISTS: {
-			populate_universes(*t.r, universe, universes, database);
-			std::set<elem> universe2 = universe;
-			const elem &elt = *(t.l->el);
-			reduce_universe(elt, *t.r, universe2, database);
-			universes[&elt] = universe2;
-			break;
-		} case elem::UNIQUE: {
+		case elem::EXISTS: case elem::UNIQUE: case elem::FORALL: {
 			populate_universes(*t.r, universe, universes, database);
 			std::set<elem> universe2 = universe;
 			const elem &elt = *(t.l->el);
@@ -1187,14 +1192,7 @@ void driver::populate_universes(const raw_form_tree &t,
 			break;
 		} case elem::NONE:
 			break;
-		case elem::FORALL: {
-			populate_universes(*t.r, universe, universes, database);
-			std::set<elem> universe2 = universe;
-			const elem &elt = *(t.l->el);
-			reduce_universe(elt, *t.r, universe2, database);
-			universes[&elt] = universe2;
-			break;
-		} default:
+		default:
 			assert(false); //should never reach here
 	}
 }
@@ -1369,18 +1367,7 @@ void driver::populate_universe(const raw_term &rt,
 void driver::populate_universe(const sprawformtree &t,
 		std::set<elem> &universe) {
 	switch(t->type) {
-		case elem::IMPLIES:
-			populate_universe(t->l, universe);
-			populate_universe(t->r, universe);
-			break;
-		case elem::COIMPLIES:
-			populate_universe(t->l, universe);
-			populate_universe(t->r, universe);
-			break;
-		case elem::AND:
-			populate_universe(t->l, universe);
-			populate_universe(t->r, universe);
-			break;
+		case elem::IMPLIES: case elem::COIMPLIES: case elem::AND:
 		case elem::ALT:
 			populate_universe(t->l, universe);
 			populate_universe(t->r, universe);
@@ -1388,19 +1375,13 @@ void driver::populate_universe(const sprawformtree &t,
 		case elem::NOT:
 			populate_universe(t->l, universe);
 			break;
-		case elem::EXISTS: {
-			populate_universe(t->r, universe);
-			break;
-		} case elem::UNIQUE: {
+		case elem::EXISTS: case elem::UNIQUE: case elem::FORALL: {
 			populate_universe(t->r, universe);
 			break;
 		} case elem::NONE:
 			populate_universe(*t->rt, universe);
 			break;
-		case elem::FORALL: {
-			populate_universe(t->r, universe);
-			break;
-		} default:
+		default:
 			assert(false); //should never reach here
 	}
 }
@@ -1478,7 +1459,7 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 		insert_exists(p);
 		std::cout << "Existentially Quantified Program:" << std::endl << std::endl << p << std::endl;
 		cqc_minimize(p);
-		std::cout << "CQC Stripped Program:" << std::endl << std::endl << p << std::endl;
+		std::cout << "CQC Minimized Program:" << std::endl << std::endl << p << std::endl;
 		std::set<elem> universe;
 		std::set<raw_term> database;
 		naive_pfp(p, universe, database);

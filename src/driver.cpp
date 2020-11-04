@@ -321,7 +321,12 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 	}
 }
 
-bool driver::try_cqc_strip(raw_rule &rr) {
+/* If the given query is conjunctive, go through its terms and see if
+ * removing one of them can produce an equivalent query. If this is
+ * the case, modify the input query and indicate that this has happened
+ * through the return flag. */
+
+bool driver::try_cqc_minimize(raw_rule &rr) {
 	std::vector<raw_term> heads1, bodie1, heads2, bodie2;
 	if(is_rule_conjunctive(rr, heads1, bodie1)) {
 		heads2 = heads1;
@@ -347,9 +352,12 @@ bool driver::try_cqc_strip(raw_rule &rr) {
 	return false;
 }
 
-void driver::cqc_strip(raw_prog &rp) {
+/* Do the maximal amount of query minimization on each conjunctive query
+ * in the given program. */
+
+void driver::cqc_minimize(raw_prog &rp) {
 	for(raw_rule &rr : rp.r) {
-		while(try_cqc_strip(rr));
+		while(try_cqc_minimize(rr));
 	}
 }
 
@@ -1467,7 +1475,7 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 		std::cout << "Evaled Program:" << std::endl << std::endl << p << std::endl;
 		insert_exists(p);
 		std::cout << "Existentially Quantified Program:" << std::endl << std::endl << p << std::endl;
-		cqc_strip(p);
+		cqc_minimize(p);
 		std::cout << "CQC Stripped Program:" << std::endl << std::endl << p << std::endl;
 		std::set<elem> universe;
 		std::set<raw_term> database;

@@ -298,17 +298,11 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 				make_cqc_constraints(bodie1, freeze_map, bodie2, {}),
 				make_cqc_constraints(heads2, {}, heads1, freeze_map));
 		
-		// Make a head for these constrain equations that exports the
-		// homomorphism
-		std::vector<elem> head_e = { elem::fresh_sym(d), elem_openp };
-		for(const raw_term &rt : bodie2) {
-			for(const elem &e : rt.e) {
-				if(e.type == elem::VAR) {
-					head_e.push_back(e);
-				}
-			}
-		}
-		head_e.push_back(elem_closep);
+		// Make a head for these constrain equations. We don't actually need
+		// the homomorphism though, so an empty head is fine.
+		std::vector<elem> head_e =
+			{ elem::fresh_sym(d), elem_openp, elem_closep };
+		
 		// Make the constraint rule and solve it
 		raw_rule cqc_rule = raw_rule(raw_term(head_e), constraints);
 		raw_prog nrp;
@@ -318,9 +312,44 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 		std::set<elem> universe;
 		std::set<raw_term> database;
 		naive_pfp(nrp, universe, database);
+		
+		// The presence of at least one result proves existence of
+		// homomorphism
 		return !database.empty();
 	} else {
 		return false;
+	}
+}
+
+bool driver::try_cqc_strip(raw_rule &rr) {
+	std::vector<raw_term> heads1, bodie1, heads2, bodie2;
+	if(is_rule_conjunctive(rr, heads1, bodie1)) {
+		heads2 = heads1;
+		bodie2 = bodie1;
+		for(size_t i = 0; i < bodie1.size(); i++) {
+			// bodie2 is currently equal to bodie1
+			bodie2.erase(bodie2.begin() + i);
+			// bodie2 missing element i, meaning that rule 2 contains rule 1
+			// Construct our candidate replacement rule
+			raw_rule rr2(heads2, bodie2);
+			simplify_formula(rr2.prft);
+			insert_exists(rr2);
+			if(cqc(rr2, rr)) {
+				// successful if condition implies rule 1 contains rule 2, hence
+				// rule 1 = rule 2
+				rr = rr2;
+				return true;
+			}
+			bodie2.insert(bodie2.begin() + i, bodie1[i]);
+			// bodie2 is currently equal to bodie1
+		}
+	}
+	return false;
+}
+
+void driver::cqc_strip(raw_prog &rp) {
+	for(raw_rule &rr : rp.r) {
+		while(try_cqc_strip(rr));
 	}
 }
 
@@ -1004,17 +1033,21 @@ sprawformtree driver::with_exists(sprawformtree t,
 	return t;
 }
 
+void driver::insert_exists(raw_rule &rr) {
+	if(rr.prft && rr.h.size() == 1) {
+		std::vector<elem> bound_vars;
+		for(const elem &e : rr.h[0].e) {
+			if(e.type == elem::VAR) {
+				bound_vars.push_back(e);
+			}
+		}
+		rr.prft = with_exists(rr.prft, bound_vars);
+	}
+}
+
 void driver::insert_exists(raw_prog &rp) {
 	for(raw_rule &rr : rp.r) {
-		if(rr.prft && rr.h.size() == 1) {
-			std::vector<elem> bound_vars;
-			for(const elem &e : rr.h[0].e) {
-				if(e.type == elem::VAR) {
-					bound_vars.push_back(e);
-				}
-			}
-			rr.prft = with_exists(rr.prft, bound_vars);
-		}
+		insert_exists(rr);
 	}
 }
 
@@ -1434,9 +1467,8 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 		std::cout << "Evaled Program:" << std::endl << std::endl << p << std::endl;
 		insert_exists(p);
 		std::cout << "Existentially Quantified Program:" << std::endl << std::endl << p << std::endl;
-		for(const raw_rule &rr : p.r) {
-			cqc(rr, rr);
-		}
+		cqc_strip(p);
+		std::cout << "CQC Stripped Program:" << std::endl << std::endl << p << std::endl;
 		std::set<elem> universe;
 		std::set<raw_term> database;
 		naive_pfp(p, universe, database);

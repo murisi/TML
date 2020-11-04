@@ -126,6 +126,8 @@ class driver {
 	sprawformtree make_cqc_constraints(std::vector<raw_term> terms1,
 		std::map<elem, elem> map1, std::vector<raw_term> terms2,
 		std::map<elem, elem> map2);
+	bool try_cqc_strip(raw_rule &rr);
+	void cqc_strip(raw_prog &rp);
 	void freeze_vars(const std::vector<raw_term> &terms,
 		std::map<elem, elem> &freeze_map);
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
@@ -148,6 +150,7 @@ class driver {
 		std::set<elem> &universe);
 	sprawformtree with_exists(sprawformtree t,
 		std::vector<elem> &bound_vars);
+	void insert_exists(raw_rule &rr);
 	void insert_exists(raw_prog &rp);
 	void populate_free_variables(const raw_form_tree &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);

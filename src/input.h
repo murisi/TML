@@ -429,6 +429,11 @@ struct raw_rule {
 		if (!_b.empty()) b = {_b};
 		calc_rawformterm();
 	}
+	raw_rule(const std::vector<raw_term> &h,
+			const std::vector<raw_term>& _b) : h(h) {
+		if (!_b.empty()) b = {_b};
+		calc_rawformterm();
+	}
 	raw_rule(const raw_term& h, sprawformtree &prft) : h({h}), prft(prft) {}
 	static raw_rule getdel(const raw_term& t) {
 		raw_rule r(t, t);

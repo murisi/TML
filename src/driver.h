@@ -132,7 +132,6 @@ class driver {
 		std::map<elem, elem> &freeze_map);
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
-	void simplify_formula(sprawformtree &t);
 	void simplify_formulas(raw_prog &rp);
 	elem quote_elem(const elem &e, std::map<elem, elem> &variables);
 	elem quote_term(const raw_term &head, const elem &rel_name,

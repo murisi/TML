@@ -405,36 +405,42 @@ struct raw_rule {
 	// prft != nullptr, otherwise it signifies that this rule is a fact.
 	std::vector<std::vector<raw_term>> b;
 	// Contains a tree representing the logical formula.
-	sprawformtree prft = nullptr;
+	mutable sprawformtree prft = nullptr;
 
 	enum etype { NONE, GOAL, TREE };
 	etype type = NONE;
-	void calc_rawformterm();
 	bool parse(input* in, const raw_prog& prog);
-	bool parse_aux(input* in, const raw_prog& prog);
 	void clear() { h.clear(), b.clear(), type = NONE; }
-	raw_rule(){
-		calc_rawformterm();
-	}
-	raw_rule(etype type, const raw_term& t) : h({t}), type(type) {
-		calc_rawformterm();
-	}
-	raw_rule(const raw_term& t) : raw_rule(NONE, t) {
-		calc_rawformterm();
-	}
-	raw_rule(const raw_term& h, const raw_term& b) : h({h}), b({{b}}) {
-		calc_rawformterm();
-	}
+	raw_rule(){}
+	raw_rule(etype type, const raw_term& t) : h({t}), type(type) {}
+	raw_rule(const raw_term& t) : raw_rule(NONE, t) {}
+	raw_rule(const raw_term& h, const raw_term& b) : h({h}), b({{b}}) {}
 	raw_rule(const raw_term& h, const std::vector<raw_term>& _b) : h({h}) {
 		if (!_b.empty()) b = {_b};
-		calc_rawformterm();
 	}
 	raw_rule(const std::vector<raw_term> &h,
 			const std::vector<raw_term>& _b) : h(h) {
 		if (!_b.empty()) b = {_b};
-		calc_rawformterm();
 	}
-	raw_rule(const raw_term& h, sprawformtree &prft) : h({h}), prft(prft) {}
+	raw_rule(const raw_term& h, const sprawformtree &prft) : h({h}), prft(prft) {}
+	// Clear b and set prft
+	void set_prft(const sprawformtree &_prft) {
+		prft = _prft;
+		b.clear();
+	}
+	// Clear prft and set b
+	void set_b(const std::vector<std::vector<raw_term>> &_b) {
+		b = _b;
+		prft = nullptr;
+	}
+	// If prft not set, convert b to prft, then return prft
+	sprawformtree get_prft() const;
+	// Return true iff b not empty or prft represents true
+	bool is_b();
+	// Returns b in an option type predicated on is_b
+	std::optional<std::vector<std::vector<raw_term>>> get_b() {
+		return is_b() ? std::optional<std::vector<std::vector<raw_term>>>(b) : std::nullopt;
+	}
 	static raw_rule getdel(const raw_term& t) {
 		raw_rule r(t, t);
 		return r.h[0].neg = true, r;
@@ -478,6 +484,7 @@ struct raw_form_tree {
 		if (el) delete el, el = NULL;
 	}
 	void printTree(int level =0 );
+	static sprawformtree simplify_formula(sprawformtree &t);
 };
 struct raw_sof {
 	const raw_prog& prog;

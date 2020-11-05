@@ -169,7 +169,7 @@ sprawformtree driver::inline_rule(const raw_term &rt1, const raw_term &rt2,
 			}
 		}
 		std::map<elem, elem> var_map;
-		sprawformtree tmp = rr.prft;
+		sprawformtree tmp = rr.get_prft();
 		sprawformtree copy = hygienic_copy(tmp, var_map);
 		for(const auto &[el1, el2] : constraints) {
 			copy = std::make_shared<raw_form_tree>(elem::AND, copy,
@@ -248,7 +248,7 @@ bool driver::is_rule_conjunctive(const raw_rule &rr,
 	for(const raw_term &rt : rr.h) {
 		hds.push_back(hygienic_copy(rt, variables));
 	}
-	return is_formula_conjunctive(rr.prft, tms, variables);
+	return is_formula_conjunctive(rr.get_prft(), tms, variables);
 }
 
 /* Make an SAT formula encoding a homomorphism from terms2 to terms1
@@ -371,7 +371,6 @@ bool driver::try_cqc_minimize(raw_rule &rr) {
 			// bodie2 missing element i, meaning that rule 2 contains rule 1
 			// Construct our candidate replacement rule
 			raw_rule rr2(heads2, bodie2);
-			simplify_formula(rr2.prft);
 			insert_exists(rr2);
 			if(cqc(rr2, rr)) {
 				// successful if condition implies rule 1 contains rule 2, hence
@@ -387,7 +386,6 @@ bool driver::try_cqc_minimize(raw_rule &rr) {
 		for(size_t i = 0; i < heads1.size(); i++) {
 			heads2.erase(heads2.begin() + i);
 			raw_rule rr2(heads2, bodie2);
-			simplify_formula(rr2.prft);
 			insert_exists(rr2);
 			if(cqc(rr, rr2)) {
 				rr = rr2;
@@ -408,56 +406,10 @@ void driver::cqc_minimize(raw_prog &rp) {
 	}
 }
 
-void driver::simplify_formula(sprawformtree &t) {
-	switch(t->type) {
-		case elem::IMPLIES:
-			simplify_formula(t->l);
-			simplify_formula(t->r);
-			break;
-		case elem::COIMPLIES:
-			simplify_formula(t->l);
-			simplify_formula(t->r);
-			break;
-		case elem::AND:
-			simplify_formula(t->l);
-			simplify_formula(t->r);
-			if(t->l->type == elem::NONE && t->l->rt->is_true()) {
-				t = t->r;
-			} else if(t->r->type == elem::NONE && t->r->rt->is_true()) {
-				t = t->l;
-			}
-			break;
-		case elem::ALT:
-			simplify_formula(t->l);
-			simplify_formula(t->r);
-			if(t->l->type == elem::NONE && t->l->rt->is_false()) {
-				t = t->r;
-			} else if(t->r->type == elem::NONE && t->r->rt->is_false()) {
-				t = t->l;
-			}
-			break;
-		case elem::NOT:
-			simplify_formula(t->l);
-			break;
-		case elem::EXISTS: {
-			simplify_formula(t->r);
-			break;
-		} case elem::UNIQUE: {
-			simplify_formula(t->r);
-			break;
-		} case elem::NONE: {
-			break;
-		} case elem::FORALL: {
-			simplify_formula(t->r);
-			break;
-		} default:
-			assert(false); //should never reach here
-	}
-}
-
 void driver::simplify_formulas(raw_prog &rp) {
 	for(raw_rule &rr : rp.r) {
-		simplify_formula(rr.prft);
+		sprawformtree prft = rr.get_prft();
+		rr.set_prft(raw_form_tree::simplify_formula(prft));
 	}
 }
 
@@ -595,7 +547,7 @@ std::vector<elem> driver::quote_rule(const raw_rule &rr, const elem &rel_name,
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	std::vector<elem> rule_ids;
-	const elem body_id = quote_formula(rr.prft, rel_name, rp, variables);
+	const elem body_id = quote_formula(rr.get_prft(), rel_name, rp, variables);
 	for(int_t gidx = 0; gidx < ssize(rr.h); gidx++) {
 		const elem head_id = quote_term(rr.h[gidx], rel_name, rp, variables);
 		const elem rule_id = elem::fresh_sym(d);
@@ -786,12 +738,12 @@ void driver::generate_quantified_eval(raw_prog &rp, const int_t qtype,
 			fix_variables(quote_sym, forma_id, quantified_var,
 				qparams[i], iparams[i]));
 	}
-	raw_rule rr(head_e);
-	rr.prft = std::make_shared<raw_form_tree>(elem::AND,
-		std::make_shared<raw_form_tree>(elem::NONE, quote),
-		std::make_shared<raw_form_tree>(eltype,
-			std::make_shared<raw_form_tree>(elem::VAR, quantified_var),
-			quant));
+	raw_rule rr(head_e,
+		std::make_shared<raw_form_tree>(elem::AND,
+			std::make_shared<raw_form_tree>(elem::NONE, quote),
+			std::make_shared<raw_form_tree>(eltype,
+				std::make_shared<raw_form_tree>(elem::VAR, quantified_var),
+				quant)));
 	rp.r.push_back(rr);
 }
 
@@ -834,7 +786,7 @@ void driver::transform_evals(raw_prog &rp) {
 			// Allocate rule name, rule id, head id, body id
 			elem rule_name = elem::fresh_var(d), head_id = elem::fresh_var(d),
 				body_id = elem::fresh_var(d), elt_id = elem::fresh_var(d),
-				forma_id = elem::fresh_var(d), formb_id = elem::fresh_var(d);
+				forma_id = elem::fresh_var(d);
 			// Allocate interpreted and quoted arguments
 			std::vector<elem> iparams, qparams, iargs, qargs;
 			for(int_t a = 0; a < arity_num.num; a++) {
@@ -895,8 +847,7 @@ void driver::transform_evals(raw_prog &rp) {
 					}
 				}
 				raw_term rt(rhead_e);
-				raw_rule rr(rt);
-				rr.prft = bodie;
+				raw_rule rr(rt, bodie);
 				rp.r.push_back(rr);
 			}
 			
@@ -939,8 +890,7 @@ void driver::transform_evals(raw_prog &rp) {
 								qparams[j], iparams[j]));
 					}
 				}
-				raw_rule rr(head);
-				rr.prft = bodie;
+				raw_rule rr(head, bodie);
 				rp.r.push_back(rr);
 			}
 			
@@ -956,14 +906,14 @@ void driver::transform_evals(raw_prog &rp) {
 				raw_term quote({quote_sym, elem_openp, elem(QEQUALS), elt_id,
 					qparams[0], qparams[1], elem_closep});
 				raw_term equals(raw_term::EQ, {iparams[0], elem_eq, iparams[1]});
-				raw_rule rr(head_e);
-				rr.prft = std::make_shared<raw_form_tree>(elem::AND,
+				raw_rule rr(head_e,
 					std::make_shared<raw_form_tree>(elem::AND,
-						std::make_shared<raw_form_tree>(elem::NONE, quote),
-						std::make_shared<raw_form_tree>(elem::NONE, equals)),
-					std::make_shared<raw_form_tree>(elem::AND,
-						fix_symbols(quote_sym, qparams[0], iparams[0]),
-						fix_symbols(quote_sym, qparams[1], iparams[1])));
+						std::make_shared<raw_form_tree>(elem::AND,
+							std::make_shared<raw_form_tree>(elem::NONE, quote),
+							std::make_shared<raw_form_tree>(elem::NONE, equals)),
+						std::make_shared<raw_form_tree>(elem::AND,
+							fix_symbols(quote_sym, qparams[0], iparams[0]),
+							fix_symbols(quote_sym, qparams[1], iparams[1]))));
 				rp.r.push_back(rr);
 			}
 			
@@ -983,11 +933,11 @@ void driver::transform_evals(raw_prog &rp) {
 					neg_e.push_back(iparams[i]);
 				}
 				neg_e.push_back(elem_closep);
-				raw_rule rr(head_e);
-				rr.prft = std::make_shared<raw_form_tree>(elem::AND,
-					std::make_shared<raw_form_tree>(elem::NONE, quote),
-					std::make_shared<raw_form_tree>(elem::NOT,
-						std::make_shared<raw_form_tree>(elem::NONE, neg_e)));
+				raw_rule rr(head_e,
+					std::make_shared<raw_form_tree>(elem::AND,
+						std::make_shared<raw_form_tree>(elem::NONE, quote),
+						std::make_shared<raw_form_tree>(elem::NOT,
+							std::make_shared<raw_form_tree>(elem::NONE, neg_e))));
 				rp.r.push_back(rr);
 			}
 			
@@ -1067,14 +1017,14 @@ sprawformtree driver::with_exists(sprawformtree t,
 }
 
 void driver::insert_exists(raw_rule &rr) {
-	if(rr.prft && rr.h.size() == 1) {
+	if(rr.get_prft() && rr.h.size() == 1) {
 		std::vector<elem> bound_vars;
 		for(const elem &e : rr.h[0].e) {
 			if(e.type == elem::VAR) {
 				bound_vars.push_back(e);
 			}
 		}
-		rr.prft = with_exists(rr.prft, bound_vars);
+		rr.set_prft(with_exists(rr.get_prft(), bound_vars));
 	}
 }
 
@@ -1151,19 +1101,7 @@ void driver::reduce_universe(const elem &var, const raw_form_tree &t,
 
 void driver::reduce_universe(const elem &var, const raw_rule &rul,
 		std::set<elem> &universe, std::set<raw_term> &database) {
-	if(!rul.b.empty()) {
-		std::set<elem> universe3;
-		for(const std::vector<raw_term> &bodie : rul.b) {
-			std::set<elem> universe2 = universe;
-			for(const raw_term &rt : bodie) {
-				reduce_universe(var, rt, universe2, database);
-			}
-			universe3.insert(universe2.begin(), universe2.end());
-		}
-		universe = universe3;
-	} else if(rul.prft) {
-		reduce_universe(var, *rul.prft, universe, database);
-	}
+	reduce_universe(var, *rul.get_prft(), universe, database);
 }
 
 /* Based on the current state of the database, use static analysis of
@@ -1214,7 +1152,7 @@ void driver::populate_universes(const raw_rule &rul,
 			}
 		}
 	}
-	populate_universes(*rul.prft, universe, universes, database);
+	populate_universes(*rul.get_prft(), universe, universes, database);
 }
 
 /* Evaluate the given logical term over the given database in the context
@@ -1334,7 +1272,7 @@ void driver::interpret_rule(size_t hd_idx, size_t inp_idx,
 			interpret_rule(hd_idx, inp_idx + 1, rul, universes, bindings, database);
 		}
 	} else {
-		if(evaluate_form_tree(*rul.prft, universes, bindings, database)) {
+		if(evaluate_form_tree(*rul.get_prft(), universes, bindings, database)) {
 			raw_term fact = head;
 			for(elem &e : fact.e) {
 				if(e.type == elem::VAR) {
@@ -1392,7 +1330,7 @@ void driver::populate_universe(const raw_prog &rp,
 		for(const raw_term &rt : rr.h) {
 			populate_universe(rt, universe);
 		}
-		populate_universe(rr.prft, universe);
+		populate_universe(rr.get_prft(), universe);
 	}
 }
 

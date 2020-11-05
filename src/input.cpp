@@ -497,46 +497,37 @@ bool macro::parse(input* in, const raw_prog& prog){
 
 	fail: return pos = curr , false;
 }
-void raw_rule::calc_rawformterm() {
-	if(!prft || (prft->type == elem::NONE && prft->rt->is_true())) {
-		if(b.empty()) {
-			prft = std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
-		} else {
-			sprawformtree disj =
-				std::make_shared<raw_form_tree>(elem::NONE, raw_term::_false());
-			for(size_t i = 0; i < b.size(); i++) {
-				sprawformtree conj =
-					std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
-				for(size_t j = 0; j < b[i].size(); j++) {
-					bool negated = b[i][j].neg;
-					b[i][j].neg = false;
-					sprawformtree tm =
-						std::make_shared<raw_form_tree>(elem::NONE, b[i][j]);
-					if(negated) {
-						tm = std::make_shared<raw_form_tree>(elem::NOT, tm);
-					}
-					conj = std::make_shared<raw_form_tree>(elem::AND, conj, tm);
-				}
-				disj = std::make_shared<raw_form_tree>(elem::ALT, disj, conj);
-			}
-			prft = disj;
-			b.clear();
-		}
-	}
-}
-/* Return the body of this rule as a sprawformtree. This means that if
- * the body is stored in b as a std::vector<std::vector<raw_term>>, a
- * corresponding sprawformtree is created. */
- 
-bool raw_rule::parse(input* in, const raw_prog& prog) {
-	if(parse_aux(in, prog)) {
-		calc_rawformterm();
-		return true;
+sprawformtree raw_rule::get_prft() const {
+	if(prft) {
+		return prft;
+	} else if(b.empty()) {
+		return prft = std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
 	} else {
-		return false;
+		sprawformtree disj =
+			std::make_shared<raw_form_tree>(elem::NONE, raw_term::_false());
+		for(size_t i = 0; i < b.size(); i++) {
+			sprawformtree conj =
+				std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
+			for(size_t j = 0; j < b[i].size(); j++) {
+				raw_term entr = b[i][j];
+				bool negated = entr.neg;
+				entr.neg = false;
+				sprawformtree tm =
+					std::make_shared<raw_form_tree>(elem::NONE, entr);
+				if(negated) {
+					tm = std::make_shared<raw_form_tree>(elem::NOT, tm);
+				}
+				conj = std::make_shared<raw_form_tree>(elem::AND, conj, tm);
+			}
+			disj = std::make_shared<raw_form_tree>(elem::ALT, disj, conj);
+		}
+		return prft = raw_form_tree::simplify_formula(disj);
 	}
 }
-bool raw_rule::parse_aux(input* in, const raw_prog& prog) {
+bool raw_rule::is_b() {
+	return !b.empty() || (prft && prft->type == elem::NONE && prft->rt->is_true());
+}
+bool raw_rule::parse(input* in, const raw_prog& prog) {
 	const lexemes& l = in->l;
 	size_t& pos = in->pos;	size_t curr = pos;
 	if (*l[pos][0] == '!') {
@@ -746,6 +737,54 @@ void raw_form_tree::printTree( int level) {
 	for(int i = 0; i < level; i++) COUT << '\t';
 	(this->rt)?	COUT<<*rt : (this->el)? COUT <<*el: COUT<<"";
 	if (l) l->printTree(level + 1);
+}
+
+sprawformtree raw_form_tree::simplify_formula(sprawformtree &t) {
+	switch(t->type) {
+		case elem::IMPLIES:
+			simplify_formula(t->l);
+			simplify_formula(t->r);
+			break;
+		case elem::COIMPLIES:
+			simplify_formula(t->l);
+			simplify_formula(t->r);
+			break;
+		case elem::AND:
+			simplify_formula(t->l);
+			simplify_formula(t->r);
+			if(t->l->type == elem::NONE && t->l->rt->is_true()) {
+				t = t->r;
+			} else if(t->r->type == elem::NONE && t->r->rt->is_true()) {
+				t = t->l;
+			}
+			break;
+		case elem::ALT:
+			simplify_formula(t->l);
+			simplify_formula(t->r);
+			if(t->l->type == elem::NONE && t->l->rt->is_false()) {
+				t = t->r;
+			} else if(t->r->type == elem::NONE && t->r->rt->is_false()) {
+				t = t->l;
+			}
+			break;
+		case elem::NOT:
+			simplify_formula(t->l);
+			break;
+		case elem::EXISTS: {
+			simplify_formula(t->r);
+			break;
+		} case elem::UNIQUE: {
+			simplify_formula(t->r);
+			break;
+		} case elem::NONE: {
+			break;
+		} case elem::FORALL: {
+			simplify_formula(t->r);
+			break;
+		} default:
+			assert(false); //should never reach here
+	}
+	return t;
 }
 
 bool production::parse(input *in, const raw_prog& prog) {

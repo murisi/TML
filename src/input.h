@@ -484,7 +484,7 @@ struct raw_form_tree {
 		if (el) delete el, el = NULL;
 	}
 	void printTree(int level =0 );
-	static sprawformtree simplify_formula(sprawformtree &t);
+	static sprawformtree simplify(sprawformtree &t);
 };
 struct raw_sof {
 	const raw_prog& prog;

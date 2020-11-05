@@ -409,7 +409,7 @@ void driver::cqc_minimize(raw_prog &rp) {
 void driver::simplify_formulas(raw_prog &rp) {
 	for(raw_rule &rr : rp.r) {
 		sprawformtree prft = rr.get_prft();
-		rr.set_prft(raw_form_tree::simplify_formula(prft));
+		rr.set_prft(raw_form_tree::simplify(prft));
 	}
 }
 
@@ -484,6 +484,23 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
 	}
 }
 
+/* Recursively quotes the given formula. Say that the output relation
+ * name is q, quote_formula will populate it according to the following
+ * schema:
+ * q(VARS <var name>)
+ * q(RULE <id> <head id> <body id>).
+ * q(TERM <id> <name>).
+ * q(TERM <id> <name> <param1 name>).
+ * q(TERM <id> <name> <param1 name> <param2 name>).
+ * q(TERM <id> <name> <param1 name> <param2 name> <param3 name>).
+ * q(TERM <id> <name> <param1 name> <param2 name> <param3 name> <param4 name>).
+ * q(EQUALS <id> <param1 name> <param2 name>).
+ * q(FORALL <id> <var name> <body id>).
+ * q(EXISTS <id> <var name> <body id>).
+ * q(NOT <id> <body id>).
+ * q(AND <id> <body1 id> <body2 id>).
+ * q(OR <id> <body1 id> <body2 id>). */
+
 elem driver::quote_formula(const sprawformtree &t, const elem &rel_name,
 		raw_prog &rp, std::map<elem, elem> &variables) {
 	// Get dictionary for generating fresh symbols
@@ -542,8 +559,11 @@ elem driver::quote_formula(const sprawformtree &t, const elem &rel_name,
 	return part_id;
 }
 
-std::vector<elem> driver::quote_rule(const raw_rule &rr, const elem &rel_name,
-		raw_prog &rp, std::map<elem, elem> &variables) {
+/* Quote the given rule and put its quotation into the given raw_prog
+ * under a relation given by rel_name. */
+
+std::vector<elem> driver::quote_rule(const raw_rule &rr,
+		const elem &rel_name, raw_prog &rp, std::map<elem, elem> &variables) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	std::vector<elem> rule_ids;
@@ -574,22 +594,7 @@ raw_prog driver::read_prog(elem prog, const raw_prog &rp) {
 /* Loop through the rules of the given program checking if they use a
  * function called "quote" in their bodies. Quote's first argument is
  * the relation into which it should put the quotation it creates, and
- * it's second argument is the program to quote. Say that the output
- * relation name is s, quote will populate it according to the following
- * schema:
- * q(VARS <var name>)
- * q(RULE <id> <head id> <body id>).
- * q(TERM <id> <name>).
- * q(TERM <id> <name> <param1 name>).
- * q(TERM <id> <name> <param1 name> <param2 name>).
- * q(TERM <id> <name> <param1 name> <param2 name> <param3 name>).
- * q(TERM <id> <name> <param1 name> <param2 name> <param3 name> <param4 name>).
- * q(EQUALS <id> <param1 name> <param2 name>).
- * q(FORALL <id> <var name> <body id>).
- * q(EXISTS <id> <var name> <body id>).
- * q(NOT <id> <body id>).
- * q(AND <id> <body1 id> <body2 id>).
- * q(OR <id> <body1 id> <body2 id>). */
+ * it's second argument is the program to quote. */
 
 void driver::transform_quotes(raw_prog &rp) {
 	for(size_t oridx = 0; oridx < rp.r.size(); oridx++) {

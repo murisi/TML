@@ -521,7 +521,7 @@ sprawformtree raw_rule::get_prft() const {
 			}
 			disj = std::make_shared<raw_form_tree>(elem::ALT, disj, conj);
 		}
-		return prft = raw_form_tree::simplify_formula(disj);
+		return prft = raw_form_tree::simplify(disj);
 	}
 }
 bool raw_rule::is_b() {
@@ -739,19 +739,19 @@ void raw_form_tree::printTree( int level) {
 	if (l) l->printTree(level + 1);
 }
 
-sprawformtree raw_form_tree::simplify_formula(sprawformtree &t) {
+sprawformtree raw_form_tree::simplify(sprawformtree &t) {
 	switch(t->type) {
 		case elem::IMPLIES:
-			simplify_formula(t->l);
-			simplify_formula(t->r);
+			simplify(t->l);
+			simplify(t->r);
 			break;
 		case elem::COIMPLIES:
-			simplify_formula(t->l);
-			simplify_formula(t->r);
+			simplify(t->l);
+			simplify(t->r);
 			break;
 		case elem::AND:
-			simplify_formula(t->l);
-			simplify_formula(t->r);
+			simplify(t->l);
+			simplify(t->r);
 			if(t->l->type == elem::NONE && t->l->rt->is_true()) {
 				t = t->r;
 			} else if(t->r->type == elem::NONE && t->r->rt->is_true()) {
@@ -759,8 +759,8 @@ sprawformtree raw_form_tree::simplify_formula(sprawformtree &t) {
 			}
 			break;
 		case elem::ALT:
-			simplify_formula(t->l);
-			simplify_formula(t->r);
+			simplify(t->l);
+			simplify(t->r);
 			if(t->l->type == elem::NONE && t->l->rt->is_false()) {
 				t = t->r;
 			} else if(t->r->type == elem::NONE && t->r->rt->is_false()) {
@@ -768,18 +768,18 @@ sprawformtree raw_form_tree::simplify_formula(sprawformtree &t) {
 			}
 			break;
 		case elem::NOT:
-			simplify_formula(t->l);
+			simplify(t->l);
 			break;
 		case elem::EXISTS: {
-			simplify_formula(t->r);
+			simplify(t->r);
 			break;
 		} case elem::UNIQUE: {
-			simplify_formula(t->r);
+			simplify(t->r);
 			break;
 		} case elem::NONE: {
 			break;
 		} case elem::FORALL: {
-			simplify_formula(t->r);
+			simplify(t->r);
 			break;
 		} default:
 			assert(false); //should never reach here

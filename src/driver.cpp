@@ -972,6 +972,76 @@ void driver::transform_evals(raw_prog &rp) {
 	}
 }
 
+elem driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
+		std::set<elem> &bs) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	const elem part_id = elem::fresh_sym(d);
+	switch(t->type) {
+		case elem::IMPLIES:
+			return to_pure_tml(std::make_shared<raw_form_tree>(elem::ALT,
+				std::make_shared<raw_form_tree>(elem::NOT, t->l), t->r), rp, bs);
+		case elem::COIMPLIES:
+			return to_pure_tml(std::make_shared<raw_form_tree>(elem::AND,
+				std::make_shared<raw_form_tree>(elem::IMPLIES, t->l, t->r),
+				std::make_shared<raw_form_tree>(elem::IMPLIES, t->r, t->l)),
+				rp, bs);
+		case elem::AND:
+			rp.r.push_back(raw_rule(raw_term(part_id, bs),
+				{raw_term(to_pure_tml(t->l, rp, bs), bs),
+				raw_term(to_pure_tml(t->r, rp, bs), bs)}));
+			break;
+		case elem::ALT:
+			rp.r.push_back(raw_rule(raw_term(part_id, bs),
+				{{raw_term(to_pure_tml(t->l, rp, bs), bs)},
+				{raw_term(to_pure_tml(t->r, rp, bs), bs)}}));
+			break;
+		case elem::NOT: {
+			raw_term nt = raw_term(to_pure_tml(t->l, rp, bs), bs);
+			nt.neg = true;
+			rp.r.push_back(raw_rule(raw_term(part_id, bs), nt));
+			break;
+		} case elem::EXISTS: {
+			elem qvar = *(t->l->el);
+			bs.erase(qvar);
+			rp.r.push_back(raw_rule(raw_term(part_id, bs),
+				raw_term(to_pure_tml(t->r, rp, bs), bs)));
+			bs.insert(qvar);
+			break;
+		} /*case elem::UNIQUE: {
+			elem qvar = quote_elem(*(t->l->el), variables);
+			break;
+		}*/ case elem::NONE: {
+			rp.r.push_back(raw_rule(raw_term(part_id, bs), *t->rt));
+			break;
+		} case elem::FORALL: {
+			elem qvar = *(t->l->el);
+			return to_pure_tml(std::make_shared<raw_form_tree>(elem::NOT,
+				std::make_shared<raw_form_tree>(elem::EXISTS,
+					std::make_shared<raw_form_tree>(elem::VAR, qvar),
+					std::make_shared<raw_form_tree>(elem::NOT, t->r))), rp, bs);
+		} default:
+			assert(false); //should never reach here
+	}
+	return part_id;
+}
+
+void driver::to_pure_tml(raw_rule &rr, raw_prog &rp) {
+	if(!rr.is_b()) {
+		std::set<elem> free_vars;
+		std::vector<elem> bound_vars = {};
+		populate_free_variables(*rr.prft, bound_vars, free_vars);
+		std::shared_ptr prft = rr.prft;
+		rr.set_b({{raw_term(to_pure_tml(prft, rp, free_vars), free_vars)}});
+	}
+}
+
+void driver::to_pure_tml(raw_prog &rp) {
+	for(size_t i = 0; i < rp.r.size(); i++) {
+		to_pure_tml(rp.r[i], rp);
+	}
+}
+
 void driver::populate_free_variables(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars) {
 	for(const elem &e : t.e) {
@@ -1399,7 +1469,7 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 		std::cout << "Quoted Program:" << std::endl << std::endl << p << std::endl;
 		transform_evals(p);
 		std::cout << "Evaled Program:" << std::endl << std::endl << p << std::endl;
-		insert_exists(p);
+		to_pure_tml(p);
 		std::cout << "Existentially Quantified Program:" << std::endl << std::endl << p << std::endl;
 		cqc_minimize(p);
 		std::cout << "CQC Minimized Program:" << std::endl << std::endl << p << std::endl;

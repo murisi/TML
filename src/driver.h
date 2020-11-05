@@ -140,6 +140,10 @@ class driver {
 		raw_prog &rp, std::map<elem, elem> &variables);
 	std::vector<elem> quote_rule(const raw_rule &rr, const elem &rel_name,
 		raw_prog &rp, std::map<elem, elem> &variables);
+	elem to_pure_tml(const sprawformtree &t, raw_prog &rp,
+		std::set<elem> &bs);
+	void to_pure_tml(raw_rule &rr, raw_prog &rp);
+	void to_pure_tml(raw_prog &rp);
 	void populate_free_variables(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	void populate_universe(const raw_term &rt, std::set<elem> &universe);

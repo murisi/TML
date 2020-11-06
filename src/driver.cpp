@@ -209,9 +209,6 @@ sprawformtree driver::inline_rule(const raw_term &rt,
 
 void driver::flatten_associative(const elem::etype &tp,
 		const sprawformtree &tree, std::vector<sprawformtree> &tms) {
-	// Get dictionary for generating fresh variables
-	dict_t &d = tbl->get_dict();
-	
 	if(tree->type == tp) {
 		flatten_associative(tp, tree->l, tms);
 		flatten_associative(tp, tree->r, tms);
@@ -383,8 +380,10 @@ void driver::cqc_minimize(raw_prog &rp) {
 
 void driver::simplify_formulas(raw_prog &rp) {
 	for(raw_rule &rr : rp.r) {
-		sprawformtree prft = rr.get_prft();
-		rr.set_prft(raw_form_tree::simplify(prft));
+		if(!rr.is_b()) {
+			sprawformtree prft = rr.get_prft();
+			rr.set_prft(raw_form_tree::simplify(prft));
+		}
 	}
 }
 
@@ -1462,9 +1461,9 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 		std::cout << "Evaled Program:" << std::endl << std::endl << p << std::endl;
 		to_pure_tml(p);
 		std::cout << "Pure TML Program:" << std::endl << std::endl << p << std::endl;
-		/*cqc_minimize(p);
+		cqc_minimize(p);
 		std::cout << "CQC Minimized Program:" << std::endl << std::endl << p << std::endl;
-		std::set<elem> universe;
+		/*std::set<elem> universe;
 		std::set<raw_term> database;
 		naive_pfp(p, universe, database);
 		std::cout << "Fixed Point:" << std::endl << std::endl;

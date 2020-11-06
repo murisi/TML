@@ -2770,6 +2770,29 @@ bool tables::pfp(size_t nsteps, size_t break_on_step) {
 	DBGFAIL;
 }
 
+/* Run the given program with the given settings, put the query
+ * results into the given out-parameter, and return true in the case
+ * that it reaches a fixed point. Otherwise just return false. */
+
+bool tables::run_prog(const raw_prog &rp, const options &opts,
+    std::set<raw_term> &results) {
+	dict_t dict;
+	inputs ii;
+	dict.set_inputs(&ii);
+	tables tbl(dict, opts.enabled("proof"), 
+		opts.enabled("optimize"), opts.enabled("bin"),
+		opts.enabled("t"), opts.enabled("regex"));
+  strs_t strs;
+	if(tbl.run_prog(rp, strs)) {
+    for(const term &result : tbl.decompress()) {
+      results.insert(tbl.to_raw_term(result));
+    }
+    return true;
+  } else {
+    return false;
+  }
+}
+
 bool tables::run_prog(const raw_prog& p, const strs_t& strs, size_t steps,
 	size_t break_on_step)
 {

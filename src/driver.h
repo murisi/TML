@@ -127,8 +127,7 @@ class driver {
 		const std::map<elem, elem> &map2);
 	bool try_cqc_minimize(raw_rule &rr);
 	void cqc_minimize(raw_prog &rp);
-	void freeze_vars(const std::vector<raw_term> &terms,
-		std::map<elem, elem> &freeze_map);
+	raw_rule freeze_rule(raw_rule rr, std::map<elem, elem> &freeze_map);
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
 	void simplify_formulas(raw_prog &rp);

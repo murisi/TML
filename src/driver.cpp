@@ -221,52 +221,12 @@ void driver::flatten_associative(const elem::etype &tp,
 
 bool driver::is_rule_conjunctive(const raw_rule &rr) {
 	// Ensure that there are no disjunctions
-	if(rr.b.size() != 1) return false;
+	if(rr.h.size() != 1 || rr.b.size() != 1) return false;
 	// Ensure that each body term is positive and is a relation
 	for(const raw_term &rt : rr.b[0]) {
 		if(rt.neg || rt.extype != raw_term::REL) return false;
 	}
 	return true;
-}
-
-/* Make an SAT formula encoding a homomorphism from terms2 to terms1
- * through the given variable translation maps. Specifically, it is
- * meant that each elem is looked up in the corresponding map before
- * being used. */
-
-sprawformtree driver::make_cqc_constraints(const std::vector<raw_term> &terms1,
-		const std::map<elem, elem> &map1, const std::vector<raw_term> &terms2,
-		const std::map<elem, elem> &map2) {
-	sprawformtree conj = std::make_shared<raw_form_tree>(elem::NONE, ttrue);
-	// Each term2 should map to something
-	for(const raw_term &tm2 : terms2) {
-		sprawformtree disj =
-			std::make_shared<raw_form_tree>(elem::NONE, tfalse);
-		// And the mapping should be to some term1 with matching relation
-		// name and arity.
-		for(const raw_term &tm1 : terms1) {
-			if(tm1.e[0] == tm2.e[0] && tm1.e.size() == tm2.e.size()) {
-				sprawformtree constraint =
-					std::make_shared<raw_form_tree>(elem::NONE, ttrue);
-				// And each elem should correspond through the maps.
-				for(size_t i = 2; i < tm1.e.size() - 1; i++) {
-					constraint = std::make_shared<raw_form_tree>(elem::AND,
-						constraint,
-						std::make_shared<raw_form_tree>(elem::NONE,
-							raw_term(raw_term::EQ,
-								{at_default(map2, tm2.e[i], tm2.e[i]), elem_eq,
-									at_default(map1, tm1.e[i], tm1.e[i])})));
-				}
-				// Disjunction is used since only one mapping for each term2
-				// is needed
-				disj = std::make_shared<raw_form_tree>(elem::ALT, disj,
-					constraint);
-			}
-		}
-		// Conjunction is used since no term1 should be without partner
-		conj = std::make_shared<raw_form_tree>(elem::AND, conj, disj);
-	}
-	return conj;
 }
 
 /* If rr1 and rr2 are both conjunctive queries, check if there is a
@@ -284,43 +244,32 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
 		std::map<elem, elem> freeze_map;
-		freeze_vars(heads1, freeze_map);
-		freeze_vars(bodie1, freeze_map);
+		raw_rule frozen_rr1 = freeze_rule(rr1, freeze_map);
 		
-		// Encode the constraint that there is a homomorphism from rule 2
-		// to the frozen rule 1
-		sprawformtree
-			constraints = std::make_shared<raw_form_tree>(elem::NONE, ttrue),
-			body_constraints = make_cqc_constraints(bodie1, freeze_map, bodie2, {});
-		for(const raw_term head1 : heads1) {
-			// Need to make sure that each frozen head of rule 1 corresponds
-			// to a head of rule 2, but not all at the same time - hence the
-			// existential quantifier insertion.
-			constraints = std::make_shared<raw_form_tree>(elem::AND,
-				constraints,
-				with_exists(std::make_shared<raw_form_tree>(elem::AND,
-					body_constraints,
-					make_cqc_constraints(heads2, {}, {head1}, freeze_map)), {}));
-		}
-		
-		// Make a head for these constrain equations. We don't actually need
-		// the homomorphism though, so an empty head is fine.
-		raw_term constraint_head
-			({ elem::fresh_sym(d), elem_openp, elem_closep });
-		
-		// Make the constraint rule and solve it
-		raw_rule cqc_rule = raw_rule(constraint_head, constraints);
+		// Build up the queries necessary to check homomorphism.
 		raw_prog nrp;
-		nrp.r = {cqc_rule};
-		simplify_formulas(nrp);
-		insert_exists(nrp);
-		std::set<elem> universe;
-		std::set<raw_term> database;
-		naive_pfp(nrp, universe, database);
+		for(const raw_term &rt : frozen_rr1.b[0]) {
+			nrp.r.push_back(raw_rule(rt));
+		}
+		nrp.r.push_back(rr2);
 		
-		// The presence of at least one result proves existence of
-		// homomorphism
-		return !database.empty();
+		// Run the queries and check for the frozen head. This process can
+		// be optimized by inlining the frozen head of rule 1 into rule 2.
+		std::set<raw_term> results;
+		tables::run_prog(nrp, opts, results);
+		for(const raw_term &res : results) {
+			// Temporary hack till I figure out why equal term representation
+			// doesn't imply equal terms.
+			std::stringstream ress; ress << res;
+			std::stringstream frozs; frozs << frozen_rr1.h[0];
+			if(ress.str() == frozs.str()) {
+				// If the frozen head is found, then there is a homomorphism
+				// between the two rules.
+				return true;
+			}
+		}
+		// If no frozen head found, then there is no homomorphism.
+		return false;
 	} else {
 		return false;
 	}
@@ -408,13 +357,21 @@ elem driver::quote_elem(const elem &e, std::map<elem, elem> &variables) {
 /* Iterate through terms and associate each unique variable with unique
  * fresh symbol. */
 
-void driver::freeze_vars(const std::vector<raw_term> &terms,
+raw_rule driver::freeze_rule(raw_rule rr,
 		std::map<elem, elem> &freeze_map) {
-	for(const raw_term &tm : terms) {
-		for(const elem &el : tm.e) {
-			quote_elem(el, freeze_map);
+	for(raw_term &tm : rr.h) {
+		for(elem &el : tm.e) {
+			el = quote_elem(el, freeze_map);
 		}
 	}
+	for(std::vector<raw_term> &bodie : rr.b) {
+		for(raw_term &tm : bodie) {
+			for(elem &el : tm.e) {
+				el = quote_elem(el, freeze_map);
+			}
+		}
+	}
+	return rr;
 }
 
 /* Takes a raw term and returns its quotation within a relation of the

@@ -26,6 +26,7 @@
 #include "input.h"
 #include "form.h"
 #include "err.h"
+#include "options.h"
 
 typedef int_t rel_t;
 class archive;
@@ -443,6 +444,8 @@ public:
 	~tables();
 	size_t step() { return nstep; }
 	bool add_prog(const raw_prog& p, const strs_t& strs);
+	static bool run_prog(const raw_prog &rp, const options &opts,
+		std::set<raw_term> &results);
 	bool run_prog(const raw_prog& p, const strs_t& strs, size_t steps = 0,
 		size_t break_on_step = 0);
 	bool run_nums(flat_prog m, std::set<term>& r, size_t nsteps);

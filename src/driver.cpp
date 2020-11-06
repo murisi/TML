@@ -204,51 +204,32 @@ sprawformtree driver::inline_rule(const raw_term &rt,
 	return unfolded_tree;
 }
 
-/* Checks if the given formula is conjunctive, that is, ultimately a
- * tree of conjunctions of terms. If so, then put the terms that are
- * ultimately conjuncted into the list. Note that if the body of a query
- * is a conjunctive formula, then the query is also conjunctive. */
+/* Puts the formulas parented by a tree of associative binary operators
+ * into a flat list. */
 
-bool driver::is_formula_conjunctive(const sprawformtree &tree,
-		std::vector<raw_term> &tms, std::map<elem, elem> &variables) {
+void driver::flatten_associative(const elem::etype &tp,
+		const sprawformtree &tree, std::vector<sprawformtree> &tms) {
 	// Get dictionary for generating fresh variables
 	dict_t &d = tbl->get_dict();
 	
-	if(tree->type == elem::NONE) {
-		tms.push_back(hygienic_copy(*tree->rt, variables));
-		return true;
-	} else if(tree->type == elem::AND) {
-		return is_formula_conjunctive(tree->l, tms, variables) &&
-			is_formula_conjunctive(tree->r, tms, variables);
-	} else if(tree->type == elem::EXISTS) {
-		// In the case of existence, we want to make sure that uses of the
-		// quantified variable receives new names as we put the formula into
-		// PNF.
-		elem elt = *(tree->l->el);
-		std::optional<elem> prev_map = at_optional(variables, elt);
-		variables[elt] = elem::fresh_var(d);
-		bool ans = is_formula_conjunctive(tree->r, tms, variables);
-		insert_optional(variables, elt, prev_map);
-		return ans;
+	if(tree->type == tp) {
+		flatten_associative(tp, tree->l, tms);
+		flatten_associative(tp, tree->r, tms);
 	} else {
-		// If tree is not a conjunction, existence, or term, then it cannot
-		// be a conjunctive formula.
-		return false;
+		tms.push_back(tree);
 	}
 }
 
-/* Checks if the body of the given rule is conjunctive. If so, then
- * return the terms that are ultimately conjuncted into a list. */
+/* Checks if the body of the given rule is conjunctive. */
 
-bool driver::is_rule_conjunctive(const raw_rule &rr,
-		std::vector<raw_term> &hds, std::vector<raw_term> &tms) {
-	std::map<elem, elem> variables;
-	// Hygienic copies of head terms are made here so that the variables
-	// in the body receive the same names.
-	for(const raw_term &rt : rr.h) {
-		hds.push_back(hygienic_copy(rt, variables));
+bool driver::is_rule_conjunctive(const raw_rule &rr) {
+	// Ensure that there are no disjunctions
+	if(rr.b.size() != 1) return false;
+	// Ensure that each body term is positive and is a relation
+	for(const raw_term &rt : rr.b[0]) {
+		if(rt.neg || rt.extype != raw_term::REL) return false;
 	}
-	return is_formula_conjunctive(rr.get_prft(), tms, variables);
+	return true;
 }
 
 /* Make an SAT formula encoding a homomorphism from terms2 to terms1
@@ -296,18 +277,13 @@ sprawformtree driver::make_cqc_constraints(const std::vector<raw_term> &terms1,
  * of a homomorphism implies that rr1 is contained by rr2. */
 
 bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
+	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
-	std::vector<raw_term> heads1, bodie1, heads2, bodie2;
-	// The rules must be conjunctive as per precondition
-	if(is_rule_conjunctive(rr1, heads1, bodie1) &&
-			is_rule_conjunctive(rr2, heads2, bodie2)) {
-		// The terms of the conjunctive queries must also be uninterpreted
-		for(const raw_term &rt : bodie1) {
-			if(rt.extype != raw_term::REL) return false;
-		}
-		for(const raw_term &rt : bodie2) {
-			if(rt.extype != raw_term::REL) return false;
-		}
+	
+	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2)) {
+		std::vector<raw_term> heads1 = rr1.h, bodie1 = rr1.b[0],
+			heads2 = rr2.h, bodie2 = rr2.b[0];
+		
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
 		std::map<elem, elem> freeze_map;
@@ -359,10 +335,9 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
  * through the return flag. */
 
 bool driver::try_cqc_minimize(raw_rule &rr) {
-	std::vector<raw_term> heads1, bodie1, heads2, bodie2;
-	if(is_rule_conjunctive(rr, heads1, bodie1)) {
-		heads2 = heads1;
-		bodie2 = bodie1;
+	if(is_rule_conjunctive(rr)) {
+		std::vector<raw_term> heads1 = rr.h, bodie1 = rr.b[0],
+			heads2 = rr.h, bodie2 = rr.b[0];
 		// Let's see if we can remove a body term from the rule without
 		// affecting its behavior
 		for(size_t i = 0; i < bodie1.size(); i++) {
@@ -986,17 +961,25 @@ elem driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
 				std::make_shared<raw_form_tree>(elem::IMPLIES, t->l, t->r),
 				std::make_shared<raw_form_tree>(elem::IMPLIES, t->r, t->l)),
 				rp, bs);
-		case elem::AND:
-			rp.r.push_back(raw_rule(raw_term(part_id, bs),
-				{raw_term(to_pure_tml(t->l, rp, bs), bs),
-				raw_term(to_pure_tml(t->r, rp, bs), bs)}));
+		case elem::AND: {
+			std::vector<sprawformtree> ands;
+			flatten_associative(elem::AND, t, ands);
+			std::vector<raw_term> terms;
+			for(const sprawformtree &tree : ands) {
+				terms.push_back(raw_term(to_pure_tml(tree, rp, bs), bs));
+			}
+			rp.r.push_back(raw_rule(raw_term(part_id, bs), terms));
 			break;
-		case elem::ALT:
-			rp.r.push_back(raw_rule(raw_term(part_id, bs),
-				{{raw_term(to_pure_tml(t->l, rp, bs), bs)},
-				{raw_term(to_pure_tml(t->r, rp, bs), bs)}}));
+		} case elem::ALT: {
+			std::vector<sprawformtree> alts;
+			flatten_associative(elem::ALT, t, alts);
+			std::vector<std::vector<raw_term>> terms;
+			for(const sprawformtree &tree : alts) {
+				terms.push_back({raw_term(to_pure_tml(tree, rp, bs), bs)});
+			}
+			rp.r.push_back(raw_rule(raw_term(part_id, bs), terms));
 			break;
-		case elem::NOT: {
+		} case elem::NOT: {
 			raw_term nt = raw_term(to_pure_tml(t->l, rp, bs), bs);
 			nt.neg = true;
 			rp.r.push_back(raw_rule(raw_term(part_id, bs), nt));

@@ -426,6 +426,7 @@ struct raw_rule {
 	raw_rule(const raw_term& h, const std::vector<raw_term>& _b) : h({h}) {
 		if (!_b.empty()) b = {_b};
 	}
+	raw_rule(const raw_term& h, const std::vector<std::vector<raw_term>>& _b) : h({h}), b(_b) {}
 	raw_rule(const std::vector<raw_term> &h,
 			const std::vector<raw_term>& _b) : h(h) {
 		if (!_b.empty()) b = {_b};

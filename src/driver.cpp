@@ -343,7 +343,6 @@ bool driver::try_cqc_minimize(raw_rule &rr) {
 			// bodie2 missing element i, meaning that rule 2 contains rule 1
 			// Construct our candidate replacement rule
 			raw_rule rr2(heads2, bodie2);
-			insert_exists(rr2);
 			if(cqc(rr2, rr)) {
 				// successful if condition implies rule 1 contains rule 2, hence
 				// rule 1 = rule 2
@@ -358,7 +357,6 @@ bool driver::try_cqc_minimize(raw_rule &rr) {
 		for(size_t i = 0; i < heads1.size(); i++) {
 			heads2.erase(heads2.begin() + i);
 			raw_rule rr2(heads2, bodie2);
-			insert_exists(rr2);
 			if(cqc(rr, rr2)) {
 				rr = rr2;
 				return true;

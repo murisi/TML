@@ -1002,16 +1002,23 @@ elem driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
 			rp.r.push_back(raw_rule(raw_term(part_id, bs), nt));
 			break;
 		} case elem::EXISTS: {
+			raw_term hd(part_id, bs);
 			elem qvar = *(t->l->el);
-			bs.erase(qvar);
-			rp.r.push_back(raw_rule(raw_term(part_id, bs),
-				raw_term(to_pure_tml(t->r, rp, bs), bs)));
 			bs.insert(qvar);
+			rp.r.push_back(raw_rule(hd,
+				raw_term(to_pure_tml(t->r, rp, bs), bs)));
+			bs.erase(qvar);
 			break;
-		} /*case elem::UNIQUE: {
-			elem qvar = quote_elem(*(t->l->el), variables);
-			break;
-		}*/ case elem::NONE: {
+		} case elem::UNIQUE: {
+			const elem evar = elem::fresh_var(d), qvar = *(t->l->el);
+			return to_pure_tml(std::make_shared<raw_form_tree>(elem::EXISTS,
+				std::make_shared<raw_form_tree>(elem::VAR, evar),
+				std::make_shared<raw_form_tree>(elem::FORALL,
+					std::make_shared<raw_form_tree>(elem::VAR, qvar),
+					std::make_shared<raw_form_tree>(elem::COIMPLIES, t->r,
+						std::make_shared<raw_form_tree>(elem::NONE,
+							raw_term(raw_term::EQ, { evar, elem_eq, qvar }))))), rp, bs);
+		} case elem::NONE: {
 			rp.r.push_back(raw_rule(raw_term(part_id, bs), *t->rt));
 			break;
 		} case elem::FORALL: {
@@ -1031,14 +1038,15 @@ void driver::to_pure_tml(raw_rule &rr, raw_prog &rp) {
 		std::set<elem> free_vars;
 		std::vector<elem> bound_vars = {};
 		populate_free_variables(*rr.prft, bound_vars, free_vars);
-		std::shared_ptr prft = rr.prft;
-		rr.set_b({{raw_term(to_pure_tml(prft, rp, free_vars), free_vars)}});
+		rr.set_b({{raw_term(to_pure_tml(rr.prft, rp, free_vars), free_vars)}});
 	}
 }
 
 void driver::to_pure_tml(raw_prog &rp) {
 	for(size_t i = 0; i < rp.r.size(); i++) {
-		to_pure_tml(rp.r[i], rp);
+		raw_rule rr = rp.r[i];
+		to_pure_tml(rr, rp);
+		rp.r[i] = rr;
 	}
 }
 
@@ -1470,8 +1478,8 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 		transform_evals(p);
 		std::cout << "Evaled Program:" << std::endl << std::endl << p << std::endl;
 		to_pure_tml(p);
-		std::cout << "Existentially Quantified Program:" << std::endl << std::endl << p << std::endl;
-		cqc_minimize(p);
+		std::cout << "Pure TML Program:" << std::endl << std::endl << p << std::endl;
+		/*cqc_minimize(p);
 		std::cout << "CQC Minimized Program:" << std::endl << std::endl << p << std::endl;
 		std::set<elem> universe;
 		std::set<raw_term> database;
@@ -1479,7 +1487,7 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 		std::cout << "Fixed Point:" << std::endl << std::endl;
 		for(const raw_term &entry : database) {
 			std::cout << entry << "." << std::endl;
-		}
+		}*/
 		std::cout << std::endl << std::endl;
 	}
 #ifdef TRANSFORM_BIN_DRIVER

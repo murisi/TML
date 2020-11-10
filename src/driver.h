@@ -122,13 +122,12 @@ class driver {
 	void flatten_associative(const elem::etype &tp,
 		const sprawformtree &tree, std::vector<sprawformtree> &tms);
 	bool is_rule_conjunctive(const raw_rule &rr);
-	sprawformtree make_cqc_constraints(const std::vector<raw_term> &terms1,
-		const std::map<elem, elem> &map1, const std::vector<raw_term> &terms2,
-		const std::map<elem, elem> &map2);
+	bool is_rule_conjunctive_with_negation(const raw_rule &rr);
 	bool try_cqc_minimize(raw_rule &rr);
 	void cqc_minimize(raw_prog &rp);
 	raw_rule freeze_rule(raw_rule rr, std::map<elem, elem> &freeze_map);
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
+	bool cqnc(const raw_rule &rr1, const raw_rule &rr2);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
 	void simplify_formulas(raw_prog &rp);
 	elem quote_elem(const elem &e, std::map<elem, elem> &variables);

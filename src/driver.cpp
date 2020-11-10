@@ -229,6 +229,18 @@ bool driver::is_rule_conjunctive(const raw_rule &rr) {
 	return true;
 }
 
+/* Checks if the body of the given rule is conjunctive with negation. */
+
+bool driver::is_rule_conjunctive_with_negation(const raw_rule &rr) {
+	// Ensure that there are no disjunctions
+	if(rr.h.size() != 1 || rr.b.size() != 1) return false;
+	// Ensure that each body term is positive and is a relation
+	for(const raw_term &rt : rr.b[0]) {
+		if(rt.extype != raw_term::REL) return false;
+	}
+	return true;
+}
+
 /* If rr1 and rr2 are both conjunctive queries, check if there is a
  * homomorphism rr2 to rr1. By the homomorphism theorem, the existence
  * of a homomorphism implies that rr1 is contained by rr2. */
@@ -237,7 +249,7 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	
-	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2)) {
+	if(is_rule_conjunctive(rr1) && is_rule_conjunctive_with_negation(rr2)) {
 		std::vector<raw_term> heads1 = rr1.h, bodie1 = rr1.b[0],
 			heads2 = rr2.h, bodie2 = rr2.b[0];
 		
@@ -256,13 +268,9 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 		// Run the queries and check for the frozen head. This process can
 		// be optimized by inlining the frozen head of rule 1 into rule 2.
 		std::set<raw_term> results;
-		tables::run_prog(nrp, opts, results);
+		tables::run_prog(nrp, d, opts, results);
 		for(const raw_term &res : results) {
-			// Temporary hack till I figure out why equal term representation
-			// doesn't imply equal terms.
-			std::stringstream ress; ress << res;
-			std::stringstream frozs; frozs << frozen_rr1.h[0];
-			if(ress.str() == frozs.str()) {
+			if(res == frozen_rr1.h[0]) {
 				// If the frozen head is found, then there is a homomorphism
 				// between the two rules.
 				return true;
@@ -275,13 +283,187 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 	}
 }
 
+/* Function to iterate through the partitions of the given set. Calls
+ * the supplied function with a vector of sets representing each
+ * partition. If the supplied function returns false, then the iteration
+ * stops. */
+
+template<typename T, typename F> bool partition_iter(std::set<T> &vars,
+		std::vector<std::set<T>> &partitions, const F &f) {
+	if(vars.empty()) {
+    return f(partitions);
+	} else {
+		const T nvar = *vars.begin();
+		vars.erase(nvar);
+		for(size_t i = 0; i < partitions.size(); i++) {
+			partitions[i].insert(nvar);
+			if(!partition_iter(vars, partitions, f)) {
+        return false;
+      }
+			partitions[i].erase(nvar);
+		}
+		std::set<T> npart = { nvar };
+		partitions.push_back(npart);
+		if(!partition_iter(vars, partitions, f)) {
+      return false;
+    }
+		partitions.pop_back();
+		vars.insert(nvar);
+		return true;
+	}
+}
+
+/* Function to iterate through the given set raised to the given
+ * cartesian power. The supplied function is called with each tuple in
+ * the product and if it returns false, the iteration stops. */
+
+template<typename T, typename F>
+    bool product_iter(const std::set<T> &vars, std::vector<T> &seq,
+      size_t len, const F &f) {
+  if(len == 0) {
+    return f(seq);
+  } else {
+    for(const T &el : vars) {
+      seq.push_back(el);
+      if(!product_iter(vars, seq, len - 1, f)) {
+        return false;
+      }
+      seq.pop_back();
+    }
+    return true;
+  }
+}
+
+/* Function to iterate through the power set of the given set. The
+ * supplied function is called with each element of the power set and
+ * if it returns false, the iteration stops. */
+
+template<typename T, typename F> bool power_iter(std::set<T> &elts,
+    std::set<T> &subset, const F &f) {
+  if(elts.size() == 0) {
+    return f(subset);
+  } else {
+    const T nelt = *elts.begin();
+		elts.erase(nelt);
+    // Case where current element will not be in subset
+    if(!power_iter(elts, subset, f)) {
+      return false;
+    }
+    if(subset.insert(nelt).second) {
+      // Case where current element will be in subset
+      if(!power_iter(elts, subset, f)) {
+        return false;
+      }
+      subset.erase(nelt);
+    }
+    elts.insert(nelt);
+		return true;
+  }
+}
+
+/* If rr1 and rr2 are both conjunctive queries with negation, check that
+ * rr1 is contained by rr2. Do this using the Levy-Sagiv test. */
+
+bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
+	std::set<elem> vars;
+	for(const elem &e : rr1.h[0].e) {
+		if(e.type == elem::VAR) {
+			vars.insert(e);
+		}
+	}
+	for(const raw_term &tm : rr1.b[0]) {
+		if(!tm.neg) {
+			for(const elem &e : tm.e) {
+				if(e.type == elem::VAR) {
+					vars.insert(e);
+				}
+			}
+		}
+	}
+	std::vector<std::set<elem>> partitions;
+	return partition_iter(vars, partitions,
+    [&](const std::vector<std::set<elem>> &partitions) -> bool {
+      // Get dictionary for generating fresh symbols
+      dict_t &d = tbl->get_dict();
+      std::map<elem, elem> subs;
+      for(const std::set<elem> &part : partitions) {
+        elem pvar = elem::fresh_sym(d);
+        for(const elem &e : part) {
+          subs[e] = pvar;
+        }
+      }
+      raw_rule subbed = freeze_rule(rr1, subs);
+      std::set<elem> symbol_set;
+      std::set<raw_term> canonical, canonical_negative;
+      // Only the positive subgoals are needed for the Levy-Sagiv test
+      for(raw_term &rt : subbed.b[0]) {
+        if(rt.neg) {
+          rt.neg = false;
+          canonical_negative.insert(rt);
+          rt.neg = true;
+        } else {
+          canonical.insert(rt);
+          for(size_t i = 2; i < rt.e.size() - 1; i++) {
+            symbol_set.insert(rt.e[i]);
+          }
+        }
+      }
+      // Does canonical make all the subgoals of subbed true?
+      for(raw_term &rt : subbed.b[0]) {
+        if(rt.neg) {
+          // If the term in the rule is negated, we need to make sure
+          // that it is not in the canonical database.
+          rt.neg = false;
+          if(canonical.find(rt) != canonical.end()) {
+            return true;
+          }
+          rt.neg = true;
+        }
+      }
+      // Now we need to get the largest superset of our canonical
+      // database
+      std::set<raw_term> superset;
+      for(const raw_term &rt : rr2.b[0]) {
+        std::vector<elem> tuple;
+        product_iter(symbol_set, tuple, rt.e.size() - 3,
+          [&](const std::vector<elem> tuple) -> bool {
+            std::vector<elem> nterm_e = { rt.e[0], rt.e[1] };
+            for(const elem &e : tuple) {
+              nterm_e.push_back(e);
+            }
+            nterm_e.push_back(rt.e[rt.e.size() - 1]);
+            raw_term nterm(nterm_e);
+            superset.insert(nterm);
+            return true;
+          });
+      }
+      // Remove the frozen negative subgoals
+      for(const raw_term &rt : canonical_negative) {
+        superset.erase(rt);
+      }
+      // Now need to through all the supersets of our canonical database
+      // and check that they yield the frozen head.
+      return power_iter(superset, canonical,
+        [&](const std::set<raw_term> ext) -> bool {
+          raw_prog test_prog;
+          for(const raw_term rt : ext) {
+            test_prog.r.push_back(raw_rule(rt));
+          }
+          test_prog.r.push_back(rr2);
+          std::set<raw_term> res;
+          tables::run_prog(test_prog, d, opts, res);
+          return res.find(subbed.h[0]) != res.end();
+        });
+    });
+}
+
 /* If the given query is conjunctive, go through its terms and see if
  * removing one of them can produce an equivalent query. If this is
  * the case, modify the input query and indicate that this has happened
  * through the return flag. */
 
 bool driver::try_cqc_minimize(raw_rule &rr) {
-	if(is_rule_conjunctive(rr)) {
+	if(is_rule_conjunctive_with_negation(rr)) {
 		std::vector<raw_term> heads1 = rr.h, bodie1 = rr.b[0],
 			heads2 = rr.h, bodie2 = rr.b[0];
 		// Let's see if we can remove a body term from the rule without
@@ -292,7 +474,7 @@ bool driver::try_cqc_minimize(raw_rule &rr) {
 			// bodie2 missing element i, meaning that rule 2 contains rule 1
 			// Construct our candidate replacement rule
 			raw_rule rr2(heads2, bodie2);
-			if(cqc(rr2, rr)) {
+			if(cqnc(rr2, rr)) {
 				// successful if condition implies rule 1 contains rule 2, hence
 				// rule 1 = rule 2
 				rr = rr2;
@@ -300,17 +482,6 @@ bool driver::try_cqc_minimize(raw_rule &rr) {
 			}
 			bodie2.insert(bodie2.begin() + i, bodie1[i]);
 			// bodie2 is currently equal to bodie1
-		}
-		// Let's see if we can remove a head term from the rule without
-		// affecting its behavior. Operations are analogous to above.
-		for(size_t i = 0; i < heads1.size(); i++) {
-			heads2.erase(heads2.begin() + i);
-			raw_rule rr2(heads2, bodie2);
-			if(cqc(rr, rr2)) {
-				rr = rr2;
-				return true;
-			}
-			heads2.insert(heads2.begin() + i, heads1[i]);
 		}
 	}
 	return false;

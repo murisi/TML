@@ -387,6 +387,10 @@ std::set<elem> driver::collect_positive_vars(const raw_rule &rr) {
  * rr1 is contained by rr2. Do this using the Levy-Sagiv test. */
 
 bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
+	// Check that rules have correct format
+	if(!(is_rule_conjunctive_with_negation(rr1) &&
+		is_rule_conjunctive_with_negation(rr2))) return false;
+	
 	std::set<elem> vars = collect_positive_vars(rr1);
 	std::vector<std::set<elem>> partitions;
 	// Do the Levy-Sagiv test
@@ -1109,11 +1113,10 @@ elem driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
 		} case elem::ALT: {
 			std::vector<sprawformtree> alts;
 			flatten_associative(elem::ALT, t, alts);
-			std::vector<std::vector<raw_term>> terms;
 			for(const sprawformtree &tree : alts) {
-				terms.push_back({raw_term(to_pure_tml(tree, rp, bs), bs)});
+				rp.r.push_back(raw_rule(raw_term(part_id, bs),
+					raw_term(to_pure_tml(tree, rp, bs), bs)));
 			}
-			rp.r.push_back(raw_rule(raw_term(part_id, bs), terms));
 			break;
 		} case elem::NOT: {
 			raw_term nt = raw_term(to_pure_tml(t->l, rp, bs), bs);

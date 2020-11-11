@@ -1087,7 +1087,11 @@ void driver::transform_evals(raw_prog &rp) {
 	}
 }
 
-elem driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
+/* Make a term with behavior equivalent to the supplied first order
+ * logic formula with the given bound variables. This might involve
+ * adding temporary relations to the given program. */
+
+raw_term driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
 		std::set<elem> &bs) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
@@ -1106,7 +1110,7 @@ elem driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
 			flatten_associative(elem::AND, t, ands);
 			std::vector<raw_term> terms;
 			for(const sprawformtree &tree : ands) {
-				terms.push_back(raw_term(to_pure_tml(tree, rp, bs), bs));
+				terms.push_back(to_pure_tml(tree, rp, bs));
 			}
 			rp.r.push_back(raw_rule(raw_term(part_id, bs), terms));
 			break;
@@ -1115,20 +1119,18 @@ elem driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
 			flatten_associative(elem::ALT, t, alts);
 			for(const sprawformtree &tree : alts) {
 				rp.r.push_back(raw_rule(raw_term(part_id, bs),
-					raw_term(to_pure_tml(tree, rp, bs), bs)));
+					to_pure_tml(tree, rp, bs)));
 			}
 			break;
 		} case elem::NOT: {
-			raw_term nt = raw_term(to_pure_tml(t->l, rp, bs), bs);
+			raw_term nt = to_pure_tml(t->l, rp, bs);
 			nt.neg = true;
-			rp.r.push_back(raw_rule(raw_term(part_id, bs), nt));
-			break;
+			return nt;
 		} case elem::EXISTS: {
 			raw_term hd(part_id, bs);
 			elem qvar = *(t->l->el);
 			bs.insert(qvar);
-			rp.r.push_back(raw_rule(hd,
-				raw_term(to_pure_tml(t->r, rp, bs), bs)));
+			rp.r.push_back(raw_rule(hd, to_pure_tml(t->r, rp, bs)));
 			bs.erase(qvar);
 			break;
 		} case elem::UNIQUE: {
@@ -1141,8 +1143,7 @@ elem driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
 						std::make_shared<raw_form_tree>(elem::NONE,
 							raw_term(raw_term::EQ, { evar, elem_eq, qvar }))))), rp, bs);
 		} case elem::NONE: {
-			rp.r.push_back(raw_rule(raw_term(part_id, bs), *t->rt));
-			break;
+			return *t->rt;
 		} case elem::FORALL: {
 			elem qvar = *(t->l->el);
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::NOT,
@@ -1152,7 +1153,7 @@ elem driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
 		} default:
 			assert(false); //should never reach here
 	}
-	return part_id;
+	return raw_term(part_id, bs);
 }
 
 void driver::to_pure_tml(raw_rule &rr, raw_prog &rp) {
@@ -1160,7 +1161,7 @@ void driver::to_pure_tml(raw_rule &rr, raw_prog &rp) {
 		std::set<elem> free_vars;
 		std::vector<elem> bound_vars = {};
 		populate_free_variables(*rr.prft, bound_vars, free_vars);
-		rr.set_b({{raw_term(to_pure_tml(rr.prft, rp, free_vars), free_vars)}});
+		rr.set_b({{to_pure_tml(rr.prft, rp, free_vars)}});
 	}
 }
 

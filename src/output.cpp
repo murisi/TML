@@ -500,7 +500,7 @@ basic_ostream<T>& print_raw_rule(basic_ostream<T>& os, const raw_rule& r,
 	bool uni = r.b.size() == 1 && r.b[0].size() == 1;
 	bool noendl = !r.b.size() || uni;
 	if (!compact && !noendl) os << endl;
-	if (r.prft.get()) os << r.prft.get();
+	if (r.prft.get()) os << *r.prft;
 	for (size_t n = 0; n < r.b.size(); ++n) {
 		for (size_t k = 0; k < r.b[n].size(); ++k)
 			if (((compact||uni?os<<"":os<<indent<<'\t')<<r.b[n][k]),

@@ -693,6 +693,24 @@ std::vector<elem> driver::quote_rule(const raw_rule &rr,
 	return rule_ids;
 }
 
+/* Put the quotation of the given program into a relation of the given
+ * name in the given program. */
+
+void driver::quote_prog(const raw_prog &nrp, const elem &rel_name,
+		raw_prog &rp) {
+	// Maintain a list of the variable substitutions:
+	std::map<elem, elem> variables;
+	for(int_t ridx = 0; ridx < ssize(nrp.r); ridx++) {
+		quote_rule(nrp.r[ridx], rel_name, rp, variables);
+	}
+	// Now create sub-relation to store the names of the variable
+	// substitutes in the quoted relation
+	for(auto const& [_, var_sym] : variables) {
+		rp.r.push_back(raw_rule(raw_term({ rel_name, elem_openp,
+			elem(QVARS), var_sym, elem_closep })));
+	}
+}
+
 /* Parse an STR elem into a raw_prog. */
 
 raw_prog driver::read_prog(elem prog, const raw_prog &rp) {
@@ -727,17 +745,8 @@ void driver::transform_quotes(raw_prog &rp) {
 					// Replace the whole quotation with the relation it will create.
 					curr_term.e.erase(curr_term.e.begin() + offset);
 					curr_term.calc_arity(nullptr);
-					// Maintain a list of the variable substitutions:
-					std::map<elem, elem> variables;
-					for(int_t ridx = 0; ridx < ssize(nrp.r); ridx++) {
-						quote_rule(nrp.r[ridx], rel_name, rp, variables);
-					}
-					// Now create sub-relation to store the names of the variable
-					// substitutes in the quoted relation
-					for(auto const& [_, var_sym] : variables) {
-						rp.r.push_back(raw_rule(raw_term({ rel_name, elem_openp,
-							elem(QVARS), var_sym, elem_closep })));
-					}
+					// Create the quotation relation
+					quote_prog(nrp, rel_name, rp);
 				}
 			}
 		}

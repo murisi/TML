@@ -189,6 +189,9 @@ void options::setup() {
 		.description("run N steps"));
 	add(option(option::type::INT, { "break", "b" })
 		.description("break on the N-th step"));
+	add(option(option::type::INT, { "regex-level", "" })
+		.description("aggressive matching with regex with levels 1 and more." 
+		"\n\t 1 - try all substrings - n+1  delete n rules after processing reg matching"));
 	add_bool2("break-on-fp", "bfp", "break on a fixed point");
 
 	add_bool2("populate-tml_update", "tml_update",
@@ -197,7 +200,8 @@ void options::setup() {
 	add_bool2("print-updates", "pu", "print updates");
 	add_bool2("print-dict", "dict", "print internal string dictionary");
 	add_bool2("reg-match", "regex", "applies regular expression matching");
-
+	add_bool2("guards", "g", "transforms if and while conditions");
+	add_bool2("keep-guards", "kg", "don't delete guards when program ends");
 	add_bool("optimize","optimize and show more benchmarks");
 	add(option(option::type::STRING, { "name", "n" },
 		[](const option::value& v) {

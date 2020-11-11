@@ -30,8 +30,9 @@ void bdd_size(cr_spbdd_handle x,  std::set<int_t>& s) {
 
 //------------------------------------------------------------------------------
 
-spbdd_handle bdd_quantify(cr_spbdd_handle x, const std::vector<quant_t> &quants) {
-	return bdd_handle::get(bdd::bdd_quantify(x->b, 0, quants));
+spbdd_handle bdd_quantify(cr_spbdd_handle x, const std::vector<quant_t> &quants,
+		const size_t bits, const size_t n_args) {
+	return bdd_handle::get(bdd::bdd_quantify(x->b, 0, quants, bits, n_args));
 }
 
 spbdd_handle bdd_and_hl(cr_spbdd_handle x) {
@@ -100,32 +101,38 @@ spbdd_handle bdd_mult_dfs(cr_spbdd_handle x, cr_spbdd_handle y, size_t bits,
 
 // ----------------------------------------------------------------------------
 
-int_t bdd::bdd_quantify(int_t x, int_t bit, const std::vector<quant_t> &quants) {
+int_t bdd::bdd_quantify(int_t x, int_t bit, const std::vector<quant_t> &quants,
+		const size_t bits, const size_t n_args) {
 
-	if (x == T || x == F || bit == (int_t) quants.size()) return x;
+	if (x == T || x == F || bit == (int_t) quants.size() * (int_t) bits) return x;
+
 	bdd c = get(x);
 
 	int_t h,l;
-	if (c.v > bit+1) c.h = x, c.l = x;
+	if (c.v > (int_t) quants.size() * (int_t) bits) return x;
+	if (c.v > bit+1)
+		return bdd_quantify(x, bit+1, quants, bits, n_args);
 
-	switch (quants[bit]) {
+	size_t idx = bit/bits;
+
+	switch (quants[idx]) {
 		case quant_t::FA: {
 			if (c.l == F || c.h == F) return F;
-			h = bdd_quantify(c.h, bit+1, quants);
+			h = bdd_quantify(c.h, bit+1, quants, bits, n_args);
 			if (h == F) return F;
-			l =	bdd_quantify(c.l, bit+1, quants);
+			l =	bdd_quantify(c.l, bit+1, quants, bits, n_args);
 			if (l == F) return F;
 			return x;
 		}
 		case quant_t::EX: {
 			if (c.l == F && c.h == F) return F;
-			h = bdd_quantify(c.h, bit+1, quants);
-			l =	bdd_quantify(c.l, bit+1, quants);
+			h = bdd_quantify(c.h, bit+1, quants, bits, n_args);
+			l =	bdd_quantify(c.l, bit+1, quants, bits, n_args);
 			if (l == F && h == F) return F;
+			if (l == F || h == F) return add(c.v, h, l);
 			return x;
 		}
 		case quant_t::UN: {
-			//TODO: review semantic for i.e unique x0 exists x1
 			if ((c.l == T && c.h == T) || (c.l == F && c.h == F))
 				//TODO: complete
 				return F;

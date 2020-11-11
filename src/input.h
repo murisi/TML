@@ -28,6 +28,8 @@
 class archive;
 #define lexeme2str(l) string_t((l)[0], (l)[1]-(l)[0])
 
+typedef std::pair<int_t, bool> guard;
+
 /**
  * input class contains input data. input can be one of three types: STDIN,
  * FILE or STRING. STDIN works as a STRING which is read from the standard input
@@ -242,8 +244,9 @@ static const std::set<std::string> str_bltins =
 
 struct elem {
 	enum etype {
-		NONE, SYM, NUM, CHR, VAR, OPENP, CLOSEP, ALT, STR, EQ, NEQ, LEQ, GT, LT,
-		GEQ, BLTIN, NOT, AND, OR, FORALL, EXISTS, UNIQUE, IMPLIES, COIMPLIES, ARITH,
+		NONE, SYM, NUM, CHR, VAR, OPENP, CLOSEP, ALT, STR,
+		EQ, NEQ, LEQ, GT, LT, GEQ, BLTIN, NOT, AND, OR,
+		FORALL, EXISTS, UNIQUE, IMPLIES, COIMPLIES, ARITH,
 		OPENB, CLOSEB, OPENSB, CLOSESB,
 	} type;
 	t_arith_op arith_op = NOP;
@@ -307,7 +310,7 @@ struct elem {
 	static elem fresh_sym(dict_t &d) {
 		return elem(elem::SYM, d.get_sym(d.get_fresh_sym(0)));
 	}
-	std::string to_str(){
+	std::string to_str() const{
 		if (type == NUM) return to_string(to_string_t(num));
 		if (type == CHR) return to_string(to_string_t(ch)); 
 		return to_string(lexeme2str(e));			
@@ -417,6 +420,7 @@ struct raw_rule {
 
 	enum etype { NONE, GOAL, TREE };
 	etype type = NONE;
+	bool guarding = false;
 	bool parse(input* in, const raw_prog& prog);
 	void clear() { h.clear(), b.clear(), type = NONE; }
 	raw_rule(){}
@@ -450,6 +454,7 @@ struct raw_rule {
 	std::optional<std::vector<std::vector<raw_term>>> get_b() {
 		return is_b() ? std::optional<std::vector<std::vector<raw_term>>>(b) : std::nullopt;
 	}
+	inline bool is_form() { return prft.get(); }
 	static raw_rule getdel(const raw_term& t) {
 		raw_rule r(t, t);
 		return r.h[0].neg = true, r;
@@ -474,6 +479,7 @@ struct raw_form_tree {
 
 	sprawformtree l = nullptr;
 	sprawformtree r = nullptr;
+	bool neg = false;
 
 	raw_form_tree (elem::etype _type, const raw_term &_rt) : type(_type), rt(new raw_term(_rt)) {}
 	raw_form_tree (elem::etype _type, const elem &_el) : type(_type), el(new elem(_el)) {}
@@ -503,27 +509,51 @@ private:
 	bool parsematrix(input* in, sprawformtree &root);
 public:
 	bool parse(input* in, sprawformtree &root);
+};
 
+struct guard_statement {
+	enum gtype { IF, WHILE } type;
+	bool parse_condition(input* in, raw_prog& rp);
+	bool parse_if(input* in, dict_t &dict, raw_prog& rp);
+	bool parse_while(input* in, dict_t &dict, raw_prog& rp);
+	bool parse(input* in, dict_t &dict, raw_prog& rp);
+	sprawformtree prft;
+	int_t id = 0;
+	static int_t last_id;
 };
 
 struct raw_prog {
+	enum ptype {
+		PFP, LFP, GFP
+	} type = PFP;
 	std::vector<macro> vm;
 	std::vector<directive> d;
 	std::vector<production> g;
 	std::vector<raw_rule> r;
+	std::vector<guard_statement> gs;
+	std::vector<raw_prog> nps;
+	guard grd;
 
 	std::set<lexeme, lexcmp> builtins;
-	std::vector<raw_prog> nps; // nested progs
 //	int_t delrel = -1;
+
+	int_t id = 0;
+	static int_t last_id;
+
+	raw_prog() { id = ++last_id; }
+
 	bool parse(input* in, dict_t &dict);
+	bool parse_statement(input* in, dict_t &dict, guard grd = {-1,false});
+	bool parse_nested(input* in, dict_t &dict);
+	bool parse_xfp(input* in, dict_t &dict);
 	bool macro_expand(input *in , macro mm, const size_t i, const size_t j, 
-					std::vector<raw_term> &vrt, dict_t &dict);
+				std::vector<raw_term> &vrt, dict_t &dict);
 };
 
 struct raw_progs {
-	std::vector<raw_prog> p;
+	raw_prog p;
 	raw_progs();
-	bool parse(input* in, dict_t& dict, bool newseq = true);
+	bool parse(input* in, dict_t& dict);
 };
 
 bool throw_runtime_error(std::string err, std::string details = "");
@@ -544,6 +574,8 @@ std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const raw_form_tree
 template <typename T>
 std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const raw_term& t);
 template <typename T>
+std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const sprawformtree prts);
+template <typename T>
 std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const std::pair<raw_term, std::string>& p);
 template <typename T>
 std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const raw_rule& r);
@@ -555,6 +587,13 @@ template <typename T>
 std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const production& p);
 std::basic_ostream<char>& operator<<(std::basic_ostream<char>& os, const lexeme& l);
 std::basic_ostream<wchar_t>& operator<<(std::basic_ostream<wchar_t>& os, const lexeme& l);
+
+template <typename T>
+std::basic_ostream<T>& print_raw_prog_tree(std::basic_ostream<T>& os,
+	const raw_prog& p, size_t level);
+template <typename T>
+std::basic_ostream<T>& print_raw_rule(std::basic_ostream<T>& os,
+	const raw_rule& r, size_t level);
 
 bool operator==(const lexeme& l, std::string s);
 bool operator==(const lexeme& l, const char* s);

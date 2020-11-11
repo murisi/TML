@@ -97,7 +97,7 @@ struct body {
 
 struct alt : public std::vector<body*> {
 	spbdd_handle rng = htrue, eq = htrue, rlast = hfalse;
-	size_t varslen;
+	size_t varslen = 0;
 	bdd_handles last;
 	std::vector<term> t;
 	bools ex;
@@ -111,11 +111,13 @@ struct alt : public std::vector<body*> {
 	int_t idbltin = -1; //lexeme bltintype;
 	ints bltinargs;
 	size_t bltinsize;
+	pnft_handle f = 0;
 
 	bool operator<(const alt& t) const {
 		if (varslen != t.varslen) return varslen < t.varslen;
 		if (rng != t.rng) return rng < t.rng;
 		if (eq != t.eq) return eq < t.eq;
+		if (f != t.f) return f < t.f;
 		return (std::vector<body*>)*this<(std::vector<body*>)t;
 	}
 };
@@ -127,12 +129,10 @@ struct rule : public std::vector<alt*> {
 	size_t len;
 	bdd_handles last;
 	term t;
-	pnft_handle f;
 	bool operator<(const rule& t) const {
 		if (neg != t.neg) return neg;
 		if (tab != t.tab) return tab < t.tab;
 		if (eq != t.eq) return eq < t.eq;
-		if (f != t.f) return f < t.f;
 		return (std::vector<alt*>)*this < (std::vector<alt*>)t;
 	}
 	bool equals_termwise(const rule& r) const {
@@ -229,7 +229,8 @@ private:
 	size_t bits = 2;
 	dict_t dict; // dict_t& dict;
 	bool bproof, datalog, optimize, unsat = false, bcqc = true,
-		 bin_transform = false, print_transformed, apply_regexpmatch = false;
+		 bin_transform = false, print_transformed = false,
+		 apply_regexpmatch = false, keep_guards = false;
 
 	size_t max_args = 0;
 	std::map<std::array<int_t, 6>, spbdd_handle> range_memo;
@@ -275,6 +276,7 @@ private:
 
 	ntable add_table(sig s);
 	uints get_perm(const term& t, const varmap& m, size_t len) const;
+	uints get_perm(const term& t, const varmap& m, size_t len, size_t bits) const;
 	template<typename T>
 	static varmap get_varmap(const term& h, const T& b, size_t &len);
 	//spbdd_handle get_alt_range(const term& h, const std::set<term>& a,
@@ -288,6 +290,7 @@ private:
 	spbdd_handle from_fact(const term& t);
 	term from_raw_term(const raw_term&, bool ishdr = false, size_t orderid = 0);
 	std::pair<bools, uints> deltail(size_t len1, size_t len2) const;
+	std::pair<bools, uints> deltail(size_t len1, size_t len2, size_t bits) const;
 	uints addtail(size_t len1, size_t len2) const;
 	spbdd_handle addtail(cr_spbdd_handle x, size_t len1, size_t len2) const;
 	spbdd_handle body_query(body& b, size_t);
@@ -330,7 +333,7 @@ private:
 
 	void get_facts(const flat_prog& m);
 	void get_alt(const term_set& al, const term& h, std::set<alt>& as);
-	void get_form(pnft_handle& f, const term_set& al, const term& h);
+	void get_form(const term_set& al, const term& h, std::set<alt>& as);
 	void get_rules(flat_prog m);
 
 	ntable get_table(const sig& s);
@@ -357,6 +360,8 @@ private:
 					std::vector<term> &v, std::set<term> &done);
 	bool transform_grammar(std::vector<struct production> g, flat_prog& p, form *&root);
 	bool transform_ebnf(std::vector<struct production> &g, dict_t &d, bool &changed);
+	bool transform_grammar_constraints(const struct production &x, std::vector<term> &v, flat_prog &p, 
+											  std::map<size_t, term> &refs);
 	bool cqc(const std::vector<term>& x, std::vector<term> y) const;
 //	flat_prog cqc(std::vector<term> x, std::vector<term> y) const;
 	bool cqc(const std::vector<term>&, const flat_prog& m) const;
@@ -396,7 +401,7 @@ private:
 	spbdd_handle perm_from_to(size_t from, size_t to, spbdd_handle in, size_t n_bits, size_t n_vars);
 	spbdd_handle perm_bit_reverse(spbdd_handle in,  size_t n_bits, size_t n_vars);
 
-	void handler_form1(pnft_handle &p, form *f, varmap &vm, varmap &vmh);
+	void handler_form1(pnft_handle &p, form *f, varmap &vm, varmap &vmh, bool fq);
 	void handler_formh(pnft_handle &p, form *f, varmap &vm, varmap &vmh);
 	bool handler_arith(const term& t, const varmap &vm, const size_t vl,
 			spbdd_handle &cons);
@@ -440,7 +445,7 @@ private:
 public:
 	tables(dict_t dict, bool bproof = false, bool optimize = true,
 		bool bin_transform = false, bool print_transformed = false, 
-		bool apply_regxmatch = false);
+		bool apply_regxmatch = false, bool keep_guards = false);
 	~tables();
 	size_t step() { return nstep; }
 	bool add_prog(const raw_prog& p, const strs_t& strs);
@@ -461,12 +466,18 @@ public:
 	bool get_goals(std::basic_ostream<T>&);
 	dict_t& get_dict() { return dict; }
 
+	void __(std::vector<raw_term>& rts,const lexeme& lx,int_t i,bool neg=0);
+	void transform_guards(raw_prog& rp);
+	void transform_facts(raw_prog& rp);
+	void transform_guard_statements(raw_prog& rp);
+	void remove_guards(raw_prog& rp);
 	template <typename T>
 	std::basic_ostream<T>& print_dict(std::basic_ostream<T>&) const;
 	bool error = false;
 	bool populate_tml_update = false;
 	bool print_updates       = false;
 	bool print_steps         = false;
+	int  regex_level 		 = 0;
 };
 
 
@@ -577,7 +588,7 @@ struct ptransformer{
 	bool is_firstoffactor(elem &c);
 	bool parse_alts( std::vector<elem> &next, size_t& cur);
 	lexeme get_fresh_nonterminal();
-	bool synth_recur( struct production &np, std::vector<elem>::const_iterator from, 
+	bool synth_recur( std::vector<elem>::const_iterator from, 
 		std::vector<elem>::const_iterator till, bool bnull, bool brecur,
 		bool balt);
 	bool parse_factor( std::vector<elem> &next, size_t& cur);
@@ -598,7 +609,8 @@ struct graphgrammar {
 	bool dfs( const elem &s);
 	bool detectcycle();
 	bool iscyclic( const elem &s);
-	std::string getregularexpstr(const elem &p, bool &bhasnull);
+	std::string get_regularexpstr(const elem &p, bool &bhasnull, bool islazy);
+	const std::map<lexeme, std::string, lexcmp> & get_builtin_reg();
 	bool combine_rhs( const elem &s, std::vector<elem> &comb);
 	bool collapsewith();
 };

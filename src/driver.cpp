@@ -1554,10 +1554,9 @@ void driver::naive_pfp(const raw_prog &rp, std::set<elem> &universe,
 	} while(prev_database != database);
 }
 
-bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
-	if (!rp.p.size()) return true;
+bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	lexeme trel = { 0, 0 };
-	directives_load(rp.p[n], trel);
+	directives_load(rp, trel);
 	auto get_vars = [this](const raw_term& t) {
 		for (const elem& e : t.e)
 			if (e.type == elem::VAR)
@@ -1571,7 +1570,7 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 					get_vars(t);
 		}
 	};
-	for (const raw_prog& p : rp.p) get_all_vars(p);
+	get_all_vars(rp);
 //	for (auto x : pd.strs)
 //		if (!has(transformed_strings, x.first))
 //			transform_string(x.second, rp.p[n], x.first),
@@ -1580,7 +1579,7 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 //		if (!has(transformed_strings, x.first))
 //			transform_string(x.second, rp.p[n], x.first),
 //			transformed_strings.insert(x.first);
-	if (!rp.p[n].g.empty()) //{
+	if (!rp.g.empty()) //{
 		if (pd.strs.size() > 1)
 			return throw_runtime_error(err_one_input);
 //		else transform_grammar(rp.p[n], pd.strs.begin()->first,
@@ -1589,26 +1588,24 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 //	if (opts.enabled("sdt"))
 //		for (raw_prog& p : rp.p)
 //			p = transform_sdt(move(p));
-	for (raw_prog& p : rp.p) {
-		simplify_formulas(p);
-		std::cout << "Simplified Program:" << std::endl << std::endl << p << std::endl;
-		transform_quotes(p);
-		std::cout << "Quoted Program:" << std::endl << std::endl << p << std::endl;
-		transform_evals(p);
-		std::cout << "Evaled Program:" << std::endl << std::endl << p << std::endl;
-		to_pure_tml(p);
-		std::cout << "Pure TML Program:" << std::endl << std::endl << p << std::endl;
-		cqc_minimize(p);
-		std::cout << "CQC Minimized Program:" << std::endl << std::endl << p << std::endl;
-		/*std::set<elem> universe;
-		std::set<raw_term> database;
-		naive_pfp(p, universe, database);
-		std::cout << "Fixed Point:" << std::endl << std::endl;
-		for(const raw_term &entry : database) {
-			std::cout << entry << "." << std::endl;
-		}*/
-		std::cout << std::endl << std::endl;
-	}
+	simplify_formulas(rp);
+	std::cout << "Simplified Program:" << std::endl << std::endl << rp << std::endl;
+	transform_quotes(rp);
+	std::cout << "Quoted Program:" << std::endl << std::endl << rp << std::endl;
+	transform_evals(rp);
+	std::cout << "Evaled Program:" << std::endl << std::endl << rp << std::endl;
+	to_pure_tml(rp);
+	std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
+	cqc_minimize(rp);
+	std::cout << "CQC Minimized Program:" << std::endl << std::endl << rp << std::endl;
+	/*std::set<elem> universe;
+	std::set<raw_term> database;
+	naive_pfp(p, universe, database);
+	std::cout << "Fixed Point:" << std::endl << std::endl;
+	for(const raw_term &entry : database) {
+		std::cout << entry << "." << std::endl;
+	}*/
+	std::cout << std::endl << std::endl;
 #ifdef TRANSFORM_BIN_DRIVER
 	if (opts.enabled("bin"))
 		for (raw_prog& p : rp.p)
@@ -1617,6 +1614,7 @@ bool driver::transform(raw_progs& rp, size_t n, const strs_t& /*strtrees*/) {
 //	if (trel[0]) transform_proofs(rp.p[n], trel);
 	//o::out()<<rp.p[n]<<endl;
 //	if (pd.bwd) rp.p.push_back(transform_bwd(rp.p[n]));
+	for (auto& np : rp.nps) if (!transform(np, pd.strs)) return false;
 	return true;
 }
 
@@ -1626,19 +1624,22 @@ void driver::output_pl(const raw_prog& p) const {
 	if (opts.enabled("souffle")) print_souffle(o::to("souffle"), p);
 }
 
-bool driver::prog_run(raw_progs& rp, size_t n, size_t steps,
-	size_t break_on_step)
-{
+bool driver::prog_run(raw_prog& p, size_t steps, size_t break_on_step) {
 //	pd.clear();
 	//DBG(o::out() << "original program:"<<endl<<p;)
 //	strtrees.clear(), get_dict_stats(rp.p[n]), add_rules(rp.p[n]);
 	clock_t start, end;
 	size_t step = nsteps();
 	measure_time_start();
-	bool fp = tbl->run_prog(rp.p[n], pd.strs, steps, break_on_step);
-	if (tbl->error) error = true;
+	if (opts.enabled("guards")) {
+		tbl->transform_guards(p);
+		if (opts.enabled("transformed")) o::to("transformed")
+			<< "after transform_guards:\n" << p << endl<<endl;
+	}
+	bool fp = tbl->run_prog(p, pd.strs, steps, break_on_step);
 	o::ms() << "# elapsed: ";
 	measure_time_end();
+	if (tbl->error) error = true;
 	pd.elapsed_steps = nsteps() - step;
 //	for (auto x : prog->strtrees_out)
 //		strtrees.emplace(x.first, get_trees(prog->pd.strtrees[x.first],
@@ -1647,29 +1648,17 @@ bool driver::prog_run(raw_progs& rp, size_t n, size_t steps,
 }
 
 bool driver::add(input* in) {
-	if (!rp.parse(in, tbl->get_dict(), in->newseq)) return !(error = true);
-	if (!in->newseq) transform(rp, pd.n, pd.strs);
+	if (!rp.parse(in, tbl->get_dict())) return !(error = true);
+	transform(rp.p, pd.strs);
 	return true;
 }
 
 template <typename T>
-void driver::list(std::basic_ostream<T>& os, size_t n) {
-	size_t e = n ? n-- : rp.p.size();
-	if (e > rp.p.size()) { os<<"# no such program exist"<<endl; return; }
-	for (; n != e; ++n) os<<"# Listing program "<<(n + 1)<<":\n{\n"
-		<<rp.p[n]<<"}\n";
-	os << flush;
+void driver::list(std::basic_ostream<T>& os, size_t /*n*/) {
+	os << rp.p << endl;
 }
 template void driver::list(std::basic_ostream<char>&, size_t);
 template void driver::list(std::basic_ostream<wchar_t>&, size_t);
-
-void driver::new_sequence() {
-	//DBG(o::dbg() << "new sequence" << endl;)
-	transform(rp, pd.n, pd.strs);
-	raw_prog &p = rp.p[pd.n];
-	for (const string& s : str_bltins) p.builtins.insert(get_lexeme(s));
-	output_pl(p);
-}
 
 void driver::restart() {
 	pd.n = 0;
@@ -1677,37 +1666,26 @@ void driver::restart() {
 	running = true;
 }
 
-bool driver::run(size_t steps, size_t break_on_step, bool break_on_fp) {
-	if (!rp.p.size()) return result = true;
+bool driver::run(size_t steps, size_t break_on_step) {
 	if (!running) restart();
-next_sequence:
-	if (nsteps() == pd.start_step) new_sequence();
-	if (opts.disabled("run") && opts.disabled("repl"))
-		return true;
-	bool fp = prog_run(rp, pd.n, steps, break_on_step);
-	if (fp) {
-		//DBG(if (opts.enabled("dump")) out(o::dump());)
-		if (pd.n == rp.p.size()-1) // all progs fp
-			return result = true, true;
-		++pd.n;
-		pd.start_step = nsteps();
-		if (steps && steps >= pd.elapsed_steps)
-			if (!(steps -= pd.elapsed_steps)) return false;
-		if ((break_on_step && nsteps() == break_on_step)
-			|| break_on_fp) return false;
-		goto next_sequence;
+	if (nsteps() == pd.start_step) {
+		//transform(rp.p, pd.strs);
+		for (const string& s : str_bltins)
+			rp.p.builtins.insert(get_lexeme(s));
+		output_pl(rp.p);
 	}
-	return false;
+	if (opts.disabled("run") && opts.disabled("repl")) return true;
+	bool fp = prog_run(rp.p, steps, break_on_step);
+	if (fp) result = true;
+	return fp;
 }
 
-bool driver::step(size_t steps, size_t break_on_step, bool break_on_fp) {
-	return run(steps, break_on_step, break_on_fp);
+bool driver::step(size_t steps, size_t break_on_step) {
+	return run(steps, break_on_step);
 }
 
 template <typename T>
 void driver::info(std::basic_ostream<T>& os) {
-	size_t l = rp.p.size();
-	os<<"# prog n:    \t" << (pd.n+1) <<" of: " << (l>0?l:0) << endl;
 	os<<"# step:      \t" << nsteps() <<" - " << pd.start_step <<" = "
 		<< (nsteps() - pd.start_step) << " ("
 		<< (running ? "" : "not ") << "running)" << endl;
@@ -1768,10 +1746,11 @@ driver::driver(string s, const options &o) : rp(), opts(o) {
 	// we don't need the dict any more, tables owns it from now on...
 	tbl = new tables(move(dict), opts.enabled("proof"), 
 		opts.enabled("optimize"), opts.enabled("bin"),
-		opts.enabled("t"), opts.enabled("regex"));
+		opts.enabled("t"), opts.enabled("regex"), opts.enabled("kg"));
 	set_print_step(opts.enabled("ps"));
 	set_print_updates(opts.enabled("pu"));
 	set_populate_tml_update(opts.enabled("tml_update"));
+	set_regex_level(opts.get_int("regex-level"));
 	if (!ii) return;
 	current_input = ii->first();
 	if (current_input && !add(current_input)) return;
@@ -1779,15 +1758,15 @@ driver::driver(string s, const options &o) : rp(), opts(o) {
 }
 
 driver::driver(FILE *f, const options &o) : driver(input::file_read_text(f),o){}
-driver::driver(string_t s, const options& o)	: driver(to_string(s), o) {}
-driver::driver(const char *s, const options &o)	: driver(string(s), o) {}
-driver::driver(ccs   s, const options &o)	: driver(string_t(s), o) {}
-driver::driver(const options &o)	: driver(string(), o) {}
-driver::driver(string s)		: driver(s, options()) {}
-driver::driver(FILE *f)			: driver(f, options()) {}
-driver::driver(string_t s)		: driver(to_string(s)) {}
-driver::driver(const char *s)		: driver(s, options()) {}
-driver::driver(ccs   s)			: driver(string_t(s)) {}
+driver::driver(string_t s, const options& o)    : driver(to_string(s), o) {}
+driver::driver(const char *s, const options &o) : driver(string(s), o) {}
+driver::driver(ccs   s, const options &o)       : driver(string_t(s), o) {}
+driver::driver(const options &o)                : driver(string(), o) {}
+driver::driver(string s)                        : driver(s, options()) {}
+driver::driver(FILE *f)                         : driver(f, options()) {}
+driver::driver(string_t s)                      : driver(to_string(s)) {}
+driver::driver(const char *s)                   : driver(s, options()) {}
+driver::driver(ccs s)                           : driver(string_t(s)) {}
 
 driver::~driver() {
 	if (tbl) delete tbl;

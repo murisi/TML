@@ -2098,11 +2098,11 @@ bool tables::transform_grammar(vector<production> g, flat_prog& p, form*& /*r*/ 
 			std::smatch sm;
 			term t;
  			std::sregex_iterator iter(inputstr.begin(), inputstr.end(), rgx);
-    		std::sregex_iterator end;
+			std::sregex_iterator end;
 			bool bmatch=false;
 			for(;iter != end; ++iter) {
 				DBG(COUT << regexp << " match "<< iter->str()<< endl);
-       			DBG(COUT << "size: " << iter->size() << std::endl);
+			 	DBG(COUT << "size: " << iter->size() << std::endl);
 				DBG(COUT << "len: " << iter->length(0) << std::endl);
 		
 				t.resize(2);
@@ -2110,7 +2110,7 @@ bool tables::transform_grammar(vector<production> g, flat_prog& p, form*& /*r*/ 
 				t[0] = mknum(iter->position(0)), t[1] = mknum(iter->position(0)+iter->length(0));
 				p.insert({t});
 				bmatch =true;
-   			}		
+	 			}		
 	//		if(bmatch) prod= g.erase(prod);
 	//		else 
 				prod++;
@@ -2299,7 +2299,7 @@ bool tables::transform_grammar(vector<production> g, flat_prog& p, form*& /*r*/ 
 				else return er("Only simple binary operation allowed.");
 			}
 			else if( n < rt.e.size() && 
-				   (rt.e[n].type == elem::EQ || rt.e[n].type == elem::LEQ)) {
+					 (rt.e[n].type == elem::EQ || rt.e[n].type == elem::LEQ)) {
 				//format: lopd = ropd
 				term equalt;
 				equalt.resize(2);
@@ -2775,19 +2775,19 @@ bool tables::pfp(size_t nsteps, size_t break_on_step) {
  * that it reaches a fixed point. Otherwise just return false. */
 
 bool tables::run_prog(const raw_prog &rp, const dict_t &dict,
-    const options &opts, std::set<raw_term> &results) {
+		const options &opts, std::set<raw_term> &results) {
 	tables tbl(dict, opts.enabled("proof"), 
 		opts.enabled("optimize"), opts.enabled("bin"),
 		opts.enabled("t"), opts.enabled("regex"));
-  strs_t strs;
+	strs_t strs;
 	if(tbl.run_prog(rp, strs)) {
-    for(const term &result : tbl.decompress()) {
-      results.insert(tbl.to_raw_term(result));
-    }
-    return true;
-  } else {
-    return false;
-  }
+		for(const term &result : tbl.decompress()) {
+			results.insert(tbl.to_raw_term(result));
+		}
+		return true;
+	} else {
+		return false;
+	}
 }
 
 bool tables::run_prog(const raw_prog& p, const strs_t& strs, size_t steps,

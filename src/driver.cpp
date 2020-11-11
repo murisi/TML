@@ -291,22 +291,22 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 template<typename T, typename F> bool partition_iter(std::set<T> &vars,
 		std::vector<std::set<T>> &partitions, const F &f) {
 	if(vars.empty()) {
-    return f(partitions);
+		return f(partitions);
 	} else {
 		const T nvar = *vars.begin();
 		vars.erase(nvar);
 		for(size_t i = 0; i < partitions.size(); i++) {
 			partitions[i].insert(nvar);
 			if(!partition_iter(vars, partitions, f)) {
-        return false;
-      }
+				return false;
+			}
 			partitions[i].erase(nvar);
 		}
 		std::set<T> npart = { nvar };
 		partitions.push_back(npart);
 		if(!partition_iter(vars, partitions, f)) {
-      return false;
-    }
+			return false;
+		}
 		partitions.pop_back();
 		vars.insert(nvar);
 		return true;
@@ -318,20 +318,20 @@ template<typename T, typename F> bool partition_iter(std::set<T> &vars,
  * the product and if it returns false, the iteration stops. */
 
 template<typename T, typename F>
-    bool product_iter(const std::set<T> &vars, std::vector<T> &seq,
-      size_t len, const F &f) {
-  if(len == 0) {
-    return f(seq);
-  } else {
-    for(const T &el : vars) {
-      seq.push_back(el);
-      if(!product_iter(vars, seq, len - 1, f)) {
-        return false;
-      }
-      seq.pop_back();
-    }
-    return true;
-  }
+		bool product_iter(const std::set<T> &vars, std::vector<T> &seq,
+			size_t len, const F &f) {
+	if(len == 0) {
+		return f(seq);
+	} else {
+		for(const T &el : vars) {
+			seq.push_back(el);
+			if(!product_iter(vars, seq, len - 1, f)) {
+				return false;
+			}
+			seq.pop_back();
+		}
+		return true;
+	}
 }
 
 /* Function to iterate through the power set of the given set. The
@@ -339,39 +339,39 @@ template<typename T, typename F>
  * if it returns false, the iteration stops. */
 
 template<typename T, typename F> bool power_iter(std::set<T> &elts,
-    std::set<T> &subset, const F &f) {
-  if(elts.size() == 0) {
-    return f(subset);
-  } else {
-    const T nelt = *elts.begin();
+		std::set<T> &subset, const F &f) {
+	if(elts.size() == 0) {
+		return f(subset);
+	} else {
+		const T nelt = *elts.begin();
 		elts.erase(nelt);
-    // Case where current element will not be in subset
-    if(!power_iter(elts, subset, f)) {
-      return false;
-    }
-    if(subset.insert(nelt).second) {
-      // Case where current element will be in subset
-      if(!power_iter(elts, subset, f)) {
-        return false;
-      }
-      subset.erase(nelt);
-    }
-    elts.insert(nelt);
+		// Case where current element will not be in subset
+		if(!power_iter(elts, subset, f)) {
+			return false;
+		}
+		if(subset.insert(nelt).second) {
+			// Case where current element will be in subset
+			if(!power_iter(elts, subset, f)) {
+				return false;
+			}
+			subset.erase(nelt);
+		}
+		elts.insert(nelt);
 		return true;
-  }
+	}
 }
 
-/* If rr1 and rr2 are both conjunctive queries with negation, check that
- * rr1 is contained by rr2. Do this using the Levy-Sagiv test. */
+/* Collect the variables used in the head and the positive terms of the
+ * given rule and return. */
 
-bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
+std::set<elem> driver::collect_positive_vars(const raw_rule &rr) {
 	std::set<elem> vars;
-	for(const elem &e : rr1.h[0].e) {
+	for(const elem &e : rr.h[0].e) {
 		if(e.type == elem::VAR) {
 			vars.insert(e);
 		}
 	}
-	for(const raw_term &tm : rr1.b[0]) {
+	for(const raw_term &tm : rr.b[0]) {
 		if(!tm.neg) {
 			for(const elem &e : tm.e) {
 				if(e.type == elem::VAR) {
@@ -380,81 +380,92 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 			}
 		}
 	}
+	return vars;
+}
+
+/* If rr1 and rr2 are both conjunctive queries with negation, check that
+ * rr1 is contained by rr2. Do this using the Levy-Sagiv test. */
+
+bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
+	std::set<elem> vars = collect_positive_vars(rr1);
 	std::vector<std::set<elem>> partitions;
+	// Do the Levy-Sagiv test
 	return partition_iter(vars, partitions,
-    [&](const std::vector<std::set<elem>> &partitions) -> bool {
-      // Get dictionary for generating fresh symbols
-      dict_t &d = tbl->get_dict();
-      std::map<elem, elem> subs;
-      for(const std::set<elem> &part : partitions) {
-        elem pvar = elem::fresh_sym(d);
-        for(const elem &e : part) {
-          subs[e] = pvar;
-        }
-      }
-      raw_rule subbed = freeze_rule(rr1, subs);
-      std::set<elem> symbol_set;
-      std::set<raw_term> canonical, canonical_negative;
-      // Only the positive subgoals are needed for the Levy-Sagiv test
-      for(raw_term &rt : subbed.b[0]) {
-        if(rt.neg) {
-          rt.neg = false;
-          canonical_negative.insert(rt);
-          rt.neg = true;
-        } else {
-          canonical.insert(rt);
-          for(size_t i = 2; i < rt.e.size() - 1; i++) {
-            symbol_set.insert(rt.e[i]);
-          }
-        }
-      }
-      // Does canonical make all the subgoals of subbed true?
-      for(raw_term &rt : subbed.b[0]) {
-        if(rt.neg) {
-          // If the term in the rule is negated, we need to make sure
-          // that it is not in the canonical database.
-          rt.neg = false;
-          if(canonical.find(rt) != canonical.end()) {
-            return true;
-          }
-          rt.neg = true;
-        }
-      }
-      // Now we need to get the largest superset of our canonical
-      // database
-      std::set<raw_term> superset;
-      for(const raw_term &rt : rr2.b[0]) {
-        std::vector<elem> tuple;
-        product_iter(symbol_set, tuple, rt.e.size() - 3,
-          [&](const std::vector<elem> tuple) -> bool {
-            std::vector<elem> nterm_e = { rt.e[0], rt.e[1] };
-            for(const elem &e : tuple) {
-              nterm_e.push_back(e);
-            }
-            nterm_e.push_back(rt.e[rt.e.size() - 1]);
-            raw_term nterm(nterm_e);
-            superset.insert(nterm);
-            return true;
-          });
-      }
-      // Remove the frozen negative subgoals
-      for(const raw_term &rt : canonical_negative) {
-        superset.erase(rt);
-      }
-      // Now need to through all the supersets of our canonical database
-      // and check that they yield the frozen head.
-      return power_iter(superset, canonical,
-        [&](const std::set<raw_term> ext) -> bool {
-          raw_prog test_prog;
-          for(const raw_term rt : ext) {
-            test_prog.r.push_back(raw_rule(rt));
-          }
-          test_prog.r.push_back(rr2);
-          std::set<raw_term> res;
-          tables::run_prog(test_prog, d, opts, res);
-          return res.find(subbed.h[0]) != res.end();
-        });
-    });
+		[&](const std::vector<std::set<elem>> &partitions) -> bool {
+			// Get dictionary for generating fresh symbols
+			dict_t &d = tbl->get_dict();
+			// Map each variable to a fresh symbol according to the partitions
+			std::map<elem, elem> subs;
+			for(const std::set<elem> &part : partitions) {
+				elem pvar = elem::fresh_sym(d);
+				for(const elem &e : part) {
+					subs[e] = pvar;
+				}
+			}
+			raw_rule subbed = freeze_rule(rr1, subs);
+			std::set<elem> symbol_set;
+			std::set<raw_term> canonical, canonical_negative;
+			// Separate the positive and negative subgoals. Note the symbols
+			// supplied to the positive subgoals.
+			for(raw_term &rt : subbed.b[0]) {
+				if(rt.neg) {
+					rt.neg = false;
+					canonical_negative.insert(rt);
+					rt.neg = true;
+				} else {
+					canonical.insert(rt);
+					for(size_t i = 2; i < rt.e.size() - 1; i++) {
+						symbol_set.insert(rt.e[i]);
+					}
+				}
+			}
+			// Does canonical make all the subgoals of subbed true?
+			for(raw_term &rt : subbed.b[0]) {
+				if(rt.neg) {
+					// If the term in the rule is negated, we need to make sure
+					// that it is not in the canonical database.
+					rt.neg = false;
+					if(canonical.find(rt) != canonical.end()) {
+						return true;
+					}
+					rt.neg = true;
+				}
+			}
+			// Now we need to get the largest superset of our canonical
+			// database
+			std::set<raw_term> superset;
+			for(const raw_term &rt : rr2.b[0]) {
+				std::vector<elem> tuple;
+				product_iter(symbol_set, tuple, rt.e.size() - 3,
+					[&](const std::vector<elem> tuple) -> bool {
+						std::vector<elem> nterm_e = { rt.e[0], rt.e[1] };
+						for(const elem &e : tuple) {
+							nterm_e.push_back(e);
+						}
+						nterm_e.push_back(rt.e[rt.e.size() - 1]);
+						raw_term nterm(nterm_e);
+						superset.insert(nterm);
+						return true;
+					});
+			}
+			// Remove the frozen negative subgoals
+			for(const raw_term &rt : canonical_negative) {
+				superset.erase(rt);
+			}
+			// Now need to through all the supersets of our canonical database
+			// and check that they yield the frozen head.
+			return power_iter(superset, canonical,
+				[&](const std::set<raw_term> ext) -> bool {
+					raw_prog test_prog;
+					for(const raw_term rt : ext) {
+						test_prog.r.push_back(raw_rule(rt));
+					}
+					test_prog.r.push_back(rr2);
+					std::set<raw_term> res;
+					tables::run_prog(test_prog, d, opts, res);
+					return res.find(subbed.h[0]) != res.end();
+				});
+		});
 }
 
 /* If the given query is conjunctive, go through its terms and see if
@@ -1162,11 +1173,11 @@ void driver::populate_free_variables(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars) {
 	for(const elem &e : t.e) {
 		if(e.type == elem::VAR) {
-			if(std::find(bound_vars.begin(), bound_vars.end(), e) ==
-					bound_vars.end()) {
-				free_vars.insert(e);
-			}
+			free_vars.insert(e);
 		}
+	}
+	for(const elem &bv : bound_vars) {
+		free_vars.erase(bv);
 	}
 }
 

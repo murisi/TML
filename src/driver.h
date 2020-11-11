@@ -139,9 +139,12 @@ class driver {
 		raw_prog &rp, std::map<elem, elem> &variables);
 	elem to_pure_tml(const sprawformtree &t, raw_prog &rp,
 		std::set<elem> &bs);
+	std::set<elem> collect_positive_vars(const raw_rule &rr);
 	void to_pure_tml(raw_rule &rr, raw_prog &rp);
 	void to_pure_tml(raw_prog &rp);
 	void populate_free_variables(const raw_term &t,
+		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
+	void populate_free_variables(const raw_form_tree &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	void populate_universe(const raw_term &rt, std::set<elem> &universe);
 	void populate_universe(const sprawformtree &rft,
@@ -152,8 +155,6 @@ class driver {
 		const std::vector<elem> &bound_vars);
 	void insert_exists(raw_rule &rr);
 	void insert_exists(raw_prog &rp);
-	void populate_free_variables(const raw_form_tree &t,
-		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	void interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
 		const std::map<const elem*, std::set<elem>> &universes,
 		std::map<elem, elem> &bindings, std::set<raw_term> &database);

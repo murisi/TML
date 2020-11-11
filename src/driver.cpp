@@ -1162,10 +1162,24 @@ void driver::to_pure_tml(raw_rule &rr, raw_prog &rp) {
 }
 
 void driver::to_pure_tml(raw_prog &rp) {
+	// Convert all FOL formulas to P-DATALOG
 	for(size_t i = 0; i < rp.r.size(); i++) {
 		raw_rule rr = rp.r[i];
 		to_pure_tml(rr, rp);
 		rp.r[i] = rr;
+	}
+	// Split rules with multiple heads and delete those with 0 heads
+	for(std::vector<raw_rule>::iterator it = rp.r.begin();
+			it != rp.r.end();) {
+		if(it->h.size() != 1) {
+			const raw_rule rr = *it;
+			it = rp.r.erase(it);
+			for(const raw_term &rt : rr.h) {
+				it = rp.r.insert(it, raw_rule(rt, rr.b));
+			}
+		} else {
+			it++;
+		}
 	}
 }
 

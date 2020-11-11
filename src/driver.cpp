@@ -696,7 +696,7 @@ std::vector<elem> driver::quote_rule(const raw_rule &rr,
 /* Put the quotation of the given program into a relation of the given
  * name in the given program. */
 
-void driver::quote_prog(const raw_prog &nrp, const elem &rel_name,
+void driver::quote_prog(const raw_prog nrp, const elem &rel_name,
 		raw_prog &rp) {
 	// Maintain a list of the variable substitutions:
 	std::map<elem, elem> variables;
@@ -1621,6 +1621,8 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	std::cout << "Quoted Program:" << std::endl << std::endl << rp << std::endl;
 	transform_evals(rp);
 	std::cout << "Evaled Program:" << std::endl << std::endl << rp << std::endl;
+	quote_prog(rp, elem(elem::SYM, get_lexeme("this")), rp);
+	std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
 	to_pure_tml(rp);
 	std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
 	cqc_minimize(rp);

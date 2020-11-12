@@ -502,13 +502,44 @@ bool driver::try_cqc_minimize(raw_rule &rr) {
 	return false;
 }
 
-/* Do the maximal amount of query minimization on each conjunctive query
- * in the given program. */
+/* Go through the program and removed those queries that are subsumed by
+ * others. While we're at it, minimize (i.e. subsume a query with its
+ * part) the shortlisted queries to reduce time cost of future
+ * subsumptions. This function does not respect order, so it should only
+ * be used on an unordered stratum. */
 
-void driver::cqc_minimize(raw_prog &rp) {
+void driver::subsume_queries(raw_prog &rp) {
+	std::vector<raw_rule> reduced_rules;
 	for(raw_rule &rr : rp.r) {
-		while(try_cqc_minimize(rr));
+		bool subsumed = false;
+		
+		for(std::vector<raw_rule>::iterator nrr = reduced_rules.begin();
+				nrr != reduced_rules.end();) {
+			if(cqc(rr, *nrr)) {
+				// If the current rule is contained by a rule in reduced rules,
+				// then move onto the next rule in the outer loop
+				subsumed = true;
+				break;
+			} else if(cqc(*nrr, rr)) {
+				// If current rule contains that in reduced rules, then remove
+				// the subsumed rule from reduced rules
+				nrr = reduced_rules.erase(nrr);
+			} else {
+				// Neither rule contains the other. Move on.
+				nrr++;
+			}
+		}
+		if(!subsumed) {
+			// Do the maximal amount of query minimization on the query we are
+			// about to admit. This should reduce the time cost of future
+			// subsumptions.
+			while(try_cqc_minimize(rr));
+			// If the current rule has not been subsumed, then it needs to be
+			// represented in the reduced rules.
+			reduced_rules.push_back(rr);
+		}
 	}
+	rp.r = reduced_rules;
 }
 
 void driver::simplify_formulas(raw_prog &rp) {
@@ -1621,12 +1652,12 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	std::cout << "Quoted Program:" << std::endl << std::endl << rp << std::endl;
 	transform_evals(rp);
 	std::cout << "Evaled Program:" << std::endl << std::endl << rp << std::endl;
-	quote_prog(rp, elem(elem::SYM, get_lexeme("this")), rp);
-	std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
+	//quote_prog(rp, elem(elem::SYM, get_lexeme("this")), rp);
+	//std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
 	to_pure_tml(rp);
 	std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
-	cqc_minimize(rp);
-	std::cout << "CQC Minimized Program:" << std::endl << std::endl << rp << std::endl;
+	subsume_queries(rp);
+	std::cout << "Minimized Program:" << std::endl << std::endl << rp << std::endl;
 	/*std::set<elem> universe;
 	std::set<raw_term> database;
 	naive_pfp(p, universe, database);

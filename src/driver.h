@@ -124,7 +124,6 @@ class driver {
 	bool is_rule_conjunctive(const raw_rule &rr);
 	bool is_rule_conjunctive_with_negation(const raw_rule &rr);
 	bool try_cqc_minimize(raw_rule &rr);
-	void cqc_minimize(raw_prog &rp);
 	raw_rule freeze_rule(raw_rule rr, std::map<elem, elem> &freeze_map);
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
 	bool cqnc(const raw_rule &rr1, const raw_rule &rr2);
@@ -166,6 +165,7 @@ class driver {
 		const elem &rva, const elem &qvb, const elem &rvb);
 	sprawformtree fix_symbols(const elem &quote_sym, const elem &qva,
 		const elem &rva);
+	void subsume_queries(raw_prog &rp);
 	bool evaluate_form_tree(const raw_form_tree &rft,
 		const std::map<const elem*, std::set<elem>> &universes,
 		std::map<elem, elem> &bindings, std::set<raw_term> &database);

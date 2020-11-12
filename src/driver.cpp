@@ -540,6 +540,11 @@ void driver::subsume_queries(raw_prog &rp) {
 		}
 	}
 	rp.r = reduced_rules;
+	
+	// Separately do the subsumption for each stratum
+	for(raw_prog &np : rp.nps) {
+		subsume_queries(np);
+	}
 }
 
 void driver::simplify_formulas(raw_prog &rp) {
@@ -1131,46 +1136,51 @@ void driver::transform_evals(raw_prog &rp) {
  * logic formula with the given bound variables. This might involve
  * adding temporary relations to the given program. */
 
-raw_term driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
-		std::set<elem> &bs) {
+raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
+		std::vector<raw_prog> &rp, uint_t stratum) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	const elem part_id = elem::fresh_sym(d);
+	if(stratum == rp.size()) {
+		rp.emplace_back();
+	}
 	switch(t->type) {
 		case elem::IMPLIES:
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::ALT,
-				std::make_shared<raw_form_tree>(elem::NOT, t->l), t->r), rp, bs);
+				std::make_shared<raw_form_tree>(elem::NOT, t->l), t->r),
+				bs, rp, stratum);
 		case elem::COIMPLIES:
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::AND,
 				std::make_shared<raw_form_tree>(elem::IMPLIES, t->l, t->r),
 				std::make_shared<raw_form_tree>(elem::IMPLIES, t->r, t->l)),
-				rp, bs);
+				bs, rp, stratum);
 		case elem::AND: {
 			std::vector<sprawformtree> ands;
 			flatten_associative(elem::AND, t, ands);
 			std::vector<raw_term> terms;
 			for(const sprawformtree &tree : ands) {
-				terms.push_back(to_pure_tml(tree, rp, bs));
+				terms.push_back(to_pure_tml(tree, bs, rp, stratum + 1));
 			}
-			rp.r.push_back(raw_rule(raw_term(part_id, bs), terms));
+			rp[stratum].r.push_back(raw_rule(raw_term(part_id, bs), terms));
 			break;
 		} case elem::ALT: {
 			std::vector<sprawformtree> alts;
 			flatten_associative(elem::ALT, t, alts);
 			for(const sprawformtree &tree : alts) {
-				rp.r.push_back(raw_rule(raw_term(part_id, bs),
-					to_pure_tml(tree, rp, bs)));
+				rp[stratum].r.push_back(raw_rule(raw_term(part_id, bs),
+					to_pure_tml(tree, bs, rp, stratum + 1)));
 			}
 			break;
 		} case elem::NOT: {
-			raw_term nt = to_pure_tml(t->l, rp, bs);
+			raw_term nt = to_pure_tml(t->l, bs, rp, stratum);
 			nt.neg = true;
 			return nt;
 		} case elem::EXISTS: {
 			raw_term hd(part_id, bs);
 			elem qvar = *(t->l->el);
 			bs.insert(qvar);
-			rp.r.push_back(raw_rule(hd, to_pure_tml(t->r, rp, bs)));
+			rp[stratum].r.push_back(raw_rule(hd,
+				to_pure_tml(t->r, bs, rp, stratum + 1)));
 			bs.erase(qvar);
 			break;
 		} case elem::UNIQUE: {
@@ -1181,7 +1191,8 @@ raw_term driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
 					std::make_shared<raw_form_tree>(elem::VAR, qvar),
 					std::make_shared<raw_form_tree>(elem::COIMPLIES, t->r,
 						std::make_shared<raw_form_tree>(elem::NONE,
-							raw_term(raw_term::EQ, { evar, elem_eq, qvar }))))), rp, bs);
+							raw_term(raw_term::EQ, { evar, elem_eq, qvar }))))),
+				bs, rp, stratum);
 		} case elem::NONE: {
 			return *t->rt;
 		} case elem::FORALL: {
@@ -1189,7 +1200,8 @@ raw_term driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::NOT,
 				std::make_shared<raw_form_tree>(elem::EXISTS,
 					std::make_shared<raw_form_tree>(elem::VAR, qvar),
-					std::make_shared<raw_form_tree>(elem::NOT, t->r))), rp, bs);
+					std::make_shared<raw_form_tree>(elem::NOT, t->r))),
+				bs, rp, stratum);
 		} default:
 			assert(false); //should never reach here
 	}
@@ -1204,7 +1216,7 @@ void driver::to_pure_tml(raw_rule &rr, raw_prog &rp) {
 		std::set<elem> free_vars;
 		std::vector<elem> bound_vars = {};
 		populate_free_variables(*rr.prft, bound_vars, free_vars);
-		rr.set_b({{to_pure_tml(rr.prft, rp, free_vars)}});
+		rr.set_b({{to_pure_tml(rr.prft, free_vars, rp.nps, 0)}});
 	}
 }
 
@@ -1213,8 +1225,9 @@ void driver::to_pure_tml(raw_rule &rr, raw_prog &rp) {
  * heads. */
 
 void driver::to_pure_tml(raw_prog &rp) {
+	raw_prog srp;
 	// Convert all FOL formulas to P-DATALOG
-	for(size_t i = 0; i < rp.r.size(); i++) {
+	for(int_t i = 0; i < rp.r.size(); i++) {
 		raw_rule rr = rp.r[i];
 		to_pure_tml(rr, rp);
 		rp.r[i] = rr;
@@ -1234,6 +1247,13 @@ void driver::to_pure_tml(raw_prog &rp) {
 			// Leave the single-headed rules alone.
 			it++;
 		}
+	}
+	// If stratums were created, move the body of this program into the
+	// 0th stratum
+	if(rp.nps.size()) {
+		srp.r = rp.r;
+		rp.r.clear();
+		rp.nps.insert(rp.nps.begin(), srp);
 	}
 }
 

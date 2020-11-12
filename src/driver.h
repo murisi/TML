@@ -138,8 +138,8 @@ class driver {
 		raw_prog &rp, std::map<elem, elem> &variables);
 	void quote_prog(const raw_prog nrp, const elem &rel_name,
 		raw_prog &rp);
-	raw_term to_pure_tml(const sprawformtree &t, raw_prog &rp,
-		std::set<elem> &bs);
+	raw_term to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
+		std::vector<raw_prog> &rp, uint_t stratum);
 	std::set<elem> collect_positive_vars(const raw_rule &rr);
 	void to_pure_tml(raw_rule &rr, raw_prog &rp);
 	void to_pure_tml(raw_prog &rp);

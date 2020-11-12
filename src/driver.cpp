@@ -1196,6 +1196,9 @@ raw_term driver::to_pure_tml(const sprawformtree &t, raw_prog &rp,
 	return raw_term(part_id, bs);
 }
 
+/* If the given rule is a FOL formula, then turn it into a pure TML rule
+ * creating temporary relations as necessary. */
+
 void driver::to_pure_tml(raw_rule &rr, raw_prog &rp) {
 	if(!rr.is_b()) {
 		std::set<elem> free_vars;
@@ -1204,6 +1207,10 @@ void driver::to_pure_tml(raw_rule &rr, raw_prog &rp) {
 		rr.set_b({{to_pure_tml(rr.prft, rp, free_vars)}});
 	}
 }
+
+/* Convert every rule in the given program to pure TML rules. Rules with
+ * multiple heads are also converted to multiple rules with single
+ * heads. */
 
 void driver::to_pure_tml(raw_prog &rp) {
 	// Convert all FOL formulas to P-DATALOG
@@ -1216,12 +1223,15 @@ void driver::to_pure_tml(raw_prog &rp) {
 	for(std::vector<raw_rule>::iterator it = rp.r.begin();
 			it != rp.r.end();) {
 		if(it->h.size() != 1) {
+			// 0 heads are effectively eliminated, and multiple heads are
+			// split up.
 			const raw_rule rr = *it;
 			it = rp.r.erase(it);
 			for(const raw_term &rt : rr.h) {
 				it = rp.r.insert(it, raw_rule(rt, rr.b));
 			}
 		} else {
+			// Leave the single-headed rules alone.
 			it++;
 		}
 	}

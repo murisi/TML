@@ -540,11 +540,6 @@ void driver::subsume_queries(raw_prog &rp) {
 		}
 	}
 	rp.r = reduced_rules;
-	
-	// Separately do the subsumption for each stratum
-	for(raw_prog &np : rp.nps) {
-		subsume_queries(np);
-	}
 }
 
 void driver::simplify_formulas(raw_prog &rp) {
@@ -1161,14 +1156,16 @@ raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 			for(const sprawformtree &tree : ands) {
 				terms.push_back(to_pure_tml(tree, bs, rp, stratum + 1));
 			}
-			rp[stratum].r.push_back(raw_rule(raw_term(part_id, bs), terms));
+			raw_rule nr(raw_term(part_id, bs), terms);
+			rp[stratum].r.push_back(nr);
 			break;
 		} case elem::ALT: {
 			std::vector<sprawformtree> alts;
 			flatten_associative(elem::ALT, t, alts);
 			for(const sprawformtree &tree : alts) {
-				rp[stratum].r.push_back(raw_rule(raw_term(part_id, bs),
-					to_pure_tml(tree, bs, rp, stratum + 1)));
+				raw_rule nr(raw_term(part_id, bs),
+					to_pure_tml(tree, bs, rp, stratum + 1));
+				rp[stratum].r.push_back(nr);
 			}
 			break;
 		} case elem::NOT: {
@@ -1179,8 +1176,8 @@ raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 			raw_term hd(part_id, bs);
 			elem qvar = *(t->l->el);
 			bs.insert(qvar);
-			rp[stratum].r.push_back(raw_rule(hd,
-				to_pure_tml(t->r, bs, rp, stratum + 1)));
+			raw_rule nr(hd, to_pure_tml(t->r, bs, rp, stratum + 1));
+			rp[stratum].r.push_back(nr);
 			bs.erase(qvar);
 			break;
 		} case elem::UNIQUE: {

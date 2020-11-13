@@ -1213,6 +1213,9 @@ void driver::to_pure_tml(raw_rule &rr, raw_prog &rp) {
 		std::set<elem> free_vars;
 		std::vector<elem> bound_vars = {};
 		populate_free_variables(*rr.prft, bound_vars, free_vars);
+		// Stratums are created in reverse execution order, hence we need
+		// to overlay them on existing stratums whose order is already
+		// reversed.
 		std::reverse(rp.nps.begin(), rp.nps.end());
 		rr.set_b({{to_pure_tml(rr.prft, free_vars, rp.nps, 0)}});
 		std::reverse(rp.nps.begin(), rp.nps.end());
@@ -1248,7 +1251,7 @@ void driver::to_pure_tml(raw_prog &rp) {
 		}
 	}
 	// If stratums were created, move the body of this program into the
-	// 0th stratum
+	// last stratum
 	if(rp.nps.size()) {
 		srp.r = rp.r;
 		rp.r.clear();

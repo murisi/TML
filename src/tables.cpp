@@ -2026,11 +2026,11 @@ bool graphgrammar::iscyclic( const elem &s) {
 }
 const std::map<lexeme,string,lexcmp>& graphgrammar::get_builtin_reg() {
 	static const map<lexeme,string,lexcmp> b =
-		  { {dict.get_lexeme("alpha"), "[a-zA-Z]"}, 
-		  {dict.get_lexeme("alnum"), "[a-zA-Z0-9]"},
-		  {dict.get_lexeme("digit"), "[0-9]" },
-		  {dict.get_lexeme("space"),  "[^\\S\\r\\n]" },  
-		  {dict.get_lexeme("printable") , "[\\x20-\\x7F]"}
+			{ {dict.get_lexeme("alpha"), "[a-zA-Z]"}, 
+			{dict.get_lexeme("alnum"), "[a-zA-Z0-9]"},
+			{dict.get_lexeme("digit"), "[0-9]" },
+			{dict.get_lexeme("space"),  "[^\\S\\r\\n]" },  
+			{dict.get_lexeme("printable") , "[\\x20-\\x7F]"}
 		};
 		return b;
 }
@@ -2052,7 +2052,7 @@ std::string graphgrammar::get_regularexpstr(const elem &p, bool &bhasnull, bool 
 			ret.append(b.at(e.e));		
 		else if (e.type == elem::CHR) {
 				if(esc.find(e.ch) != esc.end())
-					  ret.append("\\");
+						ret.append("\\");
 			ret.append(e.to_str());
 		}
 		else {
@@ -2115,7 +2115,7 @@ bool graphgrammar::collapsewith(){
 	return true;
 }
 bool tables::transform_grammar_constraints(const production &x, vector<term> &v, flat_prog &p, 
-											  std::map<size_t, term> &refs) {
+												std::map<size_t, term> &refs) {
 	std::set<term> done;
 	bool beqrule = false;
 	for( raw_term rt : x.c ) {
@@ -2849,6 +2849,51 @@ bool tables::run_prog(const raw_prog &rp, const dict_t &dict,
 	} else {
 		return false;
 	}
+}
+
+/* Run the given program on the given extensional database and yield
+ * the derived facts. Returns true or false depending on whether the
+ * given program reaches a fixed point. Useful for query containment
+ * checks. */
+
+bool tables::run_prog(const std::set<raw_term> &edb, raw_prog rp,
+		dict_t dict, const options &opts, std::set<raw_term> &results) {
+	std::map<elem, elem> freeze_map, unfreeze_map;
+	// Create a duplicate of each rule in the given program under a
+	// generated alias.
+	for(int_t i = ssize(rp.r) - 1; i >= 0; i--) {
+		raw_rule rr = rp.r[i];
+		for(raw_term &rt : rr.h) {
+			auto it = freeze_map.find(rt.e[0]);
+			if(it != freeze_map.end()) {
+				rt.e[0] = it->second;
+			} else {
+				elem frozen_elem = elem::fresh_sym(dict);
+				// Store the mapping so that the derived portion of each
+				// relation is stored in exactly one place
+				unfreeze_map[frozen_elem] = rt.e[0];
+				rt.e[0] = freeze_map[rt.e[0]] = frozen_elem;
+			}
+		}
+		rp.r.push_back(rr);
+	}
+	// Now add the extensional database to the given program.
+	for(const raw_term &rt : edb) {
+		rp.r.push_back(raw_rule(rt));
+	}
+	// Run the program to obtain the results which we will then filter
+	std::set<raw_term> tmp_results;
+	bool res = run_prog(rp, dict, opts, tmp_results);
+	// Filter out the result terms that are not derived and rename those
+	// that are derived back to their original names.
+	for(raw_term res : tmp_results) {
+		auto jt = unfreeze_map.find(res.e[0]);
+		if(jt != unfreeze_map.end()) {
+			res.e[0] = jt->second;
+			results.insert(res);
+		}
+	}
+	return res;
 }
 
 bool tables::run_prog(const raw_prog& p, const strs_t& strs, size_t steps,

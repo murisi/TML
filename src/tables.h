@@ -361,7 +361,7 @@ private:
 	bool transform_grammar(std::vector<struct production> g, flat_prog& p, form *&root);
 	bool transform_ebnf(std::vector<struct production> &g, dict_t &d, bool &changed);
 	bool transform_grammar_constraints(const struct production &x, std::vector<term> &v, flat_prog &p, 
-											  std::map<size_t, term> &refs);
+												std::map<size_t, term> &refs);
 	bool cqc(const std::vector<term>& x, std::vector<term> y) const;
 //	flat_prog cqc(std::vector<term> x, std::vector<term> y) const;
 	bool cqc(const std::vector<term>&, const flat_prog& m) const;
@@ -449,8 +449,10 @@ public:
 	~tables();
 	size_t step() { return nstep; }
 	bool add_prog(const raw_prog& p, const strs_t& strs);
-	static bool run_prog(const raw_prog &rp, const dict_t &dict, const options &opts,
-		std::set<raw_term> &results);
+	static bool run_prog(const raw_prog &rp, const dict_t &dict,
+		const options &opts, std::set<raw_term> &results);
+	static bool run_prog(const std::set<raw_term> &edb, raw_prog rp,
+		dict_t dict, const options &opts, std::set<raw_term> &results);
 	bool run_prog(const raw_prog& p, const strs_t& strs, size_t steps = 0,
 		size_t break_on_step = 0);
 	bool run_nums(flat_prog m, std::set<term>& r, size_t nsteps);

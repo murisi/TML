@@ -259,16 +259,14 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 		raw_rule frozen_rr1 = freeze_rule(rr1, freeze_map);
 		
 		// Build up the queries necessary to check homomorphism.
+		std::set<raw_term> edb(frozen_rr1.b[0].begin(), frozen_rr1.b[0].end());
 		raw_prog nrp;
-		for(const raw_term &rt : frozen_rr1.b[0]) {
-			nrp.r.push_back(raw_rule(rt));
-		}
 		nrp.r.push_back(rr2);
 		
 		// Run the queries and check for the frozen head. This process can
 		// be optimized by inlining the frozen head of rule 1 into rule 2.
 		std::set<raw_term> results;
-		tables::run_prog(nrp, d, opts, results);
+		tables::run_prog(edb, nrp, d, opts, results);
 		for(const raw_term &res : results) {
 			if(res == frozen_rr1.h[0]) {
 				// If the frozen head is found, then there is a homomorphism
@@ -308,8 +306,8 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 			unfreeze_map[v] = k;
 		}
 		
-		// Build up the queries necessary to check homomorphism.
-		raw_prog nrp;
+		// Build up the extensional database necessary to check homomorphism.
+		std::set<raw_term> edb;
 		// Map from term ids to terms in rr1
 		std::map<elem, raw_term> term_map;
 		int j = 0;
@@ -323,7 +321,7 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 			// involved in the homomorphism if it exists
 			rt.e.insert(rt.e.begin() + 2, term_id);
 			rt.calc_arity(nullptr);
-			nrp.r.push_back(raw_rule(rt));
+			edb.insert(rt);
 		}
 		// Build up the query that proves the existence of a homomorphism
 		// Make a new head for rr2 that exports all the variables used in
@@ -345,12 +343,13 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 		rr2_new_head.push_back(elem_closep);
 		// Put body and head together and make containment program
 		rr2.h[0] = raw_term(rr2_new_head);
+		raw_prog nrp;
 		nrp.r.push_back(rr2);
 		
 		// Run the queries and check for the frozen head. This process can
 		// be optimized by inlining the frozen head of rule 1 into rule 2.
 		std::set<raw_term> results;
-		tables::run_prog(nrp, d, opts, results);
+		if(!tables::run_prog(edb, nrp, d, opts, results)) return false;
 		for(const raw_term &res : results) {
 			// If the result comes from the containment query (i.e. it is not
 			// one of the frozen terms), then there is a homomorphism between
@@ -617,12 +616,9 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 			return power_iter(superset, canonical,
 				[&](const std::set<raw_term> ext) -> bool {
 					raw_prog test_prog;
-					for(const raw_term rt : ext) {
-						test_prog.r.push_back(raw_rule(rt));
-					}
 					test_prog.r.push_back(rr2);
 					std::set<raw_term> res;
-					tables::run_prog(test_prog, d, opts, res);
+					tables::run_prog(ext, test_prog, d, opts, res);
 					return res.find(subbed.h[0]) != res.end();
 				});
 		});
@@ -1385,7 +1381,7 @@ void driver::to_pure_tml(raw_rule &rr, raw_prog &rp) {
 void driver::to_pure_tml(raw_prog &rp) {
 	raw_prog srp;
 	// Convert all FOL formulas to P-DATALOG
-	for(int_t i = 0; i < rp.r.size(); i++) {
+	for(size_t i = 0; i < rp.r.size(); i++) {
 		raw_rule rr = rp.r[i];
 		to_pure_tml(rr, rp);
 		rp.r[i] = rr;
@@ -1844,7 +1840,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	//std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
 	to_pure_tml(rp);
 	std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
-	//subsume_queries(rp);
+	subsume_queries(rp);
 	std::cout << "Minimized Program:" << std::endl << std::endl << rp << std::endl;
 	factor_rules(rp);
 	std::cout << "Factorized Program:" << std::endl << std::endl << rp << std::endl;

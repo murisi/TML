@@ -347,6 +347,14 @@ struct raw_term {
 		e.push_back(elem(elem::CLOSEP));
 		calc_arity(nullptr);
 	}
+  raw_term(const elem &rel_name, const std::vector<elem> &args) {
+		e = { rel_name, elem(elem::OPENP) };
+		for(const elem &a : args) {
+			e.push_back(a);
+		}
+		e.push_back(elem(elem::CLOSEP));
+		calc_arity(nullptr);
+	}
 	raw_term(const std::vector<elem> &f) : e(f) { calc_arity(nullptr); }
 	raw_term(rtextype et, const std::vector<elem> &f) : extype(et), e(f) { calc_arity(nullptr); }
 	bool parse(input* in, const raw_prog& prog, bool is_form = false,

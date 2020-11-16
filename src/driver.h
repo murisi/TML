@@ -127,6 +127,11 @@ class driver {
 	raw_rule freeze_rule(raw_rule rr, std::map<elem, elem> &freeze_map);
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
 	bool cqnc(const raw_rule &rr1, const raw_rule &rr2);
+	bool cbc(const raw_rule &rr1, raw_rule rr2,
+		std::map<elem, elem> &var_map, std::set<raw_term> &target_terms);
+	bool try_factor_rules(raw_rule &rr1, raw_rule &rr2,
+		std::vector<raw_rule> &tmps);
+	void factor_rules(raw_prog &rp);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
 	void simplify_formulas(raw_prog &rp);
 	elem quote_elem(const elem &e, std::map<elem, elem> &variables);
@@ -143,6 +148,7 @@ class driver {
 	std::set<elem> collect_positive_vars(const raw_rule &rr);
 	void to_pure_tml(raw_rule &rr, raw_prog &rp);
 	void to_pure_tml(raw_prog &rp);
+	std::set<elem> collect_body_vars(const raw_rule &rr);
 	void populate_free_variables(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	void populate_free_variables(const raw_form_tree &t,

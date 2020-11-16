@@ -283,6 +283,147 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 	}
 }
 
+/* If rr1 and rr2 are both conjunctive bodies, check if there is a
+ * homomorphism rr2 to rr1. By the homomorphism theorem, the existence
+ * of a homomorphism implies that a valif substitution for rr1 can be
+ * turned into a valid substitution for rr2. */
+
+bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
+		std::map<elem, elem> &var_map, std::set<raw_term> &target_terms) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	
+	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2)) {
+		std::vector<raw_term> heads1 = rr1.h, bodie1 = rr1.b[0],
+			heads2 = rr2.h, bodie2 = rr2.b[0];
+		
+		// Freeze the variables and symbols of the rule we are checking the
+		// containment of
+		// Map from variables occuring in rr1 to frozen symbols
+		std::map<elem, elem> freeze_map;
+		raw_rule frozen_rr1 = freeze_rule(rr1, freeze_map);
+		// Map from frozen symbols to variables occuring in rr1
+		std::map<elem, elem> unfreeze_map;
+		for(const auto &[k, v] : freeze_map) {
+			unfreeze_map[v] = k;
+		}
+		
+		// Build up the queries necessary to check homomorphism.
+		raw_prog nrp;
+		// Map from term ids to terms in rr1
+		std::map<elem, raw_term> term_map;
+		int j = 0;
+		// First put the frozen terms of rr1 into our containment program
+		for(raw_term &rt : frozen_rr1.b[0]) {
+			// Record the mapping from the term id to the raw_term it
+			// represents
+			elem term_id = elem::fresh_sym(d);
+			term_map[term_id] = rr1.b[0][j++];
+			// Mark our frozen term with an id so that we can trace the terms
+			// involved in the homomorphism if it exists
+			rt.e.insert(rt.e.begin() + 2, term_id);
+			rt.calc_arity(nullptr);
+			nrp.r.push_back(raw_rule(rt));
+		}
+		// Build up the query that proves the existence of a homomorphism
+		// Make a new head for rr2 that exports all the variables used in
+		// its body + ids of the frozen terms it binds to
+		std::set<elem> rr2_body_vars_set = collect_body_vars(rr2);
+		std::vector<elem> rr2_new_head = { elem::fresh_sym(d), elem_openp };
+		rr2_new_head.insert(rr2_new_head.end(), rr2_body_vars_set.begin(),
+			rr2_body_vars_set.end());
+		// Prepend term id variables to rr2's body terms and export the term
+		// ids through the head
+		for(raw_term &rt : rr2.b[0]) {
+			// This variable will bind to the term id of a frozen body term
+			// used in the homomorphism
+			elem term_id = elem::fresh_var(d);
+			rt.e.insert(rt.e.begin() + 2, term_id);
+			rt.calc_arity(nullptr);
+			rr2_new_head.push_back(term_id);
+		}
+		rr2_new_head.push_back(elem_closep);
+		// Put body and head together and make containment program
+		rr2.h[0] = raw_term(rr2_new_head);
+		nrp.r.push_back(rr2);
+		
+		// Run the queries and check for the frozen head. This process can
+		// be optimized by inlining the frozen head of rule 1 into rule 2.
+		std::set<raw_term> results;
+		tables::run_prog(nrp, d, opts, results);
+		for(const raw_term &res : results) {
+			// If the result comes from the containment query (i.e. it is not
+			// one of the frozen terms), then there is a homomorphism between
+			// the bodies
+			raw_term hd_src = rr2.h[0];
+			if(res.e[0] == hd_src.e[0]) {
+				// Now we want to express the homomorphism in terms of the
+				// original (non-frozen) variables and terms of rr1.
+				for(size_t i = 2; i < res.e.size() - 1; i++) {
+					// If current variable is a body var
+					if(rr2_body_vars_set.find(hd_src.e[i]) != rr2_body_vars_set.end()) {
+						// Then trace the original var through the unfreeze map
+						var_map[hd_src.e[i]] = unfreeze_map[res.e[i]];
+					} else {
+						// Otherwise trace the original term through the term map
+						target_terms.insert(term_map[res.e[i]]);
+					}
+				}
+				return true;
+			}
+		}
+		// If no results produced, then there is no homomorphism.
+		return false;
+	} else {
+		return false;
+	}
+}
+
+bool driver::try_factor_rules(raw_rule &rr1, raw_rule &rr2,
+		std::vector<raw_rule> &tmps) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	
+	std::map<elem, elem> var_map;
+	std::set<raw_term> target_terms;
+	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2) &&
+			rr2.b[0].size() > 1 && cbc(rr1, rr2, var_map, target_terms) &&
+			target_terms.size() >= rr2.b[0].size()) {
+		elem new_relname = elem::fresh_sym(d);
+		std::vector<elem> rr2_args, rr1_args;
+		for(const auto &[v2, v1] : var_map) {
+			rr2_args.push_back(v2);
+			rr1_args.push_back(v1);
+		}
+		tmps.push_back(raw_rule(raw_term(new_relname, rr2_args), rr2.b[0]));
+		rr2.b = {{raw_term(new_relname, rr2_args)}};
+		for(const raw_term &tt : target_terms) {
+			std::vector<raw_term>::iterator it = std::find(rr1.b[0].begin(), rr1.b[0].end(), tt);
+			if(it != rr1.b[0].end()) {
+				rr1.b[0].erase(it);
+			}
+		}
+		rr1.b[0].push_back(raw_term(new_relname, rr1_args));
+		return true;
+	} else {
+		return false;
+	}
+}
+
+void driver::factor_rules(raw_prog &rp) {
+	std::vector<raw_rule> pending_rules;
+	for(raw_rule &rr1 : rp.r) {
+		for(raw_rule &rr2 : rp.r) {
+			if(&rr1 != &rr2) {
+				try_factor_rules(rr1, rr2, pending_rules);
+			}
+		}
+	}
+	for(const raw_rule &rr : pending_rules) {
+		rp.r.push_back(rr);
+	}
+}
+
 /* Function to iterate through the partitions of the given set. Calls
  * the supplied function with a vector of sets representing each
  * partition. If the supplied function returns false, then the iteration
@@ -359,6 +500,21 @@ template<typename T, typename F> bool power_iter(std::set<T> &elts,
 		elts.insert(nelt);
 		return true;
 	}
+}
+
+/* Collect the variables used in the head and the positive terms of the
+ * given rule and return. */
+
+std::set<elem> driver::collect_body_vars(const raw_rule &rr) {
+	std::set<elem> vars;
+	for(const raw_term &tm : rr.b[0]) {
+		for(const elem &e : tm.e) {
+			if(e.type == elem::VAR) {
+				vars.insert(e);
+			}
+		}
+	}
+	return vars;
 }
 
 /* Collect the variables used in the head and the positive terms of the
@@ -1688,8 +1844,10 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	//std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
 	to_pure_tml(rp);
 	std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
-	subsume_queries(rp);
+	//subsume_queries(rp);
 	std::cout << "Minimized Program:" << std::endl << std::endl << rp << std::endl;
+	factor_rules(rp);
+	std::cout << "Factorized Program:" << std::endl << std::endl << rp << std::endl;
 	/*std::set<elem> universe;
 	std::set<raw_term> database;
 	naive_pfp(p, universe, database);

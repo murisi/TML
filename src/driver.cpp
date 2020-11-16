@@ -283,11 +283,12 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 
 /* If rr1 and rr2 are both conjunctive bodies, check if there is a
  * homomorphism rr2 to rr1. By the homomorphism theorem, the existence
- * of a homomorphism implies that a valif substitution for rr1 can be
- * turned into a valid substitution for rr2. */
+ * of a homomorphism implies that a valid substitution for rr1 can be
+ * turned into a valid substitution for rr2. This function provides all
+ * off them. */
 
 bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
-		std::map<elem, elem> &var_map, std::set<raw_term> &target_terms) {
+		std::set<terms_hom> &homs) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	
@@ -356,6 +357,8 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 			// the bodies
 			raw_term hd_src = rr2.h[0];
 			if(res.e[0] == hd_src.e[0]) {
+				var_subs var_map;
+				raw_terms target_terms;
 				// Now we want to express the homomorphism in terms of the
 				// original (non-frozen) variables and terms of rr1.
 				for(size_t i = 2; i < res.e.size() - 1; i++) {
@@ -368,11 +371,11 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 						target_terms.insert(term_map[res.e[i]]);
 					}
 				}
-				return true;
+				homs.insert(std::make_pair(target_terms, var_map));
 			}
 		}
 		// If no results produced, then there is no homomorphism.
-		return false;
+		return true;
 	} else {
 		return false;
 	}
@@ -383,11 +386,11 @@ bool driver::try_factor_rules(raw_rule &rr1, raw_rule &rr2,
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	
-	std::map<elem, elem> var_map;
-	std::set<raw_term> target_terms;
+	std::set<terms_hom> homs;
 	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2) &&
-			rr2.b[0].size() > 1 && cbc(rr1, rr2, var_map, target_terms) &&
-			target_terms.size() >= rr2.b[0].size()) {
+			rr2.b[0].size() > 1 && cbc(rr1, rr2, homs) && homs.size() > 0 &&
+			get<0>(*homs.begin()).size() >= rr2.b[0].size()) {
+		auto &[target_terms, var_map] = *homs.begin();
 		elem new_relname = elem::fresh_sym(d);
 		std::vector<elem> rr2_args, rr1_args;
 		for(const auto &[v2, v1] : var_map) {

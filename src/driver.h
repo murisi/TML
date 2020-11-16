@@ -28,6 +28,9 @@
 #define mknum(x) ((((int_t)x)<<2)|2)
 
 typedef enum prolog_dialect { XSB, SWIPL } prolog_dialect;
+typedef std::set<raw_term> raw_terms;
+typedef std::map<elem, elem> var_subs;
+typedef std::pair<raw_terms, var_subs> terms_hom;
 
 #define QVARS 0
 #define QRULE 1
@@ -127,8 +130,7 @@ class driver {
 	raw_rule freeze_rule(raw_rule rr, std::map<elem, elem> &freeze_map);
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
 	bool cqnc(const raw_rule &rr1, const raw_rule &rr2);
-	bool cbc(const raw_rule &rr1, raw_rule rr2,
-		std::map<elem, elem> &var_map, std::set<raw_term> &target_terms);
+	bool cbc(const raw_rule &rr1, raw_rule rr2, std::set<terms_hom> &homs);
 	bool try_factor_rules(raw_rule &rr1, raw_rule &rr2,
 		std::vector<raw_rule> &tmps);
 	void factor_rules(raw_prog &rp);

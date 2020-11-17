@@ -390,20 +390,29 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 void driver::compute_required_vars(const raw_rule &rr,
 		const terms_hom &hom, std::set<elem> &orig_vars) {
 	auto &[rts, vs] = hom;
+	// Get all the terms used by the given rule.
 	raw_terms aggregate(rr.h.begin(), rr.h.end());
 	aggregate.insert(rr.b[0].begin(), rr.b[0].end());
+	// Make a vector containing all terms used by the given rule that are
+	// not in homomorphism target.
 	std::vector<raw_term> diff(aggregate.size());
 	auto it = std::set_difference(aggregate.begin(), aggregate.end(),
 		rts.begin(), rts.end(), diff.begin());
 	diff.resize(it - diff.begin());
+	// Get variables used outside homomorphism target
 	std::set<elem> diff_vars;
 	collect_vars(diff.begin(), diff.end(), diff_vars);
+	// Get variables used inside homomorphism target
 	std::set<elem> rts_vars;
 	collect_vars(rts.begin(), rts.end(), rts_vars);
+	// Compute the variables of the homomorphism target that we need to
+	// retain control of
 	std::vector<elem> nonfree_vars(diff_vars.size());
 	auto jt = std::set_intersection(diff_vars.begin(), diff_vars.end(),
 		rts_vars.begin(), rts_vars.end(), nonfree_vars.begin());
 	nonfree_vars.resize(jt - nonfree_vars.begin());
+	// Trace these variables of the homomorphism target to the
+	// homomorphism source.
 	for(auto &[var, covar] : vs) {
 		if(std::find(nonfree_vars.begin(), nonfree_vars.end(), covar) !=
 				nonfree_vars.end()) {
@@ -412,55 +421,102 @@ void driver::compute_required_vars(const raw_rule &rr,
 	}
 }
 
+/* Algorithm to factor the rules in a program using other rules.
+ * Starting with the conjunctive rules with the biggest bodies, record
+ * all the homomorphisms from this body into the bodies of other rules.
+ * Afterwards, check if the head of this rule could be substituted
+ * verbatim into the bodies of other rules, or whether a temporary
+ * relation taking more arguments would be required. Afterwards,
+ * replace the homomorphism targets with our chosen head. */
+
 void driver::factor_rules(raw_prog &rp) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	
+	// The place where we temporarily store our temporary rules
 	std::vector<raw_rule> pending_rules;
+	// Go through the rules we want to try substituting into other
 	for(raw_rule &rr2 : rp.r) {
+		// Because we use a conjunctive homomorphism finding rule
 		if(is_rule_conjunctive(rr2) && rr2.b[0].size() > 1) {
+			// The variables of the current rule that we'd need to be able to
+			// constrain/substitute into
 			std::set<elem> needed_vars;
 			std::set<std::tuple<raw_rule *, terms_hom>> agg;
+			// Now let's look for rules that we can substitute the current
+			// into
 			for(raw_rule &rr1 : rp.r) {
 				std::set<terms_hom> homs;
+				// Find all the homomorphisms between outer and inner rule. This
+				// way we can substitute the outer rule into the inner multiple
+				// times.
 				if(is_rule_conjunctive(rr1) && cbc(rr1, rr2, homs)) {
 					for(const terms_hom &hom : homs) {
 						auto &[target_terms, var_map] = hom;
+						// Record only those homomorphisms where the target is at
+						// least as big as the source for there is no point in
+						// replacing a group of terms with a rule utilizing a bigger
+						// group.
 						if(target_terms.size() >= rr2.b[0].size()) {
 							agg.insert(std::make_tuple(&rr1, hom));
+							// If we were to substitute the target group of terms with
+							// a single head, what arguments would we need to pass to
+							// it?
 							compute_required_vars(rr1, hom, needed_vars);
 						}
 					}
 				}
 			}
 			
+			// Now we need to figure out if we should create a temporary
+			// relation containing body of current rule or whether we can just
+			// use it directly. This depends on whether the head exports
+			// enough variables.
 			elem target_rel;
 			std::vector<elem> target_args;
 			std::set<elem> exported_vars;
 			collect_vars(rr2.h[0], exported_vars);
 			if(exported_vars == needed_vars) {
+				// The variables exported by current rule are exactly what is
+				// needed by all homomorphisms from current body
 				target_rel = rr2.h[0].e[0];
 				for(size_t i = 2; i < rr2.h[0].e.size() - 1; i++) {
 					target_args.push_back(rr2.h[0].e[i]);
 				}
 			} else {
+				// Variables are not exactly what is required. So make relation
+				// exporting required variables and note argument order.
 				target_rel = elem::fresh_sym(d);
 				target_args.assign(needed_vars.begin(), needed_vars.end());
 				pending_rules.push_back(raw_rule(raw_term(target_rel, target_args), rr2.b[0]));
 			}
+			// Also note whether we have created a temporary relation.
+			// Important because we make the current rule depend on the
+			// temporary relation in this case.
 			bool tmp_rel = exported_vars != needed_vars;
 			
+			// Now we go through all the homomorphisms and try to apply
+			// substitutions to their targets
 			for(auto &[rr1, hom] : agg) {
+				// If no temporary relation was created, then don't touch the
+				// outer rule as its definition is irreducible.
 				if(!tmp_rel && rr1 == &rr2) continue;
 				auto &[rts, vs] = hom;
 				std::set<raw_term> rr1_set(rr1->b[0].begin(), rr1->b[0].end());
+				// If the target rule still includes the homomorphism target,
+				// then ... . Note that this may not be the case as the targets
+				// of several homomorphisms could overlap.
 				if(std::includes(rr1_set.begin(), rr1_set.end(), rts.begin(),
 						rts.end())) {
+					// Remove the homomorphism target from the target rule
 					auto it = std::set_difference(rr1_set.begin(), rr1_set.end(),
 						rts.begin(), rts.end(), rr1->b[0].begin());
 					rr1->b[0].resize(it - rr1->b[0].begin());
+					// And place our chosen head with localized arguments.
 					std::vector<elem> subbed_args;
 					for(const elem &e : target_args) {
+						// If the current parameter of the outer rule is a constant,
+						// then just place it in our new term verbatim
 						subbed_args.push_back(at_default(vs, e, e));
 					}
 					rr1->b[0].push_back(raw_term(target_rel, subbed_args));
@@ -468,6 +524,8 @@ void driver::factor_rules(raw_prog &rp) {
 			}
 		}
 	}
+	// Now add the pending rules. Done here to prevent movement of rules
+	// during potential vector resizing.
 	for(const raw_rule &rr : pending_rules) {
 		rp.r.push_back(rr);
 	}

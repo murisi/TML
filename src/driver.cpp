@@ -327,7 +327,8 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 		// Build up the query that proves the existence of a homomorphism
 		// Make a new head for rr2 that exports all the variables used in
 		// its body + ids of the frozen terms it binds to
-		std::set<elem> rr2_body_vars_set = collect_body_vars(rr2);
+		std::set<elem> rr2_body_vars_set;
+		collect_vars(rr2.b[0].begin(), rr2.b[0].end(), rr2_body_vars_set);
 		std::vector<elem> rr2_new_head = { elem::fresh_sym(d), elem_openp };
 		rr2_new_head.insert(rr2_new_head.end(), rr2_body_vars_set.begin(),
 			rr2_body_vars_set.end());
@@ -381,43 +382,89 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 	}
 }
 
-bool driver::try_factor_rules(raw_rule &rr1, raw_rule &rr2,
-		std::vector<raw_rule> &tmps) {
-	// Get dictionary for generating fresh symbols
-	dict_t &d = tbl->get_dict();
-	
-	std::set<terms_hom> homs;
-	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2) &&
-			rr2.b[0].size() > 1 && cbc(rr1, rr2, homs) && homs.size() > 0 &&
-			get<0>(*homs.begin()).size() >= rr2.b[0].size()) {
-		auto &[target_terms, var_map] = *homs.begin();
-		elem new_relname = elem::fresh_sym(d);
-		std::vector<elem> rr2_args, rr1_args;
-		for(const auto &[v2, v1] : var_map) {
-			rr2_args.push_back(v2);
-			rr1_args.push_back(v1);
+/* Given a homomorphism (i.e. a pair comprising variable substitutions
+ * and terms surjected onto) and the rule that a homomorphism maps into,
+ * determine which variables of the domain would be needed to express
+ * constraints in the codomain. */
+ 
+void driver::compute_required_vars(const raw_rule &rr,
+		const terms_hom &hom, std::set<elem> &orig_vars) {
+	auto &[rts, vs] = hom;
+	raw_terms aggregate(rr.h.begin(), rr.h.end());
+	aggregate.insert(rr.b[0].begin(), rr.b[0].end());
+	std::vector<raw_term> diff(aggregate.size());
+	auto it = std::set_difference(aggregate.begin(), aggregate.end(),
+		rts.begin(), rts.end(), diff.begin());
+	diff.resize(it - diff.begin());
+	std::set<elem> diff_vars;
+	collect_vars(diff.begin(), diff.end(), diff_vars);
+	std::set<elem> rts_vars;
+	collect_vars(rts.begin(), rts.end(), rts_vars);
+	std::vector<elem> nonfree_vars(diff_vars.size());
+	auto jt = std::set_intersection(diff_vars.begin(), diff_vars.end(),
+		rts_vars.begin(), rts_vars.end(), nonfree_vars.begin());
+	nonfree_vars.resize(jt - nonfree_vars.begin());
+	for(auto &[var, covar] : vs) {
+		if(std::find(nonfree_vars.begin(), nonfree_vars.end(), covar) !=
+				nonfree_vars.end()) {
+			orig_vars.insert(var);
 		}
-		tmps.push_back(raw_rule(raw_term(new_relname, rr2_args), rr2.b[0]));
-		rr2.b = {{raw_term(new_relname, rr2_args)}};
-		for(const raw_term &tt : target_terms) {
-			std::vector<raw_term>::iterator it = std::find(rr1.b[0].begin(), rr1.b[0].end(), tt);
-			if(it != rr1.b[0].end()) {
-				rr1.b[0].erase(it);
-			}
-		}
-		rr1.b[0].push_back(raw_term(new_relname, rr1_args));
-		return true;
-	} else {
-		return false;
 	}
 }
 
 void driver::factor_rules(raw_prog &rp) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	
 	std::vector<raw_rule> pending_rules;
-	for(raw_rule &rr1 : rp.r) {
-		for(raw_rule &rr2 : rp.r) {
-			if(&rr1 != &rr2) {
-				try_factor_rules(rr1, rr2, pending_rules);
+	for(raw_rule &rr2 : rp.r) {
+		if(is_rule_conjunctive(rr2) && rr2.b[0].size() > 1) {
+			std::set<elem> needed_vars;
+			std::set<std::tuple<raw_rule *, terms_hom>> agg;
+			for(raw_rule &rr1 : rp.r) {
+				std::set<terms_hom> homs;
+				if(is_rule_conjunctive(rr1) && cbc(rr1, rr2, homs)) {
+					for(const terms_hom &hom : homs) {
+						auto &[target_terms, var_map] = hom;
+						if(target_terms.size() >= rr2.b[0].size()) {
+							agg.insert(std::make_tuple(&rr1, hom));
+							compute_required_vars(rr1, hom, needed_vars);
+						}
+					}
+				}
+			}
+			
+			elem target_rel;
+			std::vector<elem> target_args;
+			std::set<elem> exported_vars;
+			collect_vars(rr2.h[0], exported_vars);
+			if(exported_vars == needed_vars) {
+				target_rel = rr2.h[0].e[0];
+				for(size_t i = 2; i < rr2.h[0].e.size() - 1; i++) {
+					target_args.push_back(rr2.h[0].e[i]);
+				}
+			} else {
+				target_rel = elem::fresh_sym(d);
+				target_args.assign(needed_vars.begin(), needed_vars.end());
+				pending_rules.push_back(raw_rule(raw_term(target_rel, target_args), rr2.b[0]));
+			}
+			bool tmp_rel = exported_vars != needed_vars;
+			
+			for(auto &[rr1, hom] : agg) {
+				if(!tmp_rel && rr1 == &rr2) continue;
+				auto &[rts, vs] = hom;
+				std::set<raw_term> rr1_set(rr1->b[0].begin(), rr1->b[0].end());
+				if(std::includes(rr1_set.begin(), rr1_set.end(), rts.begin(),
+						rts.end())) {
+					auto it = std::set_difference(rr1_set.begin(), rr1_set.end(),
+						rts.begin(), rts.end(), rr1->b[0].begin());
+					rr1->b[0].resize(it - rr1->b[0].begin());
+					std::vector<elem> subbed_args;
+					for(const elem &e : target_args) {
+						subbed_args.push_back(at_default(vs, e, e));
+					}
+					rr1->b[0].push_back(raw_term(target_rel, subbed_args));
+				}
 			}
 		}
 	}
@@ -504,41 +551,37 @@ template<typename T, typename F> bool power_iter(std::set<T> &elts,
 	}
 }
 
-/* Collect the variables used in the head and the positive terms of the
- * given rule and return. */
+/* Collect the variables used in the given terms and return. */
 
-std::set<elem> driver::collect_body_vars(const raw_rule &rr) {
-	std::set<elem> vars;
-	for(const raw_term &tm : rr.b[0]) {
-		for(const elem &e : tm.e) {
-			if(e.type == elem::VAR) {
-				vars.insert(e);
-			}
+void driver::collect_vars(const raw_term &rt, std::set<elem> &vars) {
+	for(const elem &e : rt.e) {
+		if(e.type == elem::VAR) {
+			vars.insert(e);
 		}
 	}
-	return vars;
+}
+
+/* Collect the variables used in the given terms and return. */
+
+template <class InputIterator>
+		void driver::collect_vars(InputIterator first, InputIterator last,
+			std::set<elem> &vars) {
+	for(; first != last; first++) {
+		collect_vars(*first, vars);
+	}
 }
 
 /* Collect the variables used in the head and the positive terms of the
  * given rule and return. */
 
-std::set<elem> driver::collect_positive_vars(const raw_rule &rr) {
-	std::set<elem> vars;
-	for(const elem &e : rr.h[0].e) {
-		if(e.type == elem::VAR) {
-			vars.insert(e);
-		}
-	}
+void driver::collect_positive_vars(const raw_rule &rr,
+		std::set<elem> &vars) {
+	collect_vars(rr.h[0], vars);
 	for(const raw_term &tm : rr.b[0]) {
 		if(!tm.neg) {
-			for(const elem &e : tm.e) {
-				if(e.type == elem::VAR) {
-					vars.insert(e);
-				}
-			}
+			collect_vars(tm, vars);
 		}
 	}
-	return vars;
 }
 
 /* If rr1 and rr2 are both conjunctive queries with negation, check that
@@ -549,7 +592,8 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 	if(!(is_rule_conjunctive_with_negation(rr1) &&
 		is_rule_conjunctive_with_negation(rr2))) return false;
 	
-	std::set<elem> vars = collect_positive_vars(rr1);
+	std::set<elem> vars;
+	collect_positive_vars(rr1, vars);
 	std::vector<std::set<elem>> partitions;
 	// Do the Levy-Sagiv test
 	return partition_iter(vars, partitions,

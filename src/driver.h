@@ -131,8 +131,6 @@ class driver {
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
 	bool cqnc(const raw_rule &rr1, const raw_rule &rr2);
 	bool cbc(const raw_rule &rr1, raw_rule rr2, std::set<terms_hom> &homs);
-	bool try_factor_rules(raw_rule &rr1, raw_rule &rr2,
-		std::vector<raw_rule> &tmps);
 	void factor_rules(raw_prog &rp);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
 	void simplify_formulas(raw_prog &rp);
@@ -147,10 +145,15 @@ class driver {
 		raw_prog &rp);
 	raw_term to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 		std::vector<raw_prog> &rp, uint_t stratum);
-	std::set<elem> collect_positive_vars(const raw_rule &rr);
+	void collect_positive_vars(const raw_rule &rr, std::set<elem> &vars);
+  void collect_vars(const raw_term &rt, std::set<elem> &vars);
+  template <class InputIterator>
+		void collect_vars(InputIterator first, InputIterator last,
+			std::set<elem> &vars);
 	void to_pure_tml(raw_rule &rr, raw_prog &rp);
 	void to_pure_tml(raw_prog &rp);
-	std::set<elem> collect_body_vars(const raw_rule &rr);
+  void compute_required_vars(const raw_rule &rr, const terms_hom &hom,
+    std::set<elem> &orig_vars);
 	void populate_free_variables(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	void populate_free_variables(const raw_form_tree &t,

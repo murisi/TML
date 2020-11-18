@@ -1395,28 +1395,35 @@ raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 	const elem part_id = elem::fresh_sym(d);
 	switch(t->type) {
 		case elem::IMPLIES:
+			// Implication is logically equivalent to the following
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::ALT,
 				std::make_shared<raw_form_tree>(elem::NOT, t->l), t->r),
 				bs, rp);
 		case elem::COIMPLIES:
+			// Co-implication is logically equivalent to the following
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::AND,
 				std::make_shared<raw_form_tree>(elem::IMPLIES, t->l, t->r),
 				std::make_shared<raw_form_tree>(elem::IMPLIES, t->r, t->l)),
 				bs, rp);
 		case elem::AND: {
+			// Collect all the conjuncts within the tree top
 			std::vector<sprawformtree> ands;
 			flatten_associative(elem::AND, t, ands);
 			std::vector<raw_term> terms;
+			// And make a pure TML formula listing them
 			for(const sprawformtree &tree : ands) {
 				terms.push_back(to_pure_tml(tree, bs, rp));
 			}
+			// Make the representative rule and add to the program
 			raw_rule nr(raw_term(part_id, bs), terms);
 			rp.push_back(nr);
 			break;
 		} case elem::ALT: {
+			// Collect all the disjuncts within the tree top
 			std::vector<sprawformtree> alts;
 			flatten_associative(elem::ALT, t, alts);
 			for(const sprawformtree &tree : alts) {
+				// Make a separate rule for each disjunct
 				raw_rule nr(raw_term(part_id, bs), to_pure_tml(tree, bs, rp));
 				rp.push_back(nr);
 			}
@@ -1426,14 +1433,32 @@ raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 			nt.neg = true;
 			return nt;
 		} case elem::EXISTS: {
+			// Make the rule head before we adjust the bindings with our
+			// quantified variable.
 			raw_term hd(part_id, bs);
 			elem qvar = *(t->l->el);
-			bs.insert(qvar);
-			raw_rule nr(hd, to_pure_tml(t->r, bs, rp));
+			bool inserted = bs.insert(qvar).second;
+			// Make the proposition that is being quantified
+			raw_term nrt = to_pure_tml(t->r, bs, rp);
+			// Replace occurences of the quantified variable in the arguments
+			// with a fresh variable to avoid unnecessary constraints.
+			const elem ne = elem::fresh_var(d);
+			for(elem &e : nrt.e) {
+				if(e == qvar) {
+					e = ne;
+				}
+			}
+			// Make the rule corresponding to this existential formula
+			raw_rule nr(hd, nrt);
 			rp.push_back(nr);
-			bs.erase(qvar);
+			// Remove this binding if we made it
+			if(inserted) {
+				bs.erase(qvar);
+			}
 			break;
 		} case elem::UNIQUE: {
+			// The uniqueness quantifier is logically equivalent to the
+			// following
 			const elem evar = elem::fresh_var(d), qvar = *(t->l->el);
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::EXISTS,
 				std::make_shared<raw_form_tree>(elem::VAR, evar),
@@ -1446,6 +1471,8 @@ raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 		} case elem::NONE: {
 			return *t->rt;
 		} case elem::FORALL: {
+			// The universal quantifier is logically equivalent to the
+			// following
 			elem qvar = *(t->l->el);
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::NOT,
 				std::make_shared<raw_form_tree>(elem::EXISTS,

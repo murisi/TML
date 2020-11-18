@@ -1388,23 +1388,27 @@ void driver::transform_evals(raw_prog &rp) {
  * logic formula with the given bound variables. This might involve
  * adding temporary relations to the given program. */
 
-raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
+raw_term driver::to_pure_tml(const sprawformtree &t,
 		std::vector<raw_rule> &rp) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	const elem part_id = elem::fresh_sym(d);
+	// Determine the variables that our subformula is parameterized by,
+	// our new rule would need to receive this.
+	std::set<elem> fv;
+	std::vector<elem> bound_vars = {};
+	populate_free_variables(*t, bound_vars, fv);
+	
 	switch(t->type) {
 		case elem::IMPLIES:
 			// Implication is logically equivalent to the following
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::ALT,
-				std::make_shared<raw_form_tree>(elem::NOT, t->l), t->r),
-				bs, rp);
+				std::make_shared<raw_form_tree>(elem::NOT, t->l), t->r), rp);
 		case elem::COIMPLIES:
 			// Co-implication is logically equivalent to the following
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::AND,
 				std::make_shared<raw_form_tree>(elem::IMPLIES, t->l, t->r),
-				std::make_shared<raw_form_tree>(elem::IMPLIES, t->r, t->l)),
-				bs, rp);
+				std::make_shared<raw_form_tree>(elem::IMPLIES, t->r, t->l)), rp);
 		case elem::AND: {
 			// Collect all the conjuncts within the tree top
 			std::vector<sprawformtree> ands;
@@ -1412,10 +1416,10 @@ raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 			std::vector<raw_term> terms;
 			// And make a pure TML formula listing them
 			for(const sprawformtree &tree : ands) {
-				terms.push_back(to_pure_tml(tree, bs, rp));
+				terms.push_back(to_pure_tml(tree, rp));
 			}
 			// Make the representative rule and add to the program
-			raw_rule nr(raw_term(part_id, bs), terms);
+			raw_rule nr(raw_term(part_id, fv), terms);
 			rp.push_back(nr);
 			break;
 		} case elem::ALT: {
@@ -1424,24 +1428,20 @@ raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 			flatten_associative(elem::ALT, t, alts);
 			for(const sprawformtree &tree : alts) {
 				// Make a separate rule for each disjunct
-				raw_rule nr(raw_term(part_id, bs), to_pure_tml(tree, bs, rp));
+				raw_rule nr(raw_term(part_id, fv), to_pure_tml(tree, rp));
 				rp.push_back(nr);
 			}
 			break;
 		} case elem::NOT: {
-			raw_term nt = to_pure_tml(t->l, bs, rp);
+			raw_term nt = to_pure_tml(t->l, rp);
 			nt.neg = true;
 			return nt;
 		} case elem::EXISTS: {
-			// Make the rule head before we adjust the bindings with our
-			// quantified variable.
-			raw_term hd(part_id, bs);
-			elem qvar = *(t->l->el);
-			bool inserted = bs.insert(qvar).second;
 			// Make the proposition that is being quantified
-			raw_term nrt = to_pure_tml(t->r, bs, rp);
+			raw_term nrt = to_pure_tml(t->r, rp);
 			// Replace occurences of the quantified variable in the arguments
 			// with a fresh variable to avoid unnecessary constraints.
+			const elem qvar = *(t->l->el);
 			const elem ne = elem::fresh_var(d);
 			for(elem &e : nrt.e) {
 				if(e == qvar) {
@@ -1449,12 +1449,8 @@ raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 				}
 			}
 			// Make the rule corresponding to this existential formula
-			raw_rule nr(hd, nrt);
+			raw_rule nr(raw_term(part_id, fv), nrt);
 			rp.push_back(nr);
-			// Remove this binding if we made it
-			if(inserted) {
-				bs.erase(qvar);
-			}
 			break;
 		} case elem::UNIQUE: {
 			// The uniqueness quantifier is logically equivalent to the
@@ -1466,8 +1462,7 @@ raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 					std::make_shared<raw_form_tree>(elem::VAR, qvar),
 					std::make_shared<raw_form_tree>(elem::COIMPLIES, t->r,
 						std::make_shared<raw_form_tree>(elem::NONE,
-							raw_term(raw_term::EQ, { evar, elem_eq, qvar }))))),
-				bs, rp);
+							raw_term(raw_term::EQ, { evar, elem_eq, qvar }))))), rp);
 		} case elem::NONE: {
 			return *t->rt;
 		} case elem::FORALL: {
@@ -1477,12 +1472,11 @@ raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::NOT,
 				std::make_shared<raw_form_tree>(elem::EXISTS,
 					std::make_shared<raw_form_tree>(elem::VAR, qvar),
-					std::make_shared<raw_form_tree>(elem::NOT, t->r))),
-				bs, rp);
+					std::make_shared<raw_form_tree>(elem::NOT, t->r))), rp);
 		} default:
 			assert(false); //should never reach here
 	}
-	return raw_term(part_id, bs);
+	return raw_term(part_id, fv);
 }
 
 /* If the given rule is a FOL formula, then turn it into a pure TML rule
@@ -1490,10 +1484,7 @@ raw_term driver::to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 
 void driver::to_pure_tml(raw_rule &rr, std::vector<raw_rule> &rp) {
 	if(!rr.is_b()) {
-		std::set<elem> free_vars;
-		std::vector<elem> bound_vars = {};
-		populate_free_variables(*rr.prft, bound_vars, free_vars);
-		rr.set_b({{to_pure_tml(rr.prft, free_vars, rp)}});
+		rr.set_b({{to_pure_tml(rr.prft, rp)}});
 	}
 }
 

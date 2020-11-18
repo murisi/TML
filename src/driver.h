@@ -146,14 +146,14 @@ class driver {
 	raw_term to_pure_tml(const sprawformtree &t, std::set<elem> &bs,
 		std::vector<raw_prog> &rp, uint_t stratum);
 	void collect_positive_vars(const raw_rule &rr, std::set<elem> &vars);
-  void collect_vars(const raw_term &rt, std::set<elem> &vars);
-  template <class InputIterator>
+	void collect_vars(const raw_term &rt, std::set<elem> &vars);
+	template <class InputIterator>
 		void collect_vars(InputIterator first, InputIterator last,
 			std::set<elem> &vars);
 	void to_pure_tml(raw_rule &rr, raw_prog &rp);
 	void to_pure_tml(raw_prog &rp);
-  void compute_required_vars(const raw_rule &rr, const terms_hom &hom,
-    std::set<elem> &orig_vars);
+	void compute_required_vars(const raw_rule &rr, const terms_hom &hom,
+		std::set<elem> &orig_vars);
 	void populate_free_variables(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	void populate_free_variables(const raw_form_tree &t,

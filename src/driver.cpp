@@ -222,6 +222,8 @@ void driver::flatten_associative(const elem::etype &tp,
 bool driver::is_rule_conjunctive(const raw_rule &rr) {
 	// Ensure that there are no disjunctions
 	if(rr.h.size() != 1 || rr.b.size() != 1) return false;
+	// Ensure that head is positive
+	if(rr.h[0].neg) return false;
 	// Ensure that each body term is positive and is a relation
 	for(const raw_term &rt : rr.b[0]) {
 		if(rt.neg || rt.extype != raw_term::REL) return false;
@@ -234,6 +236,8 @@ bool driver::is_rule_conjunctive(const raw_rule &rr) {
 bool driver::is_rule_conjunctive_with_negation(const raw_rule &rr) {
 	// Ensure that there are no disjunctions
 	if(rr.h.size() != 1 || rr.b.size() != 1) return false;
+	// Ensure that head is positive
+	if(rr.h[0].neg) return false;
 	// Ensure that each body term is positive and is a relation
 	for(const raw_term &rt : rr.b[0]) {
 		if(rt.extype != raw_term::REL) return false;
@@ -1066,7 +1070,7 @@ sprawformtree driver::fix_symbols(const elem &quote_sym,
 			raw_term(raw_term::EQ, {qva, elem_eq, rva})));
 }
 
-// Interpret conjunctions with varying allocations to each side
+// Interpret binary operations with varying allocations to each side
 void driver::generate_binary_eval(raw_prog &rp, const int_t qtype,
 		const elem::etype &eltype, const elem &quote_sym,
 		const elem &und_sym, const elem &aux_rel,
@@ -1164,6 +1168,89 @@ void driver::generate_quantified_eval(raw_prog &rp, const int_t qtype,
 	rp.r.push_back(rr);
 }
 
+// Make the interpreters
+void driver::generate_rule_eval(raw_prog &rp, bool neg,
+		const elem &out_rel, const elem &quote_sym, const elem &aux_rel,
+		const std::vector<elem> &iparams, const std::vector<elem> &qparams,
+		const std::vector<elem> &iargs, const std::vector<elem> &qargs) {
+	// Get dictionary for generating fresh variables
+	dict_t &d = tbl->get_dict();
+	
+	int_t arity_num = qparams.size();
+	const elem rule_name = elem::fresh_var(d), elt_id = elem::fresh_var(d),
+		head_id = elem::fresh_var(d), head2_id = elem::fresh_var(d),
+		body_id = elem::fresh_var(d);
+	
+	for(int_t a = 0; a < arity_num+1; a++) {
+		// Make the head interpretation
+		std::vector<elem> rhead_e = { out_rel, elem_openp, rule_name };
+		for(int_t i = 0; i < a; i++) rhead_e.push_back(iparams[i]);
+		rhead_e.push_back(elem_closep);
+		// Make the rule quotation
+		raw_term qrule({ quote_sym, elem_openp, elem(QRULE), elt_id,
+			head_id, body_id, elem_closep });
+		// Make the head quotation
+		std::vector<elem> qhead_e = { quote_sym, elem_openp, elem(QTERM),
+			head_id, rule_name };
+		for(int_t i = 0; i < a; i++) qhead_e.push_back(qparams[i]);
+		qhead_e.push_back(elem_closep);
+		sprawformtree head =
+			std::make_shared<raw_form_tree>(elem::NONE, raw_term(qhead_e));
+		// If neg flag is set, then the head of the rule is actually a
+		// negation pointing to the positive part of the head
+		if(neg) {
+			// Modify positive head to not directly use id in rule quote
+			head->rt->e[3] = head2_id;
+			// Instead make an intermediate term to extract positive head part
+			// from negation
+			head = std::make_shared<raw_form_tree>(elem::AND, head,
+				std::make_shared<raw_form_tree>(elem::NONE,
+					raw_term({ quote_sym, elem_openp, elem(QNOT), head_id,
+						head2_id, elem_closep })));
+		}
+		// Make the body interpretation
+		std::vector<elem> body_e = { aux_rel, elem_openp, body_id };
+		for(int_t i = 0; i < arity_num; i++) {
+			body_e.push_back(qargs[i]);
+			body_e.push_back(iargs[i]);
+		}
+		body_e.push_back(elem_closep);
+		sprawformtree bodie =
+			std::make_shared<raw_form_tree>(elem::AND,
+				std::make_shared<raw_form_tree>(elem::AND,
+					std::make_shared<raw_form_tree>(elem::NONE, qrule), head),
+				std::make_shared<raw_form_tree>(elem::NONE, raw_term(body_e)));
+		// Fix the real parameters to this rule to the quoted symbol
+		// if it is not marked as a variable.
+		for(int_t i = 0; i < a; i++) {
+			bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
+				fix_symbols(quote_sym, qparams[i], iparams[i]));
+		}
+		// Fix the real parameters to this rule to be the same if their
+		// quotations are the same.
+		for(int_t i = 0; i < a; i++) {
+			for(int_t j = i+1; j < a; j++) {
+				bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
+					fix_variables(quote_sym, qparams[i], iparams[i],
+						qparams[j], iparams[j]));
+			}
+		}
+		// Fix the real parameters to this rule to be the same as the
+		// arguments if their corresponding quotations are the same.
+		for(int_t i = 0; i < a; i++) {
+			for(int_t j = 0; j < a; j++) {
+				bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
+					fix_variables(quote_sym, qargs[i], iargs[i], qparams[j],
+						iparams[j]));
+			}
+		}
+		raw_term rt(rhead_e);
+		if(neg) rt.neg = true;
+		raw_rule rr(rt, bodie);
+		rp.r.push_back(rr);
+	}
+}
+
 /* Loop through the rules of the given program checking if they use a
  * relation called "eval" in their bodies. If eval is used, take its
  * three arguments: the name of the relation that will contain the
@@ -1201,8 +1288,7 @@ void driver::transform_evals(raw_prog &rp) {
 			
 			// Interpret the varying rule arities.
 			// Allocate rule name, rule id, head id, body id
-			elem rule_name = elem::fresh_var(d), head_id = elem::fresh_var(d),
-				body_id = elem::fresh_var(d), elt_id = elem::fresh_var(d),
+			elem rule_name = elem::fresh_var(d), elt_id = elem::fresh_var(d),
 				forma_id = elem::fresh_var(d);
 			// Allocate interpreted and quoted arguments
 			std::vector<elem> iparams, qparams, iargs, qargs;
@@ -1213,60 +1299,10 @@ void driver::transform_evals(raw_prog &rp) {
 				qparams.push_back(elem::fresh_var(d));
 			}
 			// Make the interpreters
-			for(int_t a = 0; a < arity_num.num+1; a++) {
-				// Make the head interpretation
-				std::vector<elem> rhead_e = { out_rel, elem_openp, rule_name };
-				for(int_t i = 0; i < a; i++) rhead_e.push_back(iparams[i]);
-				rhead_e.push_back(elem_closep);
-				// Make the rule quotation
-				raw_term qrule({ quote_sym, elem_openp, elem(QRULE), elt_id,
-					head_id, body_id, elem_closep });
-				// Make the head quotation
-				std::vector<elem> qhead_e = { quote_sym, elem_openp, elem(QTERM),
-					head_id, rule_name };
-				for(int_t i = 0; i < a; i++) qhead_e.push_back(qparams[i]);
-				qhead_e.push_back(elem_closep);
-				// Make the body interpretation
-				std::vector<elem> body_e = { aux_rel, elem_openp, body_id };
-				for(int_t i = 0; i < arity_num.num; i++) {
-					body_e.push_back(qargs[i]);
-					body_e.push_back(iargs[i]);
-				}
-				body_e.push_back(elem_closep);
-				sprawformtree bodie =
-					std::make_shared<raw_form_tree>(elem::AND,
-						std::make_shared<raw_form_tree>(elem::AND,
-							std::make_shared<raw_form_tree>(elem::NONE, qrule),
-							std::make_shared<raw_form_tree>(elem::NONE, raw_term(qhead_e))),
-						std::make_shared<raw_form_tree>(elem::NONE, raw_term(body_e)));
-				// Fix the real parameters to this rule to the quoted symbol
-				// if it is not marked as a variable.
-				for(int_t i = 0; i < a; i++) {
-					bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
-						fix_symbols(quote_sym, qparams[i], iparams[i]));
-				}
-				// Fix the real parameters to this rule to be the same if their
-				// quotations are the same.
-				for(int_t i = 0; i < a; i++) {
-					for(int_t j = i+1; j < a; j++) {
-						bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
-							fix_variables(quote_sym, qparams[i], iparams[i],
-								qparams[j], iparams[j]));
-					}
-				}
-				// Fix the real parameters to this rule to be the same as the
-				// arguments if their corresponding quotations are the same.
-				for(int_t i = 0; i < a; i++) {
-					for(int_t j = 0; j < a; j++) {
-						bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
-							fix_variables(quote_sym, qargs[i], iargs[i], qparams[j],
-								iparams[j]));
-					}
-				}
-				raw_term rt(rhead_e);
-				raw_rule rr(rt, bodie);
-				rp.r.push_back(rr);
-			}
+			generate_rule_eval(rp, false, out_rel, quote_sym, aux_rel,
+				iparams, qparams, iargs, qargs);
+			generate_rule_eval(rp, true, out_rel, quote_sym, aux_rel,
+				iparams, qparams, iargs, qargs);
 			
 			// Interpret terms of each arity
 			for(int_t a = 0; a < arity_num.num+1; a++) {

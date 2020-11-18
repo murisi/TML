@@ -530,7 +530,8 @@ sprawformtree raw_rule::get_prft() const {
 	}
 }
 bool raw_rule::is_b() {
-	return !b.empty() || (prft && prft->type == elem::NONE && prft->rt->is_true());
+	return !b.empty() || prft == nullptr ||
+		(prft && prft->type == elem::NONE && prft->rt->is_true());
 }
 bool raw_rule::parse(input* in, const raw_prog& prog) {
 	const lexemes& l = in->l;

@@ -113,6 +113,10 @@ class driver {
 	void generate_quantified_eval(raw_prog &rp, const int_t qtype,
 		const elem::etype &eltype, const elem &quote_sym, const elem &aux_rel,
 		const std::vector<elem> &iparams, const std::vector<elem> &qparams);
+	void generate_rule_eval(raw_prog &rp, bool neg, const elem &out_rel,
+		const elem &quote_sym, const elem &aux_rel,
+		const std::vector<elem> &iparams, const std::vector<elem> &qparams,
+		const std::vector<elem> &iargs, const std::vector<elem> &qargs);
 	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
 	sprawformtree inline_rule(const raw_term &rt1, const raw_term &rt2,

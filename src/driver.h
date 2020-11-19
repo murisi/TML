@@ -130,7 +130,7 @@ class driver {
 		const sprawformtree &tree, std::vector<sprawformtree> &tms);
 	bool is_rule_conjunctive(const raw_rule &rr);
 	bool is_rule_conjunctive_with_negation(const raw_rule &rr);
-	bool try_cqc_minimize(raw_rule &rr);
+	bool try_minimize(raw_rule &rr);
 	raw_rule freeze_rule(raw_rule rr, std::map<elem, elem> &freeze_map);
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
 	bool cqnc(const raw_rule &rr1, const raw_rule &rr2);
@@ -153,7 +153,6 @@ class driver {
 	template <class InputIterator>
 		void collect_vars(InputIterator first, InputIterator last,
 			std::set<elem> &vars);
-	void to_pure_tml(raw_rule &rr, std::vector<raw_rule> &rp);
 	void to_pure_tml(raw_prog &rp);
 	void compute_required_vars(const raw_rule &rr, const terms_hom &hom,
 		std::set<elem> &orig_vars);

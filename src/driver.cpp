@@ -425,6 +425,18 @@ void driver::compute_required_vars(const raw_rule &rr,
 	}
 }
 
+/* Takes two pure TML rules and returns true if the first is "bigger"
+ * than the second. Bigger means more conjuncts in the body, and in the
+ * case of a tie means more arguments in the head. */
+
+bool bigger_rule(const raw_rule &rr1, const raw_rule &rr2) {
+	if(rr1.b[0].size() == rr2.b[0].size()) {
+		return rr1.h[0].e.size() > rr2.h[0].e.size();
+	} else {
+		return rr1.b[0].size() > rr2.b[0].size();
+	}
+}
+
 /* Algorithm to factor the rules in a program using other rules.
  * Starting with the conjunctive rules with the biggest bodies, record
  * all the homomorphisms from this body into the bodies of other rules.
@@ -437,6 +449,11 @@ void driver::factor_rules(raw_prog &rp) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	
+	// Sort the rules so the biggest come first. Idea is that we want to
+	// reduce total substitutions by doing the biggest factorizations
+	// first. Also prioritizing rules with more arguments to reduce chance
+	// that tmprel with more arguments is created.
+	std::sort(rp.r.begin(), rp.r.end(), bigger_rule);
 	// The place where we temporarily store our temporary rules
 	std::vector<raw_rule> pending_rules;
 	// Go through the rules we want to try substituting into other
@@ -738,7 +755,7 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
  * the case, modify the input query and indicate that this has happened
  * through the return flag. */
 
-bool driver::try_cqc_minimize(raw_rule &rr) {
+bool driver::try_minimize(raw_rule &rr) {
 	if(is_rule_conjunctive_with_negation(rr)) {
 		std::vector<raw_term> heads1 = rr.h, bodie1 = rr.b[0],
 			heads2 = rr.h, bodie2 = rr.b[0];
@@ -794,7 +811,7 @@ void driver::subsume_queries(raw_prog &rp) {
 			// Do the maximal amount of query minimization on the query we are
 			// about to admit. This should reduce the time cost of future
 			// subsumptions.
-			while(try_cqc_minimize(rr));
+			while(try_minimize(rr));
 			// If the current rule has not been subsumed, then it needs to be
 			// represented in the reduced rules.
 			reduced_rules.push_back(rr);
@@ -1552,15 +1569,6 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 	return raw_term(part_id, fv);
 }
 
-/* If the given rule is a FOL formula, then turn it into a pure TML rule
- * creating temporary relations as necessary. */
-
-void driver::to_pure_tml(raw_rule &rr, std::vector<raw_rule> &rp) {
-	if(!rr.is_b()) {
-		rr.set_b({{to_pure_tml(rr.prft, rp)}});
-	}
-}
-
 /* Convert every rule in the given program to pure TML rules. Rules with
  * multiple heads are also converted to multiple rules with single
  * heads. */
@@ -1571,7 +1579,9 @@ void driver::to_pure_tml(raw_prog &rp) {
 	// Convert all FOL formulas to P-DATALOG
 	for(size_t i = 0; i < rp.r.size(); i++) {
 		raw_rule rr = rp.r[i];
-		to_pure_tml(rr, ir);
+		if(!rr.is_b()) {
+			rr.set_b({{to_pure_tml(rr.prft, ir)}});
+		}
 		rp.r[i] = rr;
 	}
 	// Split rules with multiple heads and delete those with 0 heads

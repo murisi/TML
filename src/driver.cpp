@@ -425,6 +425,20 @@ void driver::compute_required_vars(const raw_rule &rr,
 	}
 }
 
+/* Count the number of rules (including the given one) that derive facts
+ * for the same relation that the given rule derives facts for. */
+
+int_t driver::count_related_rules(const raw_rule &rr1, const raw_prog &rp) {
+	int_t count = 0;
+	for(const raw_rule &rr2 : rp.r) {
+		if(rr1.h[0].e[0] == rr2.h[0].e[0] &&
+				rr1.h[0].e.size() == rr2.h[0].e.size()) {
+			count++;
+		}
+	}
+	return count;
+}
+
 /* Takes two pure TML rules and returns true if the first is "bigger"
  * than the second. Bigger means more conjuncts in the body, and in the
  * case of a tie means more arguments in the head. */
@@ -497,24 +511,25 @@ void driver::factor_rules(raw_prog &rp) {
 			std::vector<elem> target_args;
 			std::set<elem> exported_vars;
 			collect_vars(rr2.h[0], exported_vars);
-			if(exported_vars == needed_vars) {
+			// Note whether we have created a temporary relation. Important
+			// because we make the current rule depend on the temporary
+			// relation in this case.
+			bool tmp_rel = !(exported_vars == needed_vars && count_related_rules(rr2, rp) == 1);
+			
+			if(tmp_rel) {
+				// Variables are not exactly what is required. So make relation
+				// exporting required variables and note argument order.
+				target_rel = elem::fresh_sym(d);
+				target_args.assign(needed_vars.begin(), needed_vars.end());
+				pending_rules.push_back(raw_rule(raw_term(target_rel, target_args), rr2.b[0]));
+			} else {
 				// The variables exported by current rule are exactly what is
 				// needed by all homomorphisms from current body
 				target_rel = rr2.h[0].e[0];
 				for(size_t i = 2; i < rr2.h[0].e.size() - 1; i++) {
 					target_args.push_back(rr2.h[0].e[i]);
 				}
-			} else {
-				// Variables are not exactly what is required. So make relation
-				// exporting required variables and note argument order.
-				target_rel = elem::fresh_sym(d);
-				target_args.assign(needed_vars.begin(), needed_vars.end());
-				pending_rules.push_back(raw_rule(raw_term(target_rel, target_args), rr2.b[0]));
 			}
-			// Also note whether we have created a temporary relation.
-			// Important because we make the current rule depend on the
-			// temporary relation in this case.
-			bool tmp_rel = exported_vars != needed_vars;
 			
 			// Now we go through all the homomorphisms and try to apply
 			// substitutions to their targets

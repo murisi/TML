@@ -131,6 +131,7 @@ class driver {
 	bool is_rule_conjunctive(const raw_rule &rr);
 	bool is_rule_conjunctive_with_negation(const raw_rule &rr);
 	bool try_minimize(raw_rule &rr);
+	int_t count_related_rules(const raw_rule &rr1, const raw_prog &rp);
 	raw_rule freeze_rule(raw_rule rr, std::map<elem, elem> &freeze_map);
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
 	bool cqnc(const raw_rule &rr1, const raw_rule &rr2);

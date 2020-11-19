@@ -444,10 +444,14 @@ int_t driver::count_related_rules(const raw_rule &rr1, const raw_prog &rp) {
  * case of a tie means more arguments in the head. */
 
 bool bigger_rule(const raw_rule &rr1, const raw_rule &rr2) {
-	if(rr1.b[0].size() == rr2.b[0].size()) {
-		return rr1.h[0].e.size() > rr2.h[0].e.size();
+	if(rr1.b.size() == 1 && rr2.b.size() == 1) {
+		if(rr1.b[0].size() == rr2.b[0].size()) {
+			return rr1.h[0].e.size() > rr2.h[0].e.size();
+		} else {
+			return rr1.b[0].size() > rr2.b[0].size();
+		}
 	} else {
-		return rr1.b[0].size() > rr2.b[0].size();
+		return rr1.b.size() > rr2.b.size();
 	}
 }
 
@@ -460,111 +464,113 @@ bool bigger_rule(const raw_rule &rr1, const raw_rule &rr2) {
  * replace the homomorphism targets with our chosen head. */
 
 void driver::factor_rules(raw_prog &rp) {
-	// Get dictionary for generating fresh symbols
-	dict_t &d = tbl->get_dict();
-	
-	// Sort the rules so the biggest come first. Idea is that we want to
-	// reduce total substitutions by doing the biggest factorizations
-	// first. Also prioritizing rules with more arguments to reduce chance
-	// that tmprel with more arguments is created.
-	std::sort(rp.r.begin(), rp.r.end(), bigger_rule);
-	// The place where we temporarily store our temporary rules
-	std::vector<raw_rule> pending_rules;
-	// Go through the rules we want to try substituting into other
-	for(raw_rule &rr2 : rp.r) {
-		// Because we use a conjunctive homomorphism finding rule
-		if(is_rule_conjunctive(rr2) && rr2.b[0].size() > 1) {
-			// The variables of the current rule that we'd need to be able to
-			// constrain/substitute into
-			std::set<elem> needed_vars;
-			std::set<std::tuple<raw_rule *, terms_hom>> agg;
-			// Now let's look for rules that we can substitute the current
-			// into
-			for(raw_rule &rr1 : rp.r) {
-				std::set<terms_hom> homs;
-				// Find all the homomorphisms between outer and inner rule. This
-				// way we can substitute the outer rule into the inner multiple
-				// times.
-				if(is_rule_conjunctive(rr1) && cbc(rr1, rr2, homs)) {
-					for(const terms_hom &hom : homs) {
-						auto &[target_terms, var_map] = hom;
-						// Record only those homomorphisms where the target is at
-						// least as big as the source for there is no point in
-						// replacing a group of terms with a rule utilizing a bigger
-						// group.
-						if(target_terms.size() >= rr2.b[0].size()) {
-							agg.insert(std::make_tuple(&rr1, hom));
-							// If we were to substitute the target group of terms with
-							// a single head, what arguments would we need to pass to
-							// it?
-							compute_required_vars(rr1, hom, needed_vars);
+	step_transform(rp, [&](raw_prog &rp) {
+		// Get dictionary for generating fresh symbols
+		dict_t &d = tbl->get_dict();
+		
+		// Sort the rules so the biggest come first. Idea is that we want to
+		// reduce total substitutions by doing the biggest factorizations
+		// first. Also prioritizing rules with more arguments to reduce chance
+		// that tmprel with more arguments is created.
+		std::sort(rp.r.begin(), rp.r.end(), bigger_rule);
+		// The place where we temporarily store our temporary rules
+		std::vector<raw_rule> pending_rules;
+		// Go through the rules we want to try substituting into other
+		for(raw_rule &rr2 : rp.r) {
+			// Because we use a conjunctive homomorphism finding rule
+			if(is_rule_conjunctive(rr2) && rr2.b[0].size() > 1) {
+				// The variables of the current rule that we'd need to be able to
+				// constrain/substitute into
+				std::set<elem> needed_vars;
+				std::set<std::tuple<raw_rule *, terms_hom>> agg;
+				// Now let's look for rules that we can substitute the current
+				// into
+				for(raw_rule &rr1 : rp.r) {
+					std::set<terms_hom> homs;
+					// Find all the homomorphisms between outer and inner rule. This
+					// way we can substitute the outer rule into the inner multiple
+					// times.
+					if(is_rule_conjunctive(rr1) && cbc(rr1, rr2, homs)) {
+						for(const terms_hom &hom : homs) {
+							auto &[target_terms, var_map] = hom;
+							// Record only those homomorphisms where the target is at
+							// least as big as the source for there is no point in
+							// replacing a group of terms with a rule utilizing a bigger
+							// group.
+							if(target_terms.size() >= rr2.b[0].size()) {
+								agg.insert(std::make_tuple(&rr1, hom));
+								// If we were to substitute the target group of terms with
+								// a single head, what arguments would we need to pass to
+								// it?
+								compute_required_vars(rr1, hom, needed_vars);
+							}
 						}
 					}
 				}
-			}
-			
-			// Now we need to figure out if we should create a temporary
-			// relation containing body of current rule or whether we can just
-			// use it directly. This depends on whether the head exports
-			// enough variables.
-			elem target_rel;
-			std::vector<elem> target_args;
-			std::set<elem> exported_vars;
-			collect_vars(rr2.h[0], exported_vars);
-			// Note whether we have created a temporary relation. Important
-			// because we make the current rule depend on the temporary
-			// relation in this case.
-			bool tmp_rel = !(exported_vars == needed_vars && count_related_rules(rr2, rp) == 1);
-			
-			if(tmp_rel) {
-				// Variables are not exactly what is required. So make relation
-				// exporting required variables and note argument order.
-				target_rel = elem::fresh_sym(d);
-				target_args.assign(needed_vars.begin(), needed_vars.end());
-				pending_rules.push_back(raw_rule(raw_term(target_rel, target_args), rr2.b[0]));
-			} else {
-				// The variables exported by current rule are exactly what is
-				// needed by all homomorphisms from current body
-				target_rel = rr2.h[0].e[0];
-				for(size_t i = 2; i < rr2.h[0].e.size() - 1; i++) {
-					target_args.push_back(rr2.h[0].e[i]);
-				}
-			}
-			
-			// Now we go through all the homomorphisms and try to apply
-			// substitutions to their targets
-			for(auto &[rr1, hom] : agg) {
-				// If no temporary relation was created, then don't touch the
-				// outer rule as its definition is irreducible.
-				if(!tmp_rel && rr1 == &rr2) continue;
-				auto &[rts, vs] = hom;
-				std::set<raw_term> rr1_set(rr1->b[0].begin(), rr1->b[0].end());
-				// If the target rule still includes the homomorphism target,
-				// then ... . Note that this may not be the case as the targets
-				// of several homomorphisms could overlap.
-				if(std::includes(rr1_set.begin(), rr1_set.end(), rts.begin(),
-						rts.end())) {
-					// Remove the homomorphism target from the target rule
-					auto it = std::set_difference(rr1_set.begin(), rr1_set.end(),
-						rts.begin(), rts.end(), rr1->b[0].begin());
-					rr1->b[0].resize(it - rr1->b[0].begin());
-					// And place our chosen head with localized arguments.
-					std::vector<elem> subbed_args;
-					for(const elem &e : target_args) {
-						// If the current parameter of the outer rule is a constant,
-						// then just place it in our new term verbatim
-						subbed_args.push_back(at_default(vs, e, e));
+				
+				// Now we need to figure out if we should create a temporary
+				// relation containing body of current rule or whether we can just
+				// use it directly. This depends on whether the head exports
+				// enough variables.
+				elem target_rel;
+				std::vector<elem> target_args;
+				std::set<elem> exported_vars;
+				collect_vars(rr2.h[0], exported_vars);
+				// Note whether we have created a temporary relation. Important
+				// because we make the current rule depend on the temporary
+				// relation in this case.
+				bool tmp_rel = !(exported_vars == needed_vars && count_related_rules(rr2, rp) == 1);
+				
+				if(tmp_rel) {
+					// Variables are not exactly what is required. So make relation
+					// exporting required variables and note argument order.
+					target_rel = elem::fresh_sym(d);
+					target_args.assign(needed_vars.begin(), needed_vars.end());
+					pending_rules.push_back(raw_rule(raw_term(target_rel, target_args), rr2.b[0]));
+				} else {
+					// The variables exported by current rule are exactly what is
+					// needed by all homomorphisms from current body
+					target_rel = rr2.h[0].e[0];
+					for(size_t i = 2; i < rr2.h[0].e.size() - 1; i++) {
+						target_args.push_back(rr2.h[0].e[i]);
 					}
-					rr1->b[0].push_back(raw_term(target_rel, subbed_args));
+				}
+				
+				// Now we go through all the homomorphisms and try to apply
+				// substitutions to their targets
+				for(auto &[rr1, hom] : agg) {
+					// If no temporary relation was created, then don't touch the
+					// outer rule as its definition is irreducible.
+					if(!tmp_rel && rr1 == &rr2) continue;
+					auto &[rts, vs] = hom;
+					std::set<raw_term> rr1_set(rr1->b[0].begin(), rr1->b[0].end());
+					// If the target rule still includes the homomorphism target,
+					// then ... . Note that this may not be the case as the targets
+					// of several homomorphisms could overlap.
+					if(std::includes(rr1_set.begin(), rr1_set.end(), rts.begin(),
+							rts.end())) {
+						// Remove the homomorphism target from the target rule
+						auto it = std::set_difference(rr1_set.begin(), rr1_set.end(),
+							rts.begin(), rts.end(), rr1->b[0].begin());
+						rr1->b[0].resize(it - rr1->b[0].begin());
+						// And place our chosen head with localized arguments.
+						std::vector<elem> subbed_args;
+						for(const elem &e : target_args) {
+							// If the current parameter of the outer rule is a constant,
+							// then just place it in our new term verbatim
+							subbed_args.push_back(at_default(vs, e, e));
+						}
+						rr1->b[0].push_back(raw_term(target_rel, subbed_args));
+					}
 				}
 			}
 		}
-	}
-	// Now add the pending rules. Done here to prevent movement of rules
-	// during potential vector resizing.
-	for(const raw_rule &rr : pending_rules) {
-		rp.r.push_back(rr);
-	}
+		// Now add the pending rules. Done here to prevent movement of rules
+		// during potential vector resizing.
+		for(const raw_rule &rr : pending_rules) {
+			rp.r.push_back(rr);
+		}
+	});
 }
 
 /* Function to iterate through the partitions of the given set. Calls
@@ -1489,6 +1495,60 @@ void driver::transform_evals(raw_prog &rp) {
 	}
 }
 
+void driver::recursive_transform(raw_prog &rp,
+		const std::function<void(raw_prog &)> &f) {
+	for(raw_prog &np : rp.nps) {
+		recursive_transform(np, f);
+	}
+	f(rp);
+}
+
+/* Applies the given transformation to the given program in such a way
+ * that it completes in a single step. Does this by separating the given
+ * program into an execute and a writeback stage which serves to stop
+ * the construction of the next database from interfering with the
+ * execution of the current stage. */
+
+void driver::step_transform(raw_prog &rp,
+		const std::function<void(raw_prog &)> &f) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	
+	std::map<elem, elem> freeze_map, unfreeze_map;
+	// Separate the internal rules used to execute the parts of the
+	// transformation from the external rules used to expose the results
+	// of computation.
+	raw_prog ext_prog, int_prog;
+	// Create a duplicate of each rule in the given program under a
+	// generated alias.
+	for(raw_rule &rr : rp.r) {
+		for(raw_term &rt : rr.h) {
+			raw_term rt2 = rt;
+			auto it = freeze_map.find(rt.e[0]);
+			if(it != freeze_map.end()) {
+				rt.e[0] = it->second;
+			} else {
+				elem frozen_elem = elem::fresh_sym(d);
+				// Store the mapping so that the derived portion of each
+				// relation is stored in exactly one place
+				unfreeze_map[frozen_elem] = rt.e[0];
+				rt.e[0] = freeze_map[rt.e[0]] = frozen_elem;
+			}
+			// Update the external interface
+			ext_prog.r.push_back(raw_rule(rt2, rt));
+		}
+	}
+	// Execute the transformation on the renamed rules and set the
+	// internal program to the output.
+	int_prog.r = rp.r;
+	rp.r.clear();
+	f(int_prog);
+	// The internal and external program execute as mutually dependent
+	// nested programs.
+	rp.nps.push_back(int_prog);
+	rp.nps.push_back(ext_prog);
+}
+
 /* Make a term with behavior equivalent to the supplied first order
  * logic formula with the given bound variables. This might involve
  * adding temporary relations to the given program. */
@@ -1589,45 +1649,32 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
  * heads. */
 
 void driver::to_pure_tml(raw_prog &rp) {
-	// Where the pure TML rules needed to emulate FOL rules are put
-	std::vector<raw_rule> ir;
-	// Convert all FOL formulas to P-DATALOG
-	for(size_t i = 0; i < rp.r.size(); i++) {
-		raw_rule rr = rp.r[i];
-		if(!rr.is_b()) {
-			rr.set_b({{to_pure_tml(rr.prft, ir)}});
-		}
-		rp.r[i] = rr;
-	}
-	// Split rules with multiple heads and delete those with 0 heads
-	for(std::vector<raw_rule>::iterator it = rp.r.begin();
-			it != rp.r.end();) {
-		if(it->h.size() != 1) {
-			// 0 heads are effectively eliminated, and multiple heads are
-			// split up.
-			const raw_rule rr = *it;
-			it = rp.r.erase(it);
-			for(const raw_term &rt : rr.h) {
-				it = rp.r.insert(it, raw_rule(rt, rr.b));
+	step_transform(rp, [&](raw_prog &rp) {
+		// Convert all FOL formulas to P-DATALOG
+		for(int_t i = rp.r.size() - 1; i >= 0; i--) {
+			raw_rule rr = rp.r[i];
+			if(!rr.is_b()) {
+				rr.set_b({{to_pure_tml(rr.prft, rp.r)}});
 			}
-		} else {
-			// Leave the single-headed rules alone.
-			it++;
+			rp.r[i] = rr;
 		}
-	}
-	// If internal rules were created, sequence the external rules to come
-	// after them in this program.
-	if(!ir.empty()) {
-		// Make a nested program containing the internal rules
-		raw_prog nrp;
-		nrp.r = ir;
-		rp.nps.push_back(nrp);
-		// Make a nested program containing the external rules
-		raw_prog srp;
-		srp.r = rp.r;
-		rp.r.clear();
-		rp.nps.push_back(srp);
-	}
+		// Split rules with multiple heads and delete those with 0 heads
+		for(std::vector<raw_rule>::iterator it = rp.r.begin();
+				it != rp.r.end();) {
+			if(it->h.size() != 1) {
+				// 0 heads are effectively eliminated, and multiple heads are
+				// split up.
+				const raw_rule rr = *it;
+				it = rp.r.erase(it);
+				for(const raw_term &rt : rr.h) {
+					it = rp.r.insert(it, raw_rule(rt, rr.b));
+				}
+			} else {
+				// Leave the single-headed rules alone.
+				it++;
+			}
+		}
+	});
 }
 
 void driver::populate_free_variables(const raw_term &t,
@@ -2019,6 +2066,9 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 //	if (opts.enabled("sdt"))
 //		for (raw_prog& p : rp.p)
 //			p = transform_sdt(move(p));
+	
+	for (auto& np : rp.nps) if (!transform(np, pd.strs)) return false;
+	
 	simplify_formulas(rp);
 	std::cout << "Simplified Program:" << std::endl << std::endl << rp << std::endl;
 	transform_quotes(rp);
@@ -2027,11 +2077,11 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	std::cout << "Evaled Program:" << std::endl << std::endl << rp << std::endl;
 	//quote_prog(rp, elem(elem::SYM, get_lexeme("this")), rp);
 	//std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
-	to_pure_tml(rp);
+	recursive_transform(rp, [&](raw_prog &rp) { to_pure_tml(rp); });
 	std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
-	subsume_queries(rp);
+	recursive_transform(rp, [&](raw_prog &rp) { subsume_queries(rp); });
 	std::cout << "Minimized Program:" << std::endl << std::endl << rp << std::endl;
-	factor_rules(rp);
+	recursive_transform(rp, [&](raw_prog &rp) { factor_rules(rp); });
 	std::cout << "Factorized Program:" << std::endl << std::endl << rp << std::endl;
 	/*std::set<elem> universe;
 	std::set<raw_term> database;
@@ -2049,7 +2099,6 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 //	if (trel[0]) transform_proofs(rp.p[n], trel);
 	//o::out()<<rp.p[n]<<endl;
 //	if (pd.bwd) rp.p.push_back(transform_bwd(rp.p[n]));
-	for (auto& np : rp.nps) if (!transform(np, pd.strs)) return false;
 	return true;
 }
 

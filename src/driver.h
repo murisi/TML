@@ -132,6 +132,10 @@ class driver {
 	bool is_rule_conjunctive_with_negation(const raw_rule &rr);
 	bool try_minimize(raw_rule &rr);
 	int_t count_related_rules(const raw_rule &rr1, const raw_prog &rp);
+	void step_transform(raw_prog &rp,
+		const std::function<void(raw_prog &)> &f);
+	void recursive_transform(raw_prog &rp,
+		const std::function<void(raw_prog &)> &f);
 	raw_rule freeze_rule(raw_rule rr, std::map<elem, elem> &freeze_map);
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
 	bool cqnc(const raw_rule &rr1, const raw_rule &rr2);

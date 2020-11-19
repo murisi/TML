@@ -2862,8 +2862,8 @@ bool tables::run_prog(const std::set<raw_term> &edb, raw_prog rp,
 	// Create a duplicate of each rule in the given program under a
 	// generated alias.
 	for(int_t i = ssize(rp.r) - 1; i >= 0; i--) {
-		raw_rule rr = rp.r[i];
-		for(raw_term &rt : rr.h) {
+		for(raw_term &rt : rp.r[i].h) {
+			raw_term rt2 = rt;
 			auto it = freeze_map.find(rt.e[0]);
 			if(it != freeze_map.end()) {
 				rt.e[0] = it->second;
@@ -2874,8 +2874,8 @@ bool tables::run_prog(const std::set<raw_term> &edb, raw_prog rp,
 				unfreeze_map[frozen_elem] = rt.e[0];
 				rt.e[0] = freeze_map[rt.e[0]] = frozen_elem;
 			}
+			rp.r.push_back(raw_rule(rt2, rt));
 		}
-		rp.r.push_back(rr);
 	}
 	// Now add the extensional database to the given program.
 	for(const raw_term &rt : edb) {

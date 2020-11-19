@@ -166,10 +166,6 @@ class driver {
 		std::set<elem> &universe);
 	void populate_universe(const raw_prog &rp,
 		std::set<elem> &universe);
-	sprawformtree with_exists(sprawformtree t,
-		const std::vector<elem> &bound_vars);
-	void insert_exists(raw_rule &rr);
-	void insert_exists(raw_prog &rp);
 	void interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
 		const std::map<const elem*, std::set<elem>> &universes,
 		std::map<elem, elem> &bindings, std::set<raw_term> &database);

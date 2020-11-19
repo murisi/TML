@@ -1045,6 +1045,11 @@ void driver::transform_quotes(raw_prog &rp) {
 	}
 }
 
+/* Essential for the handling terms/arguments in a quoted program.
+ * Basically forces two interpreted terms to be equal to each other if
+ * their corresponding quoted terms are equal and are both present in
+ * the variable subrelation. */
+
 sprawformtree driver::fix_variables(const elem &quote_sym,
 		const elem &qva, const elem &rva, const elem &qvb, const elem &rvb) {
 	return std::make_shared<raw_form_tree>(elem::IMPLIES,
@@ -1060,6 +1065,11 @@ sprawformtree driver::fix_variables(const elem &quote_sym,
 			{rva, elem_eq, rvb})));
 }
 
+/* Essential for the handling terms/arguments in a quoted program.
+ * Basically forces an interpreted term to be equal to the corresponding
+ * quoted term in the case that the quoted term does not appear in the
+ * variable subrelation. */
+
 sprawformtree driver::fix_symbols(const elem &quote_sym,
 		const elem &qva, const elem &rva) {
 	return std::make_shared<raw_form_tree>(elem::IMPLIES,
@@ -1070,7 +1080,12 @@ sprawformtree driver::fix_symbols(const elem &quote_sym,
 			raw_term(raw_term::EQ, {qva, elem_eq, rva})));
 }
 
-// Interpret binary operations with varying allocations to each side
+/* Interpret binary operations with varying allocations to each side.
+ * Basically interprets a quoted binary relation by calling the
+ * auxiliary relation to interpret each side of the quote and then
+ * combining everything together using the corresponding binary logical
+ * operator of the host interpreter. */
+ 
 void driver::generate_binary_eval(raw_prog &rp, const int_t qtype,
 		const elem::etype &eltype, const elem &quote_sym,
 		const elem &und_sym, const elem &aux_rel,
@@ -1128,6 +1143,11 @@ void driver::generate_binary_eval(raw_prog &rp, const int_t qtype,
 	}
 }
 
+/* Enables the auxilliary interpreter relation to interpret quoted
+ * quantifications. Does this by using the corresponding quantifier
+ * in the host interpreter to create a variable and by handing off
+ * execution of the body to the auxilliary relation. */
+ 
 void driver::generate_quantified_eval(raw_prog &rp, const int_t qtype,
 		const elem::etype &eltype, const elem &quote_sym, const elem &aux_rel,
 		const std::vector<elem> &iparams, const std::vector<elem> &qparams) {
@@ -1168,7 +1188,13 @@ void driver::generate_quantified_eval(raw_prog &rp, const int_t qtype,
 	rp.r.push_back(rr);
 }
 
-// Make the interpreters
+/* Make interpreters that either insert terms or delete terms. Code
+ * generated basically works by matching for rule quotations and using
+ * the ids within it to match for the corresponding head and body
+ * quotations. Next we send off the body to the auxilliary interpreter
+ * relation and assign the results to a subrelation of the output
+ * relation under the name given in the head. */
+ 
 void driver::generate_rule_eval(raw_prog &rp, bool neg,
 		const elem &out_rel, const elem &quote_sym, const elem &aux_rel,
 		const std::vector<elem> &iparams, const std::vector<elem> &qparams,
@@ -1286,7 +1312,6 @@ void driver::transform_evals(raw_prog &rp) {
 			// This relation will house most of the interpreter
 			elem aux_rel = elem::fresh_sym(d);
 			
-			// Interpret the varying rule arities.
 			// Allocate rule name, rule id, head id, body id
 			elem rule_name = elem::fresh_var(d), elt_id = elem::fresh_var(d),
 				forma_id = elem::fresh_var(d);
@@ -1304,9 +1329,10 @@ void driver::transform_evals(raw_prog &rp) {
 			// the execution of the current stage.
 			raw_prog ext_prog, int_prog;
 			
-			// Make the interpreters
+			// Make the interpreters that insert terms
 			generate_rule_eval(ext_prog, false, out_rel, quote_sym, aux_rel,
 				iparams, qparams, iargs, qargs);
+			// Make the interpreters that delete terms
 			generate_rule_eval(ext_prog, true, out_rel, quote_sym, aux_rel,
 				iparams, qparams, iargs, qargs);
 			
@@ -1613,36 +1639,6 @@ void driver::populate_free_variables(const raw_form_tree &t,
 			break;
 		} default:
 			assert(false); //should never reach here
-	}
-}
-
-sprawformtree driver::with_exists(sprawformtree t,
-		const std::vector<elem> &bound_vars_tmp) {
-	std::set<elem> free_vars;
-	std::vector<elem> bound_vars = bound_vars_tmp;
-	populate_free_variables(*t, bound_vars, free_vars);
-	for(const elem &var : free_vars) {
-		t = std::make_shared<raw_form_tree>(elem::EXISTS,
-			std::make_shared<raw_form_tree>(elem::VAR, var), t);
-	}
-	return t;
-}
-
-void driver::insert_exists(raw_rule &rr) {
-	if(rr.get_prft() && rr.h.size() == 1) {
-		std::vector<elem> bound_vars;
-		for(const elem &e : rr.h[0].e) {
-			if(e.type == elem::VAR) {
-				bound_vars.push_back(e);
-			}
-		}
-		rr.set_prft(with_exists(rr.get_prft(), bound_vars));
-	}
-}
-
-void driver::insert_exists(raw_prog &rp) {
-	for(raw_rule &rr : rp.r) {
-		insert_exists(rr);
 	}
 }
 

@@ -817,7 +817,7 @@ void driver::subsume_queries(raw_prog &rp) {
 				// then move onto the next rule in the outer loop
 				subsumed = true;
 				break;
-			} else if(cqc(*nrr, rr)) {
+			} else if(cqnc(*nrr, rr)) {
 				// If current rule contains that in reduced rules, then remove
 				// the subsumed rule from reduced rules
 				nrr = reduced_rules.erase(nrr);
@@ -1537,7 +1537,8 @@ void driver::step_transform(raw_prog &rp,
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	
-	std::map<elem, elem> freeze_map, unfreeze_map;
+	std::map<std::tuple<elem, bool>, elem> freeze_map;
+	std::map<elem, std::tuple<elem, bool>> unfreeze_map;
 	// Separate the internal rules used to execute the parts of the
 	// transformation from the external rules used to expose the results
 	// of computation.
@@ -1547,16 +1548,19 @@ void driver::step_transform(raw_prog &rp,
 	for(raw_rule &rr : rp.r) {
 		for(raw_term &rt : rr.h) {
 			raw_term rt2 = rt;
-			auto it = freeze_map.find(rt.e[0]);
+			auto it = freeze_map.find(std::make_tuple(rt.e[0], rt.neg));
 			if(it != freeze_map.end()) {
 				rt.e[0] = it->second;
 			} else {
 				elem frozen_elem = elem::fresh_sym(d);
 				// Store the mapping so that the derived portion of each
 				// relation is stored in exactly one place
-				unfreeze_map[frozen_elem] = rt.e[0];
-				rt.e[0] = freeze_map[rt.e[0]] = frozen_elem;
+				unfreeze_map[frozen_elem] = std::make_tuple(rt.e[0], rt.neg);
+				rt.e[0] = freeze_map[std::make_tuple(rt.e[0], rt.neg)] = frozen_elem;
 			}
+			// The internal rule should be positive since the external can be
+			// negative.
+			rt.neg = false;
 			// Update the external interface
 			ext_prog.r.push_back(raw_rule(rt2, rt));
 		}
@@ -1641,12 +1645,17 @@ void driver::step_transform(raw_prog &rp,
 			for(raw_term &rt : rr.h) {
 				auto jt = unfreeze_map.find(rt.e[0]);
 				if(jt != unfreeze_map.end()) {
-					rt.e[0] = jt->second;
+					auto &[name, neg] = jt->second;
+					rt.e[0] = name;
+					rt.neg = neg;
 				}
 			}
 		}
 	}
 }
+
+/* Returns the difference between the two given sets. I.e. the second
+ * set removed with multiplicity from the first. */
 
 std::set<elem> set_difference(const std::multiset<elem> &s1,
 		const std::set<elem> &s2) {
@@ -1655,6 +1664,9 @@ std::set<elem> set_difference(const std::multiset<elem> &s1,
 		std::inserter(res, res.end()));
 	return res;
 }
+
+/* Returns the intersection of the two given sets. I.e. all the elems
+ * that occur in both sets. */
 
 std::set<elem> set_intersection(const std::set<elem> &s1,
 		const std::set<elem> &s2) {
@@ -1673,9 +1685,6 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	const elem part_id = elem::fresh_sym(d);
-	// Determine the variables that our subformula is parameterized by,
-	// our new rule would need to receive this.
-	//std::set<elem> fv = collect_free_variables(t);
 	
 	switch(t->type) {
 		case elem::IMPLIES:
@@ -1697,7 +1706,7 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 			std::multiset<elem> all_vars(fv.begin(), fv.end());
 			std::map<const sprawformtree, std::set<elem>> fvs;
 			for(const sprawformtree &tree : ands) {
-				fvs[tree] = collect_free_variables(tree);
+				fvs[tree] = collect_free_vars(tree);
 				all_vars.insert(fvs[tree].begin(), fvs[tree].end());
 			}
 			std::vector<raw_term> terms;
@@ -1799,14 +1808,14 @@ void driver::to_pure_tml(raw_prog &rp) {
 
 /* Collect all the variables that are free in the given term. */
 
-std::set<elem> driver::collect_free_variables(const raw_term &t) {
+std::set<elem> driver::collect_free_vars(const raw_term &t) {
 	std::set<elem> free_vars;
 	std::vector<elem> bound_vars = {};
-	collect_free_variables(t, bound_vars, free_vars);
+	collect_free_vars(t, bound_vars, free_vars);
 	return free_vars;
 }
 
-void driver::collect_free_variables(const raw_term &t,
+void driver::collect_free_vars(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars) {
 	for(const elem &e : t.e) {
 		if(e.type == elem::VAR) {
@@ -1820,32 +1829,32 @@ void driver::collect_free_variables(const raw_term &t,
 
 /* Collect all the variables that are free in the given tree. */
 
-std::set<elem> driver::collect_free_variables(const sprawformtree &t) {
+std::set<elem> driver::collect_free_vars(const sprawformtree &t) {
 	std::set<elem> free_vars;
 	std::vector<elem> bound_vars = {};
-	collect_free_variables(t, bound_vars, free_vars);
+	collect_free_vars(t, bound_vars, free_vars);
 	return free_vars;
 }
 
-void driver::collect_free_variables(const sprawformtree &t,
+void driver::collect_free_vars(const sprawformtree &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars) {
 	switch(t->type) {
 		case elem::IMPLIES: case elem::COIMPLIES: case elem::AND:
 		case elem::ALT:
-			collect_free_variables(t->l, bound_vars, free_vars);
-			collect_free_variables(t->r, bound_vars, free_vars);
+			collect_free_vars(t->l, bound_vars, free_vars);
+			collect_free_vars(t->r, bound_vars, free_vars);
 			break;
 		case elem::NOT:
-			collect_free_variables(t->l, bound_vars, free_vars);
+			collect_free_vars(t->l, bound_vars, free_vars);
 			break;
 		case elem::EXISTS: case elem::UNIQUE: case elem::FORALL: {
 			elem elt = *(t->l->el);
 			bound_vars.push_back(elt);
-			collect_free_variables(t->r, bound_vars, free_vars);
+			collect_free_vars(t->r, bound_vars, free_vars);
 			bound_vars.pop_back();
 			break;
 		} case elem::NONE: {
-			collect_free_variables(*t->rt, bound_vars, free_vars);
+			collect_free_vars(*t->rt, bound_vars, free_vars);
 			break;
 		} default:
 			assert(false); //should never reach here

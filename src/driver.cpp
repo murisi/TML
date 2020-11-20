@@ -2167,15 +2167,15 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	for (auto& np : rp.nps) if (!transform(np, pd.strs)) return false;
 	
 	recursive_transform(rp, [&](raw_prog &rp) {
+		simplify_formulas(rp);
+		std::cout << "Simplified Program:" << std::endl << std::endl << rp << std::endl;
+		transform_quotes(rp);
+		std::cout << "Quoted Program:" << std::endl << std::endl << rp << std::endl;
+		transform_evals(rp);
+		std::cout << "Evaled Program:" << std::endl << std::endl << rp << std::endl;
+		//quote_prog(rp, elem(elem::SYM, get_lexeme("this")), rp);
+		//std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
 		step_transform(rp, [&](raw_prog &rp) {
-			simplify_formulas(rp);
-			std::cout << "Simplified Program:" << std::endl << std::endl << rp << std::endl;
-			transform_quotes(rp);
-			std::cout << "Quoted Program:" << std::endl << std::endl << rp << std::endl;
-			transform_evals(rp);
-			std::cout << "Evaled Program:" << std::endl << std::endl << rp << std::endl;
-			//quote_prog(rp, elem(elem::SYM, get_lexeme("this")), rp);
-			//std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
 			to_pure_tml(rp);
 			std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
 			subsume_queries(rp);

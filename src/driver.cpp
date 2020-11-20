@@ -1659,9 +1659,7 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 	const elem part_id = elem::fresh_sym(d);
 	// Determine the variables that our subformula is parameterized by,
 	// our new rule would need to receive this.
-	std::set<elem> fv;
-	std::vector<elem> bound_vars = {};
-	populate_free_variables(*t, bound_vars, fv);
+	std::set<elem> fv = collect_free_variables(*t);
 	
 	switch(t->type) {
 		case elem::IMPLIES:
@@ -1774,7 +1772,16 @@ void driver::to_pure_tml(raw_prog &rp) {
 	}
 }
 
-void driver::populate_free_variables(const raw_term &t,
+/* Collect all the variables that are free in the given term. */
+
+std::set<elem> driver::collect_free_variables(const raw_term &t) {
+	std::set<elem> free_vars;
+	std::vector<elem> bound_vars = {};
+	collect_free_variables(t, bound_vars, free_vars);
+	return free_vars;
+}
+
+void driver::collect_free_variables(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars) {
 	for(const elem &e : t.e) {
 		if(e.type == elem::VAR) {
@@ -1786,25 +1793,34 @@ void driver::populate_free_variables(const raw_term &t,
 	}
 }
 
-void driver::populate_free_variables(const raw_form_tree &t,
+/* Collect all the variables that are free in the given tree. */
+
+std::set<elem> driver::collect_free_variables(const raw_form_tree &t) {
+	std::set<elem> free_vars;
+	std::vector<elem> bound_vars = {};
+	collect_free_variables(t, bound_vars, free_vars);
+	return free_vars;
+}
+
+void driver::collect_free_variables(const raw_form_tree &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars) {
 	switch(t.type) {
 		case elem::IMPLIES: case elem::COIMPLIES: case elem::AND:
 		case elem::ALT:
-			populate_free_variables(*t.l, bound_vars, free_vars);
-			populate_free_variables(*t.r, bound_vars, free_vars);
+			collect_free_variables(*t.l, bound_vars, free_vars);
+			collect_free_variables(*t.r, bound_vars, free_vars);
 			break;
 		case elem::NOT:
-			populate_free_variables(*t.l, bound_vars, free_vars);
+			collect_free_variables(*t.l, bound_vars, free_vars);
 			break;
 		case elem::EXISTS: case elem::UNIQUE: case elem::FORALL: {
 			elem elt = *(t.l->el);
 			bound_vars.push_back(elt);
-			populate_free_variables(*t.r, bound_vars, free_vars);
+			collect_free_variables(*t.r, bound_vars, free_vars);
 			bound_vars.pop_back();
 			break;
 		} case elem::NONE: {
-			populate_free_variables(*t.rt, bound_vars, free_vars);
+			collect_free_variables(*t.rt, bound_vars, free_vars);
 			break;
 		} default:
 			assert(false); //should never reach here

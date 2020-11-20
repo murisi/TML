@@ -1648,37 +1648,64 @@ void driver::step_transform(raw_prog &rp,
 	}
 }
 
+std::set<elem> set_difference(const std::multiset<elem> &s1,
+		const std::set<elem> &s2) {
+	std::set<elem> res;
+	std::set_difference(s1.begin(), s1.end(), s2.begin(), s2.end(),
+		std::inserter(res, res.end()));
+	return res;
+}
+
+std::set<elem> set_intersection(const std::set<elem> &s1,
+		const std::set<elem> &s2) {
+	std::set<elem> res;
+	std::set_intersection(s1.begin(), s1.end(), s2.begin(), s2.end(),
+		std::inserter(res, res.end()));
+	return res;
+}
+
 /* Make a term with behavior equivalent to the supplied first order
  * logic formula with the given bound variables. This might involve
  * adding temporary relations to the given program. */
 
 raw_term driver::to_pure_tml(const sprawformtree &t,
-		std::vector<raw_rule> &rp) {
+		std::vector<raw_rule> &rp, const std::set<elem> &fv) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	const elem part_id = elem::fresh_sym(d);
 	// Determine the variables that our subformula is parameterized by,
 	// our new rule would need to receive this.
-	std::set<elem> fv = collect_free_variables(*t);
+	//std::set<elem> fv = collect_free_variables(t);
 	
 	switch(t->type) {
 		case elem::IMPLIES:
 			// Implication is logically equivalent to the following
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::ALT,
-				std::make_shared<raw_form_tree>(elem::NOT, t->l), t->r), rp);
+				std::make_shared<raw_form_tree>(elem::NOT, t->l), t->r), rp, fv);
 		case elem::COIMPLIES:
 			// Co-implication is logically equivalent to the following
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::AND,
 				std::make_shared<raw_form_tree>(elem::IMPLIES, t->l, t->r),
-				std::make_shared<raw_form_tree>(elem::IMPLIES, t->r, t->l)), rp);
+				std::make_shared<raw_form_tree>(elem::IMPLIES, t->r, t->l)), rp, fv);
 		case elem::AND: {
 			// Collect all the conjuncts within the tree top
 			std::vector<sprawformtree> ands;
 			flatten_associative(elem::AND, t, ands);
+			// Collect the free variables in each conjunct. The intersection
+			// of variables between one and the rest is what will need to be
+			// exported
+			std::multiset<elem> all_vars(fv.begin(), fv.end());
+			std::map<const sprawformtree, std::set<elem>> fvs;
+			for(const sprawformtree &tree : ands) {
+				fvs[tree] = collect_free_variables(tree);
+				all_vars.insert(fvs[tree].begin(), fvs[tree].end());
+			}
 			std::vector<raw_term> terms;
 			// And make a pure TML formula listing them
 			for(const sprawformtree &tree : ands) {
-				terms.push_back(to_pure_tml(tree, rp));
+				std::set<elem> nv = set_intersection(fvs[tree],
+					set_difference(all_vars, fvs[tree]));
+				terms.push_back(to_pure_tml(tree, rp, nv));
 			}
 			// Make the representative rule and add to the program
 			raw_rule nr(raw_term(part_id, fv), terms);
@@ -1690,26 +1717,20 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 			flatten_associative(elem::ALT, t, alts);
 			for(const sprawformtree &tree : alts) {
 				// Make a separate rule for each disjunct
-				raw_rule nr(raw_term(part_id, fv), to_pure_tml(tree, rp));
+				raw_rule nr(raw_term(part_id, fv), to_pure_tml(tree, rp, fv));
 				rp.push_back(nr);
 			}
 			break;
 		} case elem::NOT: {
-			raw_term nt = to_pure_tml(t->l, rp);
+			raw_term nt = to_pure_tml(t->l, rp, fv);
 			nt.neg = true;
 			return nt;
 		} case elem::EXISTS: {
 			// Make the proposition that is being quantified
-			raw_term nrt = to_pure_tml(t->r, rp);
-			// Replace occurences of the quantified variable in the arguments
-			// with a fresh variable to avoid unnecessary constraints.
+			std::set<elem> nfv = fv;
 			const elem qvar = *(t->l->el);
-			const elem ne = elem::fresh_var(d);
-			for(elem &e : nrt.e) {
-				if(e == qvar) {
-					e = ne;
-				}
-			}
+			nfv.erase(qvar);
+			raw_term nrt = to_pure_tml(t->r, rp, fv);
 			// Make the rule corresponding to this existential formula
 			raw_rule nr(raw_term(part_id, fv), nrt);
 			rp.push_back(nr);
@@ -1724,7 +1745,7 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 					std::make_shared<raw_form_tree>(elem::VAR, qvar),
 					std::make_shared<raw_form_tree>(elem::COIMPLIES, t->r,
 						std::make_shared<raw_form_tree>(elem::NONE,
-							raw_term(raw_term::EQ, { evar, elem_eq, qvar }))))), rp);
+							raw_term(raw_term::EQ, { evar, elem_eq, qvar }))))), rp, fv);
 		} case elem::NONE: {
 			return *t->rt;
 		} case elem::FORALL: {
@@ -1734,7 +1755,7 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 			return to_pure_tml(std::make_shared<raw_form_tree>(elem::NOT,
 				std::make_shared<raw_form_tree>(elem::EXISTS,
 					std::make_shared<raw_form_tree>(elem::VAR, qvar),
-					std::make_shared<raw_form_tree>(elem::NOT, t->r))), rp);
+					std::make_shared<raw_form_tree>(elem::NOT, t->r))), rp, fv);
 		} default:
 			assert(false); //should never reach here
 	}
@@ -1750,7 +1771,11 @@ void driver::to_pure_tml(raw_prog &rp) {
 	for(int_t i = rp.r.size() - 1; i >= 0; i--) {
 		raw_rule rr = rp.r[i];
 		if(!rr.is_b()) {
-			rr.set_b({{to_pure_tml(rr.prft, rp.r)}});
+			std::set<elem> nv;
+			for(const raw_term &rt : rr.h) {
+				collect_vars(rt, nv);
+			}
+			rr.set_b({{to_pure_tml(rr.prft, rp.r, nv)}});
 		}
 		rp.r[i] = rr;
 	}
@@ -1795,32 +1820,32 @@ void driver::collect_free_variables(const raw_term &t,
 
 /* Collect all the variables that are free in the given tree. */
 
-std::set<elem> driver::collect_free_variables(const raw_form_tree &t) {
+std::set<elem> driver::collect_free_variables(const sprawformtree &t) {
 	std::set<elem> free_vars;
 	std::vector<elem> bound_vars = {};
 	collect_free_variables(t, bound_vars, free_vars);
 	return free_vars;
 }
 
-void driver::collect_free_variables(const raw_form_tree &t,
+void driver::collect_free_variables(const sprawformtree &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars) {
-	switch(t.type) {
+	switch(t->type) {
 		case elem::IMPLIES: case elem::COIMPLIES: case elem::AND:
 		case elem::ALT:
-			collect_free_variables(*t.l, bound_vars, free_vars);
-			collect_free_variables(*t.r, bound_vars, free_vars);
+			collect_free_variables(t->l, bound_vars, free_vars);
+			collect_free_variables(t->r, bound_vars, free_vars);
 			break;
 		case elem::NOT:
-			collect_free_variables(*t.l, bound_vars, free_vars);
+			collect_free_variables(t->l, bound_vars, free_vars);
 			break;
 		case elem::EXISTS: case elem::UNIQUE: case elem::FORALL: {
-			elem elt = *(t.l->el);
+			elem elt = *(t->l->el);
 			bound_vars.push_back(elt);
-			collect_free_variables(*t.r, bound_vars, free_vars);
+			collect_free_variables(t->r, bound_vars, free_vars);
 			bound_vars.pop_back();
 			break;
 		} case elem::NONE: {
-			collect_free_variables(*t.rt, bound_vars, free_vars);
+			collect_free_variables(*t->rt, bound_vars, free_vars);
 			break;
 		} default:
 			assert(false); //should never reach here
@@ -2199,6 +2224,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 			factor_rules(rp);
 			std::cout << "Factorized Program:" << std::endl << std::endl << rp << std::endl;
 		});
+		std::cout << "Step Transformed Program:" << std::endl << std::endl << rp << std::endl;
 	});
 	/*std::set<elem> universe;
 	std::set<raw_term> database;

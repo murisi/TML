@@ -152,7 +152,8 @@ class driver {
 		raw_prog &rp, std::map<elem, elem> &variables);
 	void quote_prog(const raw_prog nrp, const elem &rel_name,
 		raw_prog &rp);
-	raw_term to_pure_tml(const sprawformtree &t, std::vector<raw_rule> &rp);
+	raw_term to_pure_tml(const sprawformtree &t, std::vector<raw_rule> &rp,
+		const std::set<elem> &fv);
 	void collect_positive_vars(const raw_rule &rr, std::set<elem> &vars);
 	void collect_vars(const raw_term &rt, std::set<elem> &vars);
 	template <class InputIterator>
@@ -164,9 +165,9 @@ class driver {
 	void collect_free_variables(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	std::set<elem> collect_free_variables(const raw_term &t);
-	void collect_free_variables(const raw_form_tree &t,
+	void collect_free_variables(const sprawformtree &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
-	std::set<elem> collect_free_variables(const raw_form_tree &t);
+	std::set<elem> collect_free_variables(const sprawformtree &t);
 	void populate_universe(const raw_term &rt, std::set<elem> &universe);
 	void populate_universe(const sprawformtree &rft,
 		std::set<elem> &universe);

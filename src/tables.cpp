@@ -2743,7 +2743,10 @@ char tables::fwd() noexcept {
 	for (ntable tab = 0; (size_t)tab != tbls.size(); ++tab) {
 		table& tbl = tbls[tab];
 		bool changes = tbl.commit(DBG(bits));
-		b |= changes;
+		string_t tbl_name = lexeme2str(dict.get_rel(get<0>(tbl.s)));
+		// Temporary hack to make sure that tmprels are not considered to be
+		// part of the fixed point
+		b |= tbl_name.size() && !std::isdigit(tbl_name[0]) && changes;
 		if (!changes && tbl.idbltin > -1) {
 			//lexeme bltintype = dict.get_bltin(tbl.idbltin);
 			set<term>& ts = mhits[tab];
@@ -2791,8 +2794,15 @@ char tables::fwd() noexcept {
 }
 
 level tables::get_front() const {
-	level r(tbls.size());
-	for (ntable n = 0; n != (ntable)tbls.size(); ++n) r[n] = tbls.at(n).t;
+	level r;
+	for (ntable n = 0; n != (ntable)tbls.size(); ++n) {
+		string_t tbl_name = lexeme2str(dict.get_rel(get<0>(tbls.at(n).s)));
+		// Temporary hack to make sure that tmprels are not considered to be
+		// part of the fixed point
+		if(tbl_name.size() && !std::isdigit(tbl_name[0])) {
+			r.push_back(tbls.at(n).t);
+		}
+	}
 	return r;
 }
 

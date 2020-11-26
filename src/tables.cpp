@@ -2026,11 +2026,11 @@ bool graphgrammar::iscyclic( const elem &s) {
 }
 const std::map<lexeme,string,lexcmp>& graphgrammar::get_builtin_reg() {
 	static const map<lexeme,string,lexcmp> b =
-			{ {dict.get_lexeme("alpha"), "[a-zA-Z]"}, 
-			{dict.get_lexeme("alnum"), "[a-zA-Z0-9]"},
-			{dict.get_lexeme("digit"), "[0-9]" },
-			{dict.get_lexeme("space"),  "[^\\S\\r\\n]" },  
-			{dict.get_lexeme("printable") , "[\\x20-\\x7F]"}
+		  { {dict.get_lexeme("alpha"), "[a-zA-Z]"}, 
+		  {dict.get_lexeme("alnum"), "[a-zA-Z0-9]"},
+		  {dict.get_lexeme("digit"), "[0-9]" },
+		  {dict.get_lexeme("space"),  "[\\s]" },  
+		  {dict.get_lexeme("printable") , "[\\x20-\\x7F]"}
 		};
 		return b;
 }

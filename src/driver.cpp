@@ -1526,6 +1526,20 @@ std::tuple<elem, int_t> get_relation_info(const raw_term &rt) {
 	return std::make_tuple(rt.e[0], rt.e.size() - 3);
 }
 
+/* Convenience function to condition the given rule with the given
+ * condition term. */
+
+raw_rule &condition_rule(raw_rule &rr, const raw_term &cond) {
+	if(rr.b.empty()) {
+		rr.b.push_back({cond});
+	} else {
+		for(std::vector<raw_term> &bodie : rr.b) {
+			bodie.push_back(cond);
+		}
+	}
+	return rr;
+}
+
 /* Applies the given transformation to the given program in such a way
  * that it completes in a single step. Does this by separating the given
  * program into an execute and a writeback stage which serves to stop
@@ -1623,21 +1637,54 @@ void driver::step_transform(raw_prog &rp,
 	}
 	// If there are interdependencies between rules
 	if(sorted.size() > 1) {
-		// Push nested programs containing the internal rules onto the
-		// program in execution order
+		rp.r.clear();
+		// At each stage of TML execution, exactly one of the nullary facts
+		// in this vector are asserted
+		std::vector<elem> clock_states = { elem::fresh_sym(d) };
+		// Push the internal rules onto the program using conditioning to
+		// control execution order
 		for(const std::set<const relation *> v : sorted) {
-			raw_prog np;
+			// Make a new clock state for the current stage
+			const elem clock_state = elem::fresh_sym(d);
+			// If the previous state is asserted, then de-assert it and assert
+			// this state
+			rp.r.push_back(raw_rule({ raw_term(clock_state, std::vector<elem>{}),
+				raw_term(clock_states.back(), std::vector<elem>{}).negate() },
+				{ raw_term(clock_states.back(), std::vector<elem>{}) }));
+			clock_states.push_back(clock_state);
+			
 			for(const relation *w : v) {
-				for(const raw_rule &rr : *w) {
-					np.r.push_back(rr);
+				for(raw_rule rr : *w) {
+					// Condition everything in the current stage with the same
+					// clock state
+					rp.r.push_back(condition_rule(rr,
+						raw_term(clock_state, std::vector<elem>{})));
 				}
 			}
-			rp.nps.push_back(np);
+		}
+		// Start the clock ticking by asserting a state if no other state is
+		// asserted
+		raw_rule init_clock(raw_term(clock_states[0], std::vector<elem>{}));
+		init_clock.b.push_back({});
+		for(const elem &e : clock_states) {
+			init_clock.b[0].push_back(raw_term(e, std::vector<elem>{}).negate());
+		}
+		rp.r.push_back(init_clock);
+		if(clock_states.size() > 1) {
+			// If the previous state is asserted, then de-assert it and assert
+			// this state
+			rp.r.push_back(raw_rule({ raw_term(clock_states[0], std::vector<elem>{}),
+				raw_term(clock_states.back(), std::vector<elem>{}).negate() },
+				{ raw_term(clock_states.back(), std::vector<elem>{}) }));
 		}
 		// Add the external program which serves to writeback the outputs of
 		// the internal rules.
-		rp.nps.push_back(ext_prog);
-		rp.r.clear();
+		for(raw_rule &rr : ext_prog.r) {
+			// Condition everything in the writeback stage with the same
+			// clock state
+			rp.r.push_back(condition_rule(rr,
+				raw_term(clock_states[0], std::vector<elem>{})));
+		}
 	} else {
 		// If there are no interdepencies then we can just restore the
 		// original rule names to the transformed program

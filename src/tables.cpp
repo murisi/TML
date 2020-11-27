@@ -2743,10 +2743,7 @@ char tables::fwd() noexcept {
 	for (ntable tab = 0; (size_t)tab != tbls.size(); ++tab) {
 		table& tbl = tbls[tab];
 		bool changes = tbl.commit(DBG(bits));
-		string_t tbl_name = lexeme2str(dict.get_rel(get<0>(tbl.s)));
-		// Temporary hack to make sure that tmprels are not considered to be
-		// part of the fixed point
-		b |= tbl_name.size() && !std::isdigit(tbl_name[0]) && changes;
+		b |= changes;
 		if (!changes && tbl.idbltin > -1) {
 			//lexeme bltintype = dict.get_bltin(tbl.idbltin);
 			set<term>& ts = mhits[tab];
@@ -2796,12 +2793,7 @@ char tables::fwd() noexcept {
 level tables::get_front() const {
 	level r;
 	for (ntable n = 0; n != (ntable)tbls.size(); ++n) {
-		string_t tbl_name = lexeme2str(dict.get_rel(get<0>(tbls.at(n).s)));
-		// Temporary hack to make sure that tmprels are not considered to be
-		// part of the fixed point
-		if(tbl_name.size() && !std::isdigit(tbl_name[0])) {
-			r.push_back(tbls.at(n).t);
-		}
+		r.push_back(tbls.at(n).t);
 	}
 	return r;
 }
@@ -2835,7 +2827,7 @@ bool tables::pfp(size_t nsteps, size_t break_on_step) {
 			(nsteps && nstep == nsteps)) return false; // no FP yet
 		l = get_front();
 		if (!datalog && !fronts.emplace(l).second)
-			return infloop_detected();
+			return true || infloop_detected();
 		if (bproof) levels.push_back(move(l));
 	}
 	DBGFAIL;

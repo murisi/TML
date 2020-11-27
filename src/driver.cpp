@@ -710,7 +710,7 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 			std::set<elem> symbol_set;
 			std::set<raw_term> canonical, canonical_negative;
 			// Separate the positive and negative subgoals. Note the symbols
-			// supplied to the positive subgoals.
+			// supplied to the subgoals.
 			for(raw_term &rt : subbed.b[0]) {
 				if(rt.neg) {
 					rt.neg = false;
@@ -718,9 +718,15 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 					rt.neg = true;
 				} else {
 					canonical.insert(rt);
-					for(size_t i = 2; i < rt.e.size() - 1; i++) {
-						symbol_set.insert(rt.e[i]);
-					}
+				}
+				for(size_t i = 2; i < rt.e.size() - 1; i++) {
+					symbol_set.insert(rt.e[i]);
+				}
+			}
+			// Note the symbols supplied to the head.
+			for(raw_term &rt : subbed.h) {
+				for(size_t i = 2; i < rt.e.size() - 1; i++) {
+					symbol_set.insert(rt.e[i]);
 				}
 			}
 			// Does canonical make all the subgoals of subbed true?

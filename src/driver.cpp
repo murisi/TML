@@ -518,7 +518,7 @@ void driver::factor_rules(raw_prog &rp) {
 			// Note whether we have created a temporary relation. Important
 			// because we make the current rule depend on the temporary
 			// relation in this case.
-			bool tmp_rel = !(exported_vars == needed_vars && count_related_rules(rr2, rp) == 1);
+			bool tmp_rel = !(exported_vars == needed_vars && count_related_rules(rr2, rp) == 1 || agg.size() == 1);
 			
 			if(tmp_rel) {
 				// Variables are not exactly what is required. So make relation
@@ -1688,6 +1688,11 @@ void driver::step_transform(raw_prog &rp,
 		for(raw_rule &rr : ext_prog.r) {
 			// Condition everything in the writeback stage with the same
 			// clock state
+			if(!rr.h[0].neg) {
+				raw_rule keep_alive(rr.h[0], rr.h[0]);
+				rp.r.push_back(condition_rule(keep_alive,
+					raw_term(clock_states[0], std::vector<elem>{}).negate()));
+			}
 			rp.r.push_back(condition_rule(rr,
 				raw_term(clock_states[0], std::vector<elem>{})));
 		}

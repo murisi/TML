@@ -1796,10 +1796,11 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 			// Make the proposition that is being quantified
 			std::set<elem> nfv = fv;
 			const elem qvar = *(t->l->el);
-			nfv.erase(qvar);
-			raw_term nrt = to_pure_tml(t->r, rp, fv);
+			nfv.insert(qvar);
+			raw_term nrt = to_pure_tml(t->r, rp, nfv);
 			// Make the rule corresponding to this existential formula
-			raw_rule nr(raw_term(part_id, fv), nrt);
+			nfv.erase(qvar);
+			raw_rule nr(raw_term(part_id, nfv), nrt);
 			rp.push_back(nr);
 			break;
 		} case elem::UNIQUE: {

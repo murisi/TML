@@ -238,11 +238,18 @@ bool driver::is_rule_conjunctive_with_negation(const raw_rule &rr) {
 	if(rr.h.size() != 1 || rr.b.size() != 1) return false;
 	// Ensure that head is positive
 	if(rr.h[0].neg) return false;
-	// Ensure that each body term is positive and is a relation
+	// Ensure that each body term is a relation
 	for(const raw_term &rt : rr.b[0]) {
 		if(rt.extype != raw_term::REL) return false;
 	}
 	return true;
+}
+
+/* Convenience function for getting relation name and arity from
+ * term. */
+
+std::tuple<elem, int_t> get_relation_info(const raw_term &rt) {
+	return std::make_tuple(rt.e[0], rt.e.size() - 3);
 }
 
 /* If rr1 and rr2 are both conjunctive queries, check if there is a
@@ -253,7 +260,8 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	
-	if(is_rule_conjunctive(rr1) && is_rule_conjunctive_with_negation(rr2)) {
+	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2) &&
+			get_relation_info(rr1.h[0]) == get_relation_info(rr2.h[0])) {
 		std::vector<raw_term> heads1 = rr1.h, bodie1 = rr1.b[0],
 			heads2 = rr2.h, bodie2 = rr2.b[0];
 		
@@ -688,7 +696,8 @@ void driver::collect_positive_vars(const raw_rule &rr,
 bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 	// Check that rules have correct format
 	if(!(is_rule_conjunctive_with_negation(rr1) &&
-		is_rule_conjunctive_with_negation(rr2))) return false;
+		is_rule_conjunctive_with_negation(rr2) &&
+		get_relation_info(rr1.h[0]) == get_relation_info(rr2.h[0]))) return false;
 	
 	std::set<elem> vars;
 	collect_positive_vars(rr1, vars);
@@ -818,7 +827,7 @@ void driver::subsume_queries(raw_prog &rp) {
 		
 		for(std::vector<raw_rule>::iterator nrr = reduced_rules.begin();
 				nrr != reduced_rules.end();) {
-			if(cqc(rr, *nrr)) {
+			if(cqnc(rr, *nrr)) {
 				// If the current rule is contained by a rule in reduced rules,
 				// then move onto the next rule in the outer loop
 				subsumed = true;
@@ -1525,13 +1534,6 @@ bool rule_relation_precedes(const raw_rule &rr1, const raw_rule &rr2) {
 	}
 }
 
-/* Convenience function for getting relation name and arity from
- * term. */
-
-std::tuple<elem, int_t> get_relation_info(const raw_term &rt) {
-	return std::make_tuple(rt.e[0], rt.e.size() - 3);
-}
-
 /* Convenience function for creating most general rule head for the
  * given relation. */
 
@@ -1540,7 +1542,7 @@ raw_term driver::relation_to_term(const std::tuple<elem, int_t> &ri) {
 	dict_t &d = tbl->get_dict();
 	
 	std::vector<elem> els = { std::get<0>(ri), elem_openp };
-	for(size_t i = 0; i < std::get<1>(ri); i++) {
+	for(int_t i = 0; i < std::get<1>(ri); i++) {
 		els.push_back(elem::fresh_var(d));
 	}
 	els.push_back(elem_closep);
@@ -2289,10 +2291,9 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 //	if (opts.enabled("sdt"))
 //		for (raw_prog& p : rp.p)
 //			p = transform_sdt(move(p));
-	
-	for (auto& np : rp.nps) if (!transform(np, pd.strs)) return false;
-	
-	recursive_transform(rp, [&](raw_prog &rp) {
+	static std::set<raw_prog *> transformed_progs;
+	if(transformed_progs.find(&rp) == transformed_progs.end()) {
+		transformed_progs.insert(&rp);
 		simplify_formulas(rp);
 		std::cout << "Simplified Program:" << std::endl << std::endl << rp << std::endl;
 		transform_quotes(rp);
@@ -2310,7 +2311,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 			std::cout << "Factorized Program:" << std::endl << std::endl << rp << std::endl;
 		});
 		std::cout << "Step Transformed Program:" << std::endl << std::endl << rp << std::endl;
-	});
+	}
 	/*std::set<elem> universe;
 	std::set<raw_term> database;
 	naive_pfp(p, universe, database);
@@ -2327,6 +2328,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 //	if (trel[0]) transform_proofs(rp.p[n], trel);
 	//o::out()<<rp.p[n]<<endl;
 //	if (pd.bwd) rp.p.push_back(transform_bwd(rp.p[n]));
+	for (auto& np : rp.nps) if (!transform(np, pd.strs)) return false;
 	return true;
 }
 

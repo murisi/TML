@@ -370,7 +370,7 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 					// If current variable is a body var
 					if(rr2_body_vars_set.find(hd_src.e[i]) != rr2_body_vars_set.end()) {
 						// Then trace the original var through the unfreeze map
-						var_map[hd_src.e[i]] = unfreeze_map[res.e[i]];
+						var_map[hd_src.e[i]] = at_default(unfreeze_map, res.e[i], res.e[i]);
 					} else {
 						// Otherwise trace the original term through the term map
 						target_terms.insert(term_map[res.e[i]]);
@@ -1532,6 +1532,21 @@ std::tuple<elem, int_t> get_relation_info(const raw_term &rt) {
 	return std::make_tuple(rt.e[0], rt.e.size() - 3);
 }
 
+/* Convenience function for creating most general rule head for the
+ * given relation. */
+
+raw_term driver::relation_to_term(const std::tuple<elem, int_t> &ri) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	
+	std::vector<elem> els = { std::get<0>(ri), elem_openp };
+	for(size_t i = 0; i < std::get<1>(ri); i++) {
+		els.push_back(elem::fresh_var(d));
+	}
+	els.push_back(elem_closep);
+	return raw_term(els);
+}
+
 /* Convenience function to condition the given rule with the given
  * condition term. */
 
@@ -1593,6 +1608,10 @@ void driver::step_transform(raw_prog &rp,
 	std::map<std::tuple<elem, int_t>, relation> rels;
 	for(const raw_rule &rr : rp.r) {
 		rels[get_relation_info(rr.h[0])].insert(rr);
+	}
+	std::map<const relation *, std::tuple<elem, int_t>> rrels;
+	for(const auto &[ri, r] : rels) {
+		rrels[&r] = ri;
 	}
 	// Initialize the dependency lists
 	std::map<const relation *, std::set<const relation *>> deps, rdeps;
@@ -1660,6 +1679,9 @@ void driver::step_transform(raw_prog &rp,
 			clock_states.push_back(clock_state);
 			
 			for(const relation *w : v) {
+				const raw_term general_head = relation_to_term(rrels[w]);
+				rp.r.push_back(raw_rule(general_head.negate(),
+					{ general_head, raw_term(clock_states[0], std::vector<elem>{}) }));
 				for(raw_rule rr : *w) {
 					// Condition everything in the current stage with the same
 					// clock state
@@ -1688,11 +1710,6 @@ void driver::step_transform(raw_prog &rp,
 		for(raw_rule &rr : ext_prog.r) {
 			// Condition everything in the writeback stage with the same
 			// clock state
-			if(!rr.h[0].neg) {
-				raw_rule keep_alive(rr.h[0], rr.h[0]);
-				rp.r.push_back(condition_rule(keep_alive,
-					raw_term(clock_states[0], std::vector<elem>{}).negate()));
-			}
 			rp.r.push_back(condition_rule(rr,
 				raw_term(clock_states[0], std::vector<elem>{})));
 		}

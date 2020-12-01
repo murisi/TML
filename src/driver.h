@@ -168,6 +168,7 @@ class driver {
 	void collect_free_vars(const sprawformtree &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	std::set<elem> collect_free_vars(const sprawformtree &t);
+	raw_term relation_to_term(const std::tuple<elem, int_t> &ri);
 	void populate_universe(const raw_term &rt, std::set<elem> &universe);
 	void populate_universe(const sprawformtree &rft,
 		std::set<elem> &universe);

@@ -357,9 +357,10 @@ struct raw_term {
 	}
 	raw_term(const std::vector<elem> &f) : e(f) { calc_arity(nullptr); }
 	raw_term(rtextype et, const std::vector<elem> &f) : extype(et), e(f) { calc_arity(nullptr); }
-	raw_term &negate() {
-		neg = !neg;
-		return *this;
+	raw_term negate() const {
+		raw_term nrt = *this;
+		nrt.neg = !nrt.neg;
+		return nrt;
 	}
 	bool parse(input* in, const raw_prog& prog, bool is_form = false,
 		rtextype pref_type = raw_term::REL);

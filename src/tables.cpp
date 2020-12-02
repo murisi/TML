@@ -571,10 +571,14 @@ void form::printnode(int lv, const tables* tb) {
 template <typename T>
 void tables::out(basic_ostream<T>& os) const {
 	strs_t::const_iterator it;
-	for (ntable tab = 0; (size_t)tab != tbls.size(); ++tab)
+	for (ntable tab = 0; (size_t)tab != tbls.size(); ++tab) {
 //		if ((it = strs.find(dict.get_rel(tab))) == strs.end())
-			out(os, tbls[tab].t, tab);
+			const lexeme tbl_name = dict.get_rel(get<0>(tbls[tab].s));
+			if(!dict.is_temp_sym(tbl_name)) {
+				out(os, tbls[tab].t, tab);
+			}
 //		else os << it->first << " = \"" << it->second << '"' << endl;
+	}
 }
 
 template void tables::out<char>(ostream& os) const;

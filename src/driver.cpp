@@ -1376,17 +1376,12 @@ void driver::transform_evals(raw_prog &rp) {
 				iparams.push_back(elem::fresh_var(d));
 				qparams.push_back(elem::fresh_var(d));
 			}
-			// Separate the internal rules used to execute parts of a quoted
-			// rule from the external rules put in the out relation. This way
-			// the construction of the next stage does not interfere with
-			// the execution of the current stage.
-			raw_prog ext_prog, int_prog;
 			
 			// Make the interpreters that insert terms
-			generate_rule_eval(ext_prog, false, out_rel, quote_sym, aux_rel,
+			generate_rule_eval(rp, false, out_rel, quote_sym, aux_rel,
 				iparams, qparams, iargs, qargs);
 			// Make the interpreters that delete terms
-			generate_rule_eval(ext_prog, true, out_rel, quote_sym, aux_rel,
+			generate_rule_eval(rp, true, out_rel, quote_sym, aux_rel,
 				iparams, qparams, iargs, qargs);
 			
 			// Interpret terms of each arity
@@ -1429,7 +1424,7 @@ void driver::transform_evals(raw_prog &rp) {
 					}
 				}
 				raw_rule rr(head, bodie);
-				int_prog.r.push_back(rr);
+				rp.r.push_back(rr);
 			}
 			
 			// Interpret equals
@@ -1452,7 +1447,7 @@ void driver::transform_evals(raw_prog &rp) {
 						std::make_shared<raw_form_tree>(elem::AND,
 							fix_symbols(quote_sym, qparams[0], iparams[0]),
 							fix_symbols(quote_sym, qparams[1], iparams[1]))));
-				int_prog.r.push_back(rr);
+				rp.r.push_back(rr);
 			}
 			
 			// Interpret not
@@ -1476,36 +1471,31 @@ void driver::transform_evals(raw_prog &rp) {
 						std::make_shared<raw_form_tree>(elem::NONE, quote),
 						std::make_shared<raw_form_tree>(elem::NOT,
 							std::make_shared<raw_form_tree>(elem::NONE, neg_e))));
-				int_prog.r.push_back(rr);
+				rp.r.push_back(rr);
 			}
 			
 			// Interpret conjunctions
-			generate_binary_eval(int_prog, QAND, elem::AND, quote_sym, und_sym,
+			generate_binary_eval(rp, QAND, elem::AND, quote_sym, und_sym,
 				aux_rel, iparams, qparams);
 			// Interpret disjunctions
-			generate_binary_eval(int_prog, QALT, elem::ALT, quote_sym, und_sym,
+			generate_binary_eval(rp, QALT, elem::ALT, quote_sym, und_sym,
 				aux_rel, iparams, qparams);
 			// Interpret implies
-			generate_binary_eval(int_prog, QIMPLIES, elem::IMPLIES, quote_sym, und_sym,
+			generate_binary_eval(rp, QIMPLIES, elem::IMPLIES, quote_sym, und_sym,
 				aux_rel, iparams, qparams);
 			// Interpret coimplies
-			generate_binary_eval(int_prog, QCOIMPLIES, elem::COIMPLIES, quote_sym, und_sym,
+			generate_binary_eval(rp, QCOIMPLIES, elem::COIMPLIES, quote_sym, und_sym,
 				aux_rel, iparams, qparams);
 			
 			// Interpret forall
-			generate_quantified_eval(int_prog, QFORALL, elem::FORALL, quote_sym,
+			generate_quantified_eval(rp, QFORALL, elem::FORALL, quote_sym,
 				aux_rel, iparams, qparams);
 			// Interpret exists
-			generate_quantified_eval(int_prog, QEXISTS, elem::EXISTS, quote_sym,
+			generate_quantified_eval(rp, QEXISTS, elem::EXISTS, quote_sym,
 				aux_rel, iparams, qparams);
 			// Interpret unique
-			generate_quantified_eval(int_prog, QUNIQUE, elem::UNIQUE, quote_sym,
+			generate_quantified_eval(rp, QUNIQUE, elem::UNIQUE, quote_sym,
 				aux_rel, iparams, qparams);
-			
-			// Now add the internal and external programs to the output
-			// program.
-			rp.nps.push_back(int_prog);
-			rp.nps.push_back(ext_prog);
 		}
 	}
 }
@@ -1729,9 +1719,11 @@ void driver::step_transform(raw_prog &rp,
 		}
 		// Add the facts section from the original program so that facts are
 		// asserted during the writeback stage
-		rp.r.push_back(condition_rule(
-			raw_rule(std::vector<raw_term>(fact_prog.begin(), fact_prog.end()), {}),
-			raw_term(clock_states[0], std::vector<elem>{})));
+		if(fact_prog.size()) {
+			rp.r.push_back(condition_rule(
+				raw_rule(std::vector<raw_term>(fact_prog.begin(), fact_prog.end()), {}),
+				raw_term(clock_states[0], std::vector<elem>{})));
+		}
 	} else {
 		// If there are no interdepencies then we can just restore the
 		// original rule names to the transformed program
@@ -1746,8 +1738,10 @@ void driver::step_transform(raw_prog &rp,
 			}
 		}
 		// Add the facts from the original program
-		rp.r.push_back(raw_rule(std::vector<raw_term>(fact_prog.begin(),
-			fact_prog.end()), {}));
+		if(fact_prog.size()) {
+			rp.r.push_back(raw_rule(std::vector<raw_term>(fact_prog.begin(),
+				fact_prog.end()), {}));
+		}
 	}
 }
 

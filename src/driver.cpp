@@ -526,7 +526,9 @@ void driver::factor_rules(raw_prog &rp) {
 			// Note whether we have created a temporary relation. Important
 			// because we make the current rule depend on the temporary
 			// relation in this case.
-			bool tmp_rel = !(exported_vars == needed_vars && count_related_rules(rr2, rp) == 1 || agg.size() == 1);
+			bool tmp_rel =
+				!((exported_vars == needed_vars && count_related_rules(rr2, rp) == 1) ||
+					agg.size() == 1);
 			
 			if(tmp_rel) {
 				// Variables are not exactly what is required. So make relation
@@ -1808,9 +1810,7 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 			}
 			break;
 		} case elem::NOT: {
-			raw_term nt = to_pure_tml(t->l, rp, fv);
-			nt.neg = true;
-			return nt;
+			return to_pure_tml(t->l, rp, fv).negate();
 		} case elem::EXISTS: {
 			// Make the proposition that is being quantified
 			std::set<elem> nfv = fv;

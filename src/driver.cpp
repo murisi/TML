@@ -1597,7 +1597,7 @@ void driver::step_transform(raw_prog &rp,
 				if(it != freeze_map.end()) {
 					rt.e[0] = it->second;
 				} else {
-					elem frozen_elem = elem::fresh_sym(d);
+					elem frozen_elem = elem::fresh_temp_sym(d);
 					// Store the mapping so that the derived portion of each
 					// relation is stored in exactly one place
 					unfreeze_map[frozen_elem] = std::make_tuple(rt.e[0], rt.neg);
@@ -1679,12 +1679,12 @@ void driver::step_transform(raw_prog &rp,
 		rp.r.clear();
 		// At each stage of TML execution, exactly one of the nullary facts
 		// in this vector are asserted
-		std::vector<elem> clock_states = { elem::fresh_sym(d) };
+		std::vector<elem> clock_states = { elem::fresh_temp_sym(d) };
 		// Push the internal rules onto the program using conditioning to
 		// control execution order
 		for(const std::set<const relation *> v : sorted) {
 			// Make a new clock state for the current stage
-			const elem clock_state = elem::fresh_sym(d);
+			const elem clock_state = elem::fresh_temp_sym(d);
 			// If the previous state is asserted, then de-assert it and assert
 			// this state
 			rp.r.push_back(raw_rule({ raw_term(clock_state, std::vector<elem>{}),
@@ -1781,7 +1781,7 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 		std::vector<raw_rule> &rp, const std::set<elem> &fv) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
-	const elem part_id = elem::fresh_sym(d);
+	const elem part_id = elem::fresh_temp_sym(d);
 	
 	switch(t->type) {
 		case elem::IMPLIES:

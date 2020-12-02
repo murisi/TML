@@ -574,6 +574,7 @@ void tables::out(basic_ostream<T>& os) const {
 	for (ntable tab = 0; (size_t)tab != tbls.size(); ++tab) {
 //		if ((it = strs.find(dict.get_rel(tab))) == strs.end())
 			const lexeme tbl_name = dict.get_rel(get<0>(tbls[tab].s));
+			// Print out only the non-temporary relations
 			if(!dict.is_temp_sym(tbl_name)) {
 				out(os, tbls[tab].t, tab);
 			}
@@ -2794,12 +2795,27 @@ char tables::fwd() noexcept {
 	return b;*/
 }
 
-level tables::get_front() const {
-	level r;
+/* Add a complete and partial level to the given vectors. A complete
+ * level contains all the tables whereas a partial level excludes all
+ * the tmprels. Return true if the current complete level has already
+ * been encountered. */
+
+bool tables::add_level(std::vector<level> &clevels,
+		std::vector<level> &plevels) const {
+	level r, u;
 	for (ntable n = 0; n != (ntable)tbls.size(); ++n) {
+		const lexeme tbl_name = dict.get_rel(get<0>(tbls[n].s));
+		// Keep only the non-temporary relations in u
+		if(!dict.is_temp_sym(tbl_name)) {
+			u.push_back(tbls.at(n).t);
+		}
 		r.push_back(tbls.at(n).t);
 	}
-	return r;
+	// Check if we have visited this complete front before
+	bool visited = std::find(clevels.begin(), clevels.end(), r) != clevels.end();
+	clevels.push_back(r);
+	plevels.push_back(u);
+	return visited;
 }
 
 bool tables::contradiction_detected() {
@@ -2819,8 +2835,7 @@ bool tables::infloop_detected() {
 
 bool tables::pfp(size_t nsteps, size_t break_on_step) {
 	error = false;
-	if (bproof) levels.emplace_back(get_front());
-	level l;
+	add_level(levels, plevels);
 	for (;;) {
 		if (print_steps || optimize)
 			o::inf() << "# step: " << nstep << endl;
@@ -2829,10 +2844,19 @@ bool tables::pfp(size_t nsteps, size_t break_on_step) {
 		if (unsat) return contradiction_detected();
 		if ((break_on_step && nstep == break_on_step) ||
 			(nsteps && nstep == nsteps)) return false; // no FP yet
-		l = get_front();
-		if (!datalog && !fronts.emplace(l).second)
-			return true || infloop_detected();
-		if (bproof) levels.push_back(move(l));
+		if (!datalog && add_level(levels, plevels)) {
+			const level last_level = levels.back(),
+				last_plevel = plevels.back();
+			// Check if we have fixed-point whilst ignoring tmprels by going
+			// back through the levels till the fixpoint and making sure that
+			// the partial levels are constant.
+			for(int_t i = levels.size() - 2; levels[i] != last_level; i--) {
+				if(plevels[i] != last_plevel) {
+					return infloop_detected();
+				}
+			}
+			return true;
+		}
 	}
 	DBGFAIL;
 }

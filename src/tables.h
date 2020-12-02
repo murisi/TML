@@ -218,7 +218,7 @@ private:
 	std::map<sig, ntable> smap;
 	std::vector<rule> rules;
 	std::set<level> fronts;
-	std::vector<level> levels;
+	std::vector<level> levels, plevels;
 	std::map<ntable, std::set<ntable>> deps;
 
 	void get_sym(int_t s, size_t arg, size_t args, spbdd_handle& r) const;
@@ -348,7 +348,8 @@ private:
 	bool contradiction_detected();
 	bool infloop_detected();
 	char fwd() noexcept;
-	level get_front() const;
+	bool add_level(std::vector<level> &afronts,
+		std::vector<level> &vfronts) const;
 	std::vector<term> interpolate(std::vector<term> x, std::set<int_t> v);
 	void transform_bin(flat_prog& p);
 	int_t get_factor(raw_term &rt, size_t &n, std::map<size_t, term> &ref, 

@@ -1839,7 +1839,7 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 			nfv.erase(qvar);
 			raw_rule nr(raw_term(part_id, nfv), nrt);
 			rp.push_back(nr);
-			break;
+			return raw_term(part_id, nfv);
 		} case elem::UNIQUE: {
 			// The uniqueness quantifier is logically equivalent to the
 			// following

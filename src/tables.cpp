@@ -2870,7 +2870,7 @@ bool tables::run_prog(const std::set<raw_term> &edb, raw_prog rp,
 			if(it != freeze_map.end()) {
 				rt.e[0] = it->second;
 			} else {
-				elem frozen_elem = elem::fresh_sym(dict);
+				elem frozen_elem = elem::fresh_temp_sym(dict);
 				// Store the mapping so that the derived portion of each
 				// relation is stored in exactly one place
 				unfreeze_map[frozen_elem] = rt.e[0];

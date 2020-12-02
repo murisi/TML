@@ -341,7 +341,7 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 		// its body + ids of the frozen terms it binds to
 		std::set<elem> rr2_body_vars_set;
 		collect_vars(rr2.b[0].begin(), rr2.b[0].end(), rr2_body_vars_set);
-		std::vector<elem> rr2_new_head = { elem::fresh_sym(d), elem_openp };
+		std::vector<elem> rr2_new_head = { elem::fresh_temp_sym(d), elem_openp };
 		rr2_new_head.insert(rr2_new_head.end(), rr2_body_vars_set.begin(),
 			rr2_body_vars_set.end());
 		// Prepend term id variables to rr2's body terms and export the term
@@ -533,7 +533,7 @@ void driver::factor_rules(raw_prog &rp) {
 			if(tmp_rel) {
 				// Variables are not exactly what is required. So make relation
 				// exporting required variables and note argument order.
-				target_rel = elem::fresh_sym(d);
+				target_rel = elem::fresh_temp_sym(d);
 				target_args.assign(needed_vars.begin(), needed_vars.end());
 				pending_rules.push_back(raw_rule(raw_term(target_rel, target_args), rr2.b[0]));
 			} else {
@@ -1363,7 +1363,7 @@ void driver::transform_evals(raw_prog &rp) {
 			// This symbol is used when the variable allocation is finished
 			elem und_sym = elem::fresh_sym(d);
 			// This relation will house most of the interpreter
-			elem aux_rel = elem::fresh_sym(d);
+			elem aux_rel = elem::fresh_temp_sym(d);
 			
 			// Allocate rule name, rule id, head id, body id
 			elem rule_name = elem::fresh_var(d), elt_id = elem::fresh_var(d),

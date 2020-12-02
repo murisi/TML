@@ -1554,7 +1554,7 @@ raw_term driver::relation_to_term(const std::tuple<elem, int_t> &ri) {
 /* Convenience function to condition the given rule with the given
  * condition term. */
 
-raw_rule &condition_rule(raw_rule &rr, const raw_term &cond) {
+raw_rule condition_rule(raw_rule rr, const raw_term &cond) {
 	if(rr.b.empty()) {
 		rr.b.push_back({cond});
 	} else {
@@ -1581,29 +1581,39 @@ void driver::step_transform(raw_prog &rp,
 	// Separate the internal rules used to execute the parts of the
 	// transformation from the external rules used to expose the results
 	// of computation.
-	raw_prog ext_prog;
+	std::set<raw_term> fact_prog;
+	std::vector<raw_rule> ext_prog, int_prog;
 	// Create a duplicate of each rule in the given program under a
 	// generated alias.
-	for(raw_rule &rr : rp.r) {
-		for(raw_term &rt : rr.h) {
-			raw_term rt2 = rt;
-			auto it = freeze_map.find(std::make_tuple(rt.e[0], rt.neg));
-			if(it != freeze_map.end()) {
-				rt.e[0] = it->second;
-			} else {
-				elem frozen_elem = elem::fresh_sym(d);
-				// Store the mapping so that the derived portion of each
-				// relation is stored in exactly one place
-				unfreeze_map[frozen_elem] = std::make_tuple(rt.e[0], rt.neg);
-				rt.e[0] = freeze_map[std::make_tuple(rt.e[0], rt.neg)] = frozen_elem;
+	for(raw_rule rr : rp.r) {
+		// If the current rule is a fact, store it separately so that we
+		// avoid creating unnecessary tmprels
+		if(rr.is_b() && rr.b.empty()) {
+			fact_prog.insert(rr.h.begin(), rr.h.end());
+		} else {
+			for(raw_term &rt : rr.h) {
+				raw_term rt2 = rt;
+				auto it = freeze_map.find(std::make_tuple(rt.e[0], rt.neg));
+				if(it != freeze_map.end()) {
+					rt.e[0] = it->second;
+				} else {
+					elem frozen_elem = elem::fresh_sym(d);
+					// Store the mapping so that the derived portion of each
+					// relation is stored in exactly one place
+					unfreeze_map[frozen_elem] = std::make_tuple(rt.e[0], rt.neg);
+					rt.e[0] = freeze_map[std::make_tuple(rt.e[0], rt.neg)] = frozen_elem;
+				}
+				// The internal rule should be positive since the external can be
+				// negative.
+				rt.neg = false;
+				// Update the external interface
+				ext_prog.push_back(raw_rule(rt2, rt));
 			}
-			// The internal rule should be positive since the external can be
-			// negative.
-			rt.neg = false;
-			// Update the external interface
-			ext_prog.r.push_back(raw_rule(rt2, rt));
+			int_prog.push_back(rr);
 		}
 	}
+	// Apply the modifications from the above loop
+	rp.r = int_prog;
 	// Execute the transformation on the renamed rules.
 	f(rp);
 	
@@ -1711,12 +1721,17 @@ void driver::step_transform(raw_prog &rp,
 		}
 		// Add the external program which serves to writeback the outputs of
 		// the internal rules.
-		for(raw_rule &rr : ext_prog.r) {
+		for(raw_rule &rr : ext_prog) {
 			// Condition everything in the writeback stage with the same
 			// clock state
 			rp.r.push_back(condition_rule(rr,
 				raw_term(clock_states[0], std::vector<elem>{})));
 		}
+		// Add the facts section from the original program so that facts are
+		// asserted during the writeback stage
+		rp.r.push_back(condition_rule(
+			raw_rule(std::vector<raw_term>(fact_prog.begin(), fact_prog.end()), {}),
+			raw_term(clock_states[0], std::vector<elem>{})));
 	} else {
 		// If there are no interdepencies then we can just restore the
 		// original rule names to the transformed program
@@ -1730,6 +1745,9 @@ void driver::step_transform(raw_prog &rp,
 				}
 			}
 		}
+		// Add the facts from the original program
+		rp.r.push_back(raw_rule(std::vector<raw_term>(fact_prog.begin(),
+			fact_prog.end()), {}));
 	}
 }
 

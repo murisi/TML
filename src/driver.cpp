@@ -258,14 +258,17 @@ std::tuple<elem, int_t> get_relation_info(const raw_term &rt) {
 
 bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 	// Get dictionary for generating fresh symbols
-	dict_t &d = tbl->get_dict();
+	dict_t &old_dict = tbl->get_dict();
+	dict_t d;
+	d.op = old_dict.op;
+	d.cl = old_dict.cl;
 	
 	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2) &&
 			get_relation_info(rr1.h[0]) == get_relation_info(rr2.h[0])) {
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
 		std::map<elem, elem> freeze_map;
-		raw_rule frozen_rr1 = freeze_rule(rr1, freeze_map);
+		raw_rule frozen_rr1 = freeze_rule(rr1, freeze_map, d);
 		
 		// Build up the queries necessary to check homomorphism.
 		std::set<raw_term> edb(frozen_rr1.b[0].begin(), frozen_rr1.b[0].end());
@@ -299,14 +302,17 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 		std::set<terms_hom> &homs) {
 	// Get dictionary for generating fresh symbols
-	dict_t &d = tbl->get_dict();
+	dict_t &old_dict = tbl->get_dict();
+	dict_t d;
+	d.op = old_dict.op;
+	d.cl = old_dict.cl;
 	
 	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2)) {
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
 		// Map from variables occuring in rr1 to frozen symbols
 		std::map<elem, elem> freeze_map;
-		raw_rule frozen_rr1 = freeze_rule(rr1, freeze_map);
+		raw_rule frozen_rr1 = freeze_rule(rr1, freeze_map, d);
 		// Map from frozen symbols to variables occuring in rr1
 		std::map<elem, elem> unfreeze_map;
 		for(const auto &[k, v] : freeze_map) {
@@ -695,14 +701,18 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 		is_rule_conjunctive_with_negation(rr2) &&
 		get_relation_info(rr1.h[0]) == get_relation_info(rr2.h[0]))) return false;
 	
+	// Get dictionary for generating fresh symbols
+	dict_t &old_dict = tbl->get_dict();
+	
 	std::set<elem> vars;
 	collect_positive_vars(rr1, vars);
 	std::vector<std::set<elem>> partitions;
 	// Do the Levy-Sagiv test
 	return partition_iter(vars, partitions,
 		[&](const std::vector<std::set<elem>> &partitions) -> bool {
-			// Get dictionary for generating fresh symbols
-			dict_t &d = tbl->get_dict();
+			dict_t d;
+			d.op = old_dict.op;
+			d.cl = old_dict.cl;
 			// Map each variable to a fresh symbol according to the partitions
 			std::map<elem, elem> subs;
 			for(const std::set<elem> &part : partitions) {
@@ -711,7 +721,7 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 					subs[e] = pvar;
 				}
 			}
-			raw_rule subbed = freeze_rule(rr1, subs);
+			raw_rule subbed = freeze_rule(rr1, subs, d);
 			std::set<elem> symbol_set;
 			std::set<raw_term> canonical, canonical_negative;
 			// Separate the positive and negative subgoals. Note the symbols
@@ -863,9 +873,8 @@ void driver::simplify_formulas(raw_prog &rp) {
  * associated with it and return that. If there is no such association,
  * make one. */
 
-elem driver::quote_elem(const elem &e, std::map<elem, elem> &variables) {
-	// Get dictionary for generating fresh symbols
-	dict_t &d = tbl->get_dict();
+elem driver::quote_elem(const elem &e, std::map<elem, elem> &variables,
+		dict_t &d) {
 	if(e.type == elem::VAR) {
 		if(variables.find(e) != variables.end()) {
 			return variables[e];
@@ -883,16 +892,16 @@ elem driver::quote_elem(const elem &e, std::map<elem, elem> &variables) {
  * fresh symbol. */
 
 raw_rule driver::freeze_rule(raw_rule rr,
-		std::map<elem, elem> &freeze_map) {
+		std::map<elem, elem> &freeze_map, dict_t &d) {
 	for(raw_term &tm : rr.h) {
 		for(elem &el : tm.e) {
-			el = quote_elem(el, freeze_map);
+			el = quote_elem(el, freeze_map, d);
 		}
 	}
 	for(std::vector<raw_term> &bodie : rr.b) {
 		for(raw_term &tm : bodie) {
 			for(elem &el : tm.e) {
-				el = quote_elem(el, freeze_map);
+				el = quote_elem(el, freeze_map, d);
 			}
 		}
 	}
@@ -914,7 +923,7 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
 			term_id, head.e[0] };
 		
 		for(int_t param_idx = 2; param_idx < ssize(head.e) - 1; param_idx ++) {
-			quoted_term_e.push_back(quote_elem(head.e[param_idx], variables));
+			quoted_term_e.push_back(quote_elem(head.e[param_idx], variables, d));
 		}
 		// Terminate term elements and make raw_term object
 		quoted_term_e.push_back(elem_closep);
@@ -922,8 +931,8 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
 	} else if(head.extype == raw_term::EQ) {
 		// Add metadata to quoted term: term signature, term id, term name
 		std::vector<elem> quoted_term_e = {rel_name, elem_openp, elem(QEQUALS),
-			term_id, quote_elem(head.e[0], variables),
-			quote_elem(head.e[2], variables), elem_closep };
+			term_id, quote_elem(head.e[0], variables, d),
+			quote_elem(head.e[2], variables, d), elem_closep };
 		rp.r.push_back(raw_rule(raw_term(quoted_term_e)));
 	}
 	if(head.neg) {
@@ -987,13 +996,13 @@ elem driver::quote_formula(const sprawformtree &t, const elem &rel_name,
 				elem_closep })));
 			break;
 		case elem::EXISTS: {
-			elem qvar = quote_elem(*(t->l->el), variables);
+			elem qvar = quote_elem(*(t->l->el), variables, d);
 			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp,
 				elem(QEXISTS), part_id, qvar,
 				quote_formula(t->r, rel_name, rp, variables), elem_closep })));
 			break;
 		} case elem::UNIQUE: {
-			elem qvar = quote_elem(*(t->l->el), variables);
+			elem qvar = quote_elem(*(t->l->el), variables, d);
 			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp,
 				elem(QUNIQUE), part_id, qvar,
 				quote_formula(t->r, rel_name, rp, variables), elem_closep })));
@@ -1002,7 +1011,7 @@ elem driver::quote_formula(const sprawformtree &t, const elem &rel_name,
 			return quote_term(*t->rt, rel_name, rp, variables);
 			break;
 		} case elem::FORALL: {
-			elem qvar = quote_elem(*(t->l->el), variables);
+			elem qvar = quote_elem(*(t->l->el), variables, d);
 			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp,
 				elem(QFORALL), part_id, qvar,
 				quote_formula(t->r, rel_name, rp, variables), elem_closep })));

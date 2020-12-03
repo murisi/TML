@@ -450,10 +450,10 @@ public:
 	~tables();
 	size_t step() { return nstep; }
 	bool add_prog(const raw_prog& p, const strs_t& strs);
-	static bool run_prog(const raw_prog &rp, const dict_t &dict,
+	static bool run_prog(const raw_prog &rp, dict_t &dict,
 		const options &opts, std::set<raw_term> &results);
 	static bool run_prog(const std::set<raw_term> &edb, raw_prog rp,
-		dict_t dict, const options &opts, std::set<raw_term> &results);
+		dict_t &dict, const options &opts, std::set<raw_term> &results);
 	bool run_prog(const raw_prog& p, const strs_t& strs, size_t steps = 0,
 		size_t break_on_step = 0);
 	bool run_nums(flat_prog m, std::set<term>& r, size_t nsteps);

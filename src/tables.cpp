@@ -2865,7 +2865,7 @@ bool tables::pfp(size_t nsteps, size_t break_on_step) {
  * results into the given out-parameter, and return true in the case
  * that it reaches a fixed point. Otherwise just return false. */
 
-bool tables::run_prog(const raw_prog &rp, const dict_t &dict,
+bool tables::run_prog(const raw_prog &rp, dict_t &dict,
 		const options &opts, std::set<raw_term> &results) {
 	tables tbl(dict, opts.enabled("proof"), 
 		opts.enabled("optimize"), opts.enabled("bin"),
@@ -2887,7 +2887,7 @@ bool tables::run_prog(const raw_prog &rp, const dict_t &dict,
  * checks. */
 
 bool tables::run_prog(const std::set<raw_term> &edb, raw_prog rp,
-		dict_t dict, const options &opts, std::set<raw_term> &results) {
+		dict_t &dict, const options &opts, std::set<raw_term> &results) {
 	std::map<elem, elem> freeze_map, unfreeze_map;
 	// Create a duplicate of each rule in the given program under a
 	// generated alias.

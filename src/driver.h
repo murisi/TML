@@ -136,14 +136,16 @@ class driver {
 		const std::function<void(raw_prog &)> &f);
 	void recursive_transform(raw_prog &rp,
 		const std::function<void(raw_prog &)> &f);
-	raw_rule freeze_rule(raw_rule rr, std::map<elem, elem> &freeze_map);
+	raw_rule freeze_rule(raw_rule rr, std::map<elem, elem> &freeze_map,
+		dict_t &d);
 	bool cqc(const raw_rule &rr1, const raw_rule &rr2);
 	bool cqnc(const raw_rule &rr1, const raw_rule &rr2);
 	bool cbc(const raw_rule &rr1, raw_rule rr2, std::set<terms_hom> &homs);
 	void factor_rules(raw_prog &rp);
 	raw_prog read_prog(elem prog, const raw_prog &rp);
 	void simplify_formulas(raw_prog &rp);
-	elem quote_elem(const elem &e, std::map<elem, elem> &variables);
+	elem quote_elem(const elem &e, std::map<elem, elem> &variables,
+		dict_t &d);
 	elem quote_term(const raw_term &head, const elem &rel_name,
 		raw_prog &rp, std::map<elem, elem> &variables);
 	elem quote_formula(const sprawformtree &t, const elem &rel_name,

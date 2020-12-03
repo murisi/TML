@@ -108,15 +108,17 @@ class driver {
 	void transform_grammar(raw_prog& r, lexeme rel, size_t len);
 	void generate_binary_eval(raw_prog &rp, const int_t qtype,
 		const elem::etype &eltype, const elem &quote_sym,
-		const elem &und_sym, const elem &aux_rel,
+		const elem &und_sym, const elem &aux_rel, const elem &fv_rel,
 		const std::vector<elem> &iparams, const std::vector<elem> &qparams);
 	void generate_quantified_eval(raw_prog &rp, const int_t qtype,
 		const elem::etype &eltype, const elem &quote_sym, const elem &aux_rel,
-		const std::vector<elem> &iparams, const std::vector<elem> &qparams);
+		const elem &fv_rel, const std::vector<elem> &iparams,
+		const std::vector<elem> &qparams);
 	void generate_rule_eval(raw_prog &rp, bool neg, const elem &out_rel,
-		const elem &quote_sym, const elem &aux_rel,
-		const std::vector<elem> &iparams, const std::vector<elem> &qparams,
-		const std::vector<elem> &iargs, const std::vector<elem> &qargs);
+		const elem &quote_sym, const elem &aux_rel, const elem &fs_rel,
+		const elem &fv_rel, const std::vector<elem> &iparams,
+		const std::vector<elem> &qparams, const std::vector<elem> &iargs,
+		const std::vector<elem> &qargs);
 	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
 	sprawformtree inline_rule(const raw_term &rt1, const raw_term &rt2,
@@ -181,9 +183,9 @@ class driver {
 		std::map<elem, elem> &bindings, std::set<raw_term> &database);
 	bool evaluate_term(const raw_term &rt, std::map<elem, elem> &bindings,
 		std::set<raw_term> &database);
-	sprawformtree fix_variables(const elem &quote_sym, const elem &qva,
+	sprawformtree fix_variables(const elem &fv_rel, const elem &qva,
 		const elem &rva, const elem &qvb, const elem &rvb);
-	sprawformtree fix_symbols(const elem &quote_sym, const elem &qva,
+	sprawformtree fix_symbols(const elem &fs_rel, const elem &qva,
 		const elem &rva);
 	void subsume_queries(raw_prog &rp);
 	bool evaluate_form_tree(const raw_form_tree &rft,

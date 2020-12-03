@@ -1108,19 +1108,10 @@ void driver::transform_quotes(raw_prog &rp) {
  * their corresponding quoted terms are equal and are both present in
  * the variable subrelation. */
 
-sprawformtree driver::fix_variables(const elem &quote_sym,
+sprawformtree driver::fix_variables(const elem &fv_rel,
 		const elem &qva, const elem &rva, const elem &qvb, const elem &rvb) {
-	return std::make_shared<raw_form_tree>(elem::IMPLIES,
-		std::make_shared<raw_form_tree>(elem::AND,
-			std::make_shared<raw_form_tree>(elem::AND,
-				std::make_shared<raw_form_tree>(elem::NONE,
-					raw_term({quote_sym, elem_openp, elem(QVARS), qva, elem_closep})),
-				std::make_shared<raw_form_tree>(elem::NONE,
-					raw_term({quote_sym, elem_openp, elem(QVARS), qvb, elem_closep}))),
-			std::make_shared<raw_form_tree>(elem::NONE,
-				raw_term(raw_term::EQ, {qva, elem_eq, qvb}))),
-		std::make_shared<raw_form_tree>(elem::NONE, raw_term(raw_term::EQ,
-			{rva, elem_eq, rvb})));
+	return std::make_shared<raw_form_tree>(elem::NONE,
+		raw_term({fv_rel, elem_openp, qva, rva, qvb, rvb, elem_closep}));
 }
 
 /* Essential for the handling terms/arguments in a quoted program.
@@ -1128,14 +1119,10 @@ sprawformtree driver::fix_variables(const elem &quote_sym,
  * quoted term in the case that the quoted term does not appear in the
  * variable subrelation. */
 
-sprawformtree driver::fix_symbols(const elem &quote_sym,
+sprawformtree driver::fix_symbols(const elem &fs_rel,
 		const elem &qva, const elem &rva) {
-	return std::make_shared<raw_form_tree>(elem::IMPLIES,
-		std::make_shared<raw_form_tree>(elem::NOT,
-			std::make_shared<raw_form_tree>(elem::NONE,
-				raw_term({ quote_sym, elem_openp, elem(QVARS), qva, elem_closep }))),
-		std::make_shared<raw_form_tree>(elem::NONE,
-			raw_term(raw_term::EQ, {qva, elem_eq, rva})));
+	return std::make_shared<raw_form_tree>(elem::NONE,
+		raw_term({fs_rel, elem_openp, qva, rva, elem_closep}));
 }
 
 /* Interpret binary operations with varying allocations to each side.
@@ -1146,7 +1133,7 @@ sprawformtree driver::fix_symbols(const elem &quote_sym,
  
 void driver::generate_binary_eval(raw_prog &rp, const int_t qtype,
 		const elem::etype &eltype, const elem &quote_sym,
-		const elem &und_sym, const elem &aux_rel,
+		const elem &und_sym, const elem &aux_rel, const elem &fv_rel,
 		const std::vector<elem> &iparams, const std::vector<elem> &qparams) {
 	// Get dictionary for generating fresh variables
 	dict_t &d = tbl->get_dict();
@@ -1193,7 +1180,7 @@ void driver::generate_binary_eval(raw_prog &rp, const int_t qtype,
 		for(int_t i = 0; i < a; i++) {
 			for(int_t j = a; j < arity_num; j++) {
 				bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
-					fix_variables(quote_sym, qparams[i], iparams[i],
+					fix_variables(fv_rel, qparams[i], iparams[i],
 						qparams[j], iparams[j]));
 			}
 		}
@@ -1208,6 +1195,7 @@ void driver::generate_binary_eval(raw_prog &rp, const int_t qtype,
  
 void driver::generate_quantified_eval(raw_prog &rp, const int_t qtype,
 		const elem::etype &eltype, const elem &quote_sym, const elem &aux_rel,
+		const elem &fv_rel,
 		const std::vector<elem> &iparams, const std::vector<elem> &qparams) {
 	// Get dictionary for generating fresh variables
 	dict_t &d = tbl->get_dict();
@@ -1234,7 +1222,7 @@ void driver::generate_quantified_eval(raw_prog &rp, const int_t qtype,
 		std::make_shared<raw_form_tree>(elem::NONE, quant_e);
 	for(int_t i = 0; i < arity_num; i++) {
 		quant = std::make_shared<raw_form_tree>(elem::AND, quant,
-			fix_variables(quote_sym, forma_id, quantified_var,
+			fix_variables(fv_rel, forma_id, quantified_var,
 				qparams[i], iparams[i]));
 	}
 	raw_rule rr(head_e,
@@ -1255,6 +1243,7 @@ void driver::generate_quantified_eval(raw_prog &rp, const int_t qtype,
  
 void driver::generate_rule_eval(raw_prog &rp, bool neg,
 		const elem &out_rel, const elem &quote_sym, const elem &aux_rel,
+		const elem &fs_rel, const elem &fv_rel,
 		const std::vector<elem> &iparams, const std::vector<elem> &qparams,
 		const std::vector<elem> &iargs, const std::vector<elem> &qargs) {
 	// Get dictionary for generating fresh variables
@@ -1308,14 +1297,14 @@ void driver::generate_rule_eval(raw_prog &rp, bool neg,
 		// if it is not marked as a variable.
 		for(int_t i = 0; i < a; i++) {
 			bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
-				fix_symbols(quote_sym, qparams[i], iparams[i]));
+				fix_symbols(fs_rel, qparams[i], iparams[i]));
 		}
 		// Fix the real parameters to this rule to be the same if their
 		// quotations are the same.
 		for(int_t i = 0; i < a; i++) {
 			for(int_t j = i+1; j < a; j++) {
 				bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
-					fix_variables(quote_sym, qparams[i], iparams[i],
+					fix_variables(fv_rel, qparams[i], iparams[i],
 						qparams[j], iparams[j]));
 			}
 		}
@@ -1324,7 +1313,7 @@ void driver::generate_rule_eval(raw_prog &rp, bool neg,
 		for(int_t i = 0; i < a; i++) {
 			for(int_t j = 0; j < a; j++) {
 				bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
-					fix_variables(quote_sym, qargs[i], iargs[i], qparams[j],
+					fix_variables(fv_rel, qargs[i], iargs[i], qparams[j],
 						iparams[j]));
 			}
 		}
@@ -1369,6 +1358,10 @@ void driver::transform_evals(raw_prog &rp) {
 			elem und_sym = elem::fresh_sym(d);
 			// This relation will house most of the interpreter
 			elem aux_rel = elem::fresh_temp_sym(d);
+			// This relation will be used to fix interpretations to literals
+			elem fs_rel = elem::fresh_temp_sym(d);
+			// This relation will be used to fix interpretations to each other
+			elem fv_rel = elem::fresh_temp_sym(d);
 			
 			// Allocate rule name, rule id, head id, body id
 			elem rule_name = elem::fresh_var(d), elt_id = elem::fresh_var(d),
@@ -1382,12 +1375,40 @@ void driver::transform_evals(raw_prog &rp) {
 				qparams.push_back(elem::fresh_var(d));
 			}
 			
+			{
+				elem qva = elem::fresh_var(d), rva = elem::fresh_var(d),
+					qvb = elem::fresh_var(d), rvb = elem::fresh_var(d);
+				rp.r.push_back(raw_rule(raw_term({fs_rel,
+						elem_openp, qva, rva, elem_closep}),
+					std::make_shared<raw_form_tree>(elem::IMPLIES,
+						std::make_shared<raw_form_tree>(elem::NOT,
+							std::make_shared<raw_form_tree>(elem::NONE,
+								raw_term({ quote_sym,
+									elem_openp, elem(QVARS), qva, elem_closep }))),
+						std::make_shared<raw_form_tree>(elem::NONE,
+							raw_term(raw_term::EQ, {qva, elem_eq, rva})))));
+				
+				rp.r.push_back(raw_rule(raw_term({fv_rel,
+						elem_openp, qva, rva, qvb, rvb, elem_closep}),
+					std::make_shared<raw_form_tree>(elem::IMPLIES,
+						std::make_shared<raw_form_tree>(elem::AND,
+							std::make_shared<raw_form_tree>(elem::AND,
+								std::make_shared<raw_form_tree>(elem::NONE,
+									raw_term({quote_sym, elem_openp, elem(QVARS), qva, elem_closep})),
+								std::make_shared<raw_form_tree>(elem::NONE,
+									raw_term({quote_sym, elem_openp, elem(QVARS), qvb, elem_closep}))),
+							std::make_shared<raw_form_tree>(elem::NONE,
+								raw_term(raw_term::EQ, {qva, elem_eq, qvb}))),
+						std::make_shared<raw_form_tree>(elem::NONE, raw_term(raw_term::EQ,
+							{rva, elem_eq, rvb})))));
+			}
+			
 			// Make the interpreters that insert terms
-			generate_rule_eval(rp, false, out_rel, quote_sym, aux_rel,
-				iparams, qparams, iargs, qargs);
+			generate_rule_eval(rp, false, out_rel, quote_sym, aux_rel, fs_rel,
+				fv_rel, iparams, qparams, iargs, qargs);
 			// Make the interpreters that delete terms
-			generate_rule_eval(rp, true, out_rel, quote_sym, aux_rel,
-				iparams, qparams, iargs, qargs);
+			generate_rule_eval(rp, true, out_rel, quote_sym, aux_rel, fs_rel,
+				fv_rel, iparams, qparams, iargs, qargs);
 			
 			// Interpret terms of each arity
 			for(int_t a = 0; a < arity_num.num+1; a++) {
@@ -1419,12 +1440,12 @@ void driver::transform_evals(raw_prog &rp) {
 						std::make_shared<raw_form_tree>(elem::NONE, raw_term(real_e)));
 				for(int_t i = 0; i < a; i++) {
 					bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
-						fix_symbols(quote_sym, qparams[i], iparams[i]));
+						fix_symbols(fs_rel, qparams[i], iparams[i]));
 				}
 				for(int_t i = 0; i < a; i++) {
 					for(int_t j = i+1; j < a; j++) {
 						bodie = std::make_shared<raw_form_tree>(elem::AND, bodie,
-							fix_variables(quote_sym, qparams[i], iparams[i],
+							fix_variables(fv_rel, qparams[i], iparams[i],
 								qparams[j], iparams[j]));
 					}
 				}
@@ -1450,8 +1471,8 @@ void driver::transform_evals(raw_prog &rp) {
 							std::make_shared<raw_form_tree>(elem::NONE, quote),
 							std::make_shared<raw_form_tree>(elem::NONE, equals)),
 						std::make_shared<raw_form_tree>(elem::AND,
-							fix_symbols(quote_sym, qparams[0], iparams[0]),
-							fix_symbols(quote_sym, qparams[1], iparams[1]))));
+							fix_symbols(fs_rel, qparams[0], iparams[0]),
+							fix_symbols(fs_rel, qparams[1], iparams[1]))));
 				rp.r.push_back(rr);
 			}
 			
@@ -1481,26 +1502,26 @@ void driver::transform_evals(raw_prog &rp) {
 			
 			// Interpret conjunctions
 			generate_binary_eval(rp, QAND, elem::AND, quote_sym, und_sym,
-				aux_rel, iparams, qparams);
+				aux_rel, fv_rel, iparams, qparams);
 			// Interpret disjunctions
 			generate_binary_eval(rp, QALT, elem::ALT, quote_sym, und_sym,
-				aux_rel, iparams, qparams);
+				aux_rel, fv_rel, iparams, qparams);
 			// Interpret implies
 			generate_binary_eval(rp, QIMPLIES, elem::IMPLIES, quote_sym, und_sym,
-				aux_rel, iparams, qparams);
+				aux_rel, fv_rel, iparams, qparams);
 			// Interpret coimplies
 			generate_binary_eval(rp, QCOIMPLIES, elem::COIMPLIES, quote_sym, und_sym,
-				aux_rel, iparams, qparams);
+				aux_rel, fv_rel, iparams, qparams);
 			
 			// Interpret forall
 			generate_quantified_eval(rp, QFORALL, elem::FORALL, quote_sym,
-				aux_rel, iparams, qparams);
+				aux_rel, fv_rel, iparams, qparams);
 			// Interpret exists
 			generate_quantified_eval(rp, QEXISTS, elem::EXISTS, quote_sym,
-				aux_rel, iparams, qparams);
+				aux_rel, fv_rel, iparams, qparams);
 			// Interpret unique
 			generate_quantified_eval(rp, QUNIQUE, elem::UNIQUE, quote_sym,
-				aux_rel, iparams, qparams);
+				aux_rel, fv_rel, iparams, qparams);
 		}
 	}
 }

@@ -128,8 +128,8 @@ class driver {
 		const std::vector<raw_rule> &inlines);
 	void flatten_associative(const elem::etype &tp,
 		const sprawformtree &tree, std::vector<sprawformtree> &tms);
-	bool is_rule_conjunctive(const raw_rule &rr);
-	bool is_rule_conjunctive_with_negation(const raw_rule &rr);
+	bool is_cq(const raw_rule &rr);
+	bool is_cqn(const raw_rule &rr);
 	bool try_minimize(raw_rule &rr);
 	int_t count_related_rules(const raw_rule &rr1, const raw_prog &rp);
 	void step_transform(raw_prog &rp,

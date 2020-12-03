@@ -219,7 +219,7 @@ void driver::flatten_associative(const elem::etype &tp,
 
 /* Checks if the body of the given rule is conjunctive. */
 
-bool driver::is_rule_conjunctive(const raw_rule &rr) {
+bool driver::is_cq(const raw_rule &rr) {
 	// Ensure that there are no disjunctions
 	if(rr.h.size() != 1 || rr.b.size() != 1) return false;
 	// Ensure that head is positive
@@ -233,7 +233,7 @@ bool driver::is_rule_conjunctive(const raw_rule &rr) {
 
 /* Checks if the body of the given rule is conjunctive with negation. */
 
-bool driver::is_rule_conjunctive_with_negation(const raw_rule &rr) {
+bool driver::is_cqn(const raw_rule &rr) {
 	// Ensure that there are no disjunctions
 	if(rr.h.size() != 1 || rr.b.size() != 1) return false;
 	// Ensure that head is positive
@@ -263,7 +263,7 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 	d.op = old_dict.op;
 	d.cl = old_dict.cl;
 	
-	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2) &&
+	if(is_cq(rr1) && is_cq(rr2) &&
 			get_relation_info(rr1.h[0]) == get_relation_info(rr2.h[0])) {
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
@@ -307,7 +307,7 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 	d.op = old_dict.op;
 	d.cl = old_dict.cl;
 	
-	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2)) {
+	if(is_cq(rr1) && is_cq(rr2)) {
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
 		// Map from variables occuring in rr1 to frozen symbols
@@ -485,7 +485,7 @@ void driver::factor_rules(raw_prog &rp) {
 	// Go through the rules we want to try substituting into other
 	for(raw_rule &rr2 : rp.r) {
 		// Because we use a conjunctive homomorphism finding rule
-		if(is_rule_conjunctive(rr2) && rr2.b[0].size() > 1) {
+		if(is_cq(rr2) && rr2.b[0].size() > 1) {
 			// The variables of the current rule that we'd need to be able to
 			// constrain/substitute into
 			std::set<elem> needed_vars;
@@ -497,7 +497,7 @@ void driver::factor_rules(raw_prog &rp) {
 				// Find all the homomorphisms between outer and inner rule. This
 				// way we can substitute the outer rule into the inner multiple
 				// times.
-				if(is_rule_conjunctive(rr1) && cbc(rr1, rr2, homs)) {
+				if(is_cq(rr1) && cbc(rr1, rr2, homs)) {
 					for(const terms_hom &hom : homs) {
 						auto &[target_terms, var_map] = hom;
 						// Record only those homomorphisms where the target is at
@@ -696,9 +696,11 @@ void driver::collect_positive_vars(const raw_rule &rr,
  * rr1 is contained by rr2. Do this using the Levy-Sagiv test. */
 
 bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
+	// The CQNC test is very heavy, so try to use the lighter CQC test if
+	// possible.
+	if(is_cq(rr1) && is_cq(rr2)) return cqc(rr1, rr2);
 	// Check that rules have correct format
-	if(!(is_rule_conjunctive_with_negation(rr1) &&
-		is_rule_conjunctive_with_negation(rr2) &&
+	if(!(is_cqn(rr1) && is_cqn(rr2) &&
 		get_relation_info(rr1.h[0]) == get_relation_info(rr2.h[0]))) return false;
 	
 	// Get dictionary for generating fresh symbols
@@ -796,7 +798,7 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
  * through the return flag. */
 
 bool driver::try_minimize(raw_rule &rr) {
-	if(is_rule_conjunctive_with_negation(rr)) {
+	if(is_cqn(rr)) {
 		std::vector<raw_term> heads1 = rr.h, bodie1 = rr.b[0],
 			heads2 = rr.h, bodie2 = rr.b[0];
 		// Let's see if we can remove a body term from the rule without

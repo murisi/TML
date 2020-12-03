@@ -262,9 +262,6 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 	
 	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2) &&
 			get_relation_info(rr1.h[0]) == get_relation_info(rr2.h[0])) {
-		std::vector<raw_term> heads1 = rr1.h, bodie1 = rr1.b[0],
-			heads2 = rr2.h, bodie2 = rr2.b[0];
-		
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
 		std::map<elem, elem> freeze_map;
@@ -305,9 +302,6 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 	dict_t &d = tbl->get_dict();
 	
 	if(is_rule_conjunctive(rr1) && is_rule_conjunctive(rr2)) {
-		std::vector<raw_term> heads1 = rr1.h, bodie1 = rr1.b[0],
-			heads2 = rr2.h, bodie2 = rr2.b[0];
-		
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
 		// Map from variables occuring in rr1 to frozen symbols

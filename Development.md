@@ -315,6 +315,40 @@ r(?nm ?d1) :-
 
 An interpreter size of `N` ensures that the interpreter produced supports up to `N` distinct variables in quoted rule heads and up to `N` distinct variables in quoted rule bodies. This support is achieved by varying the number of variables exported by each executor rule. Without this variable propagation, the interpreter would be smaller but would not be able to correctly handle the same variable being used in different quoted terms of the same quoted rules. Applying an interpreter to rules exceeding the interpreter size will in general lead to correct results because the executors and the writeback rules will fail to capture and hence execute the quoted syntax nodes.
 
+## Sequencing
+
+The sequencing transformation takes an unsequenced transformation (i.e. a transformation that would be correct if rules instead behaved like macros) and turns it into a sequenced transformation (i.e. a transformation that would be correct if macros instead behaved like rules). The overall idea behind this transformation is to version the relations so that so that the pre-update version has a different name to the post-update version, apply the unsequenced transformation, topologically sort the rules to establish an execution order (of rule sets) that produces the results intended by the unsequenced transformation, and then output these rules with markers indicating relative execution order along with writeback rules to make the post-update relations the new pre-update relations.
+
+It is easiest to understand this transformation through an example. Imagine that we would like to "factorize" the following program:
+```
+car(?x ?y) :- car(?x ?y), truck(?y ?x).
+truck(?x ?y) :- car(?y ?x), truck(?x ?y).
+```
+Naively replacing 2nd relation with `truck(?x ?y) :- car(?y ?x).` would be incorrect due to staging and mutation of car relation. I.e. even if the `truck` relation obtained the right facts, they would come delayed with respect to the facts in the `car` relation. What we need is for the `car` and `truck` relations to have the correct facts simultaneously. So let us version the relations as follows: `0f10` is car's update and `0f20` is truck's update.
+```
+0f10(?x ?y) :- car(?x ?y), truck(?y ?x).
+0f20(?x ?y) :- car(?y ?x), truck(?x ?y).
+```
+Now their relative execution order is inconsequential since the rules are independent of each other. The rules can now be treated like macros and be substituted or exapnded freely by any transformation as can be seen in the following:
+```
+0f10(?x ?y) :- car(?x ?y), truck(?y ?x).
+0f20(?x ?y) :- 0f10(?y ?x).
+```
+Now a topological sort can be used to establish that rule `0f10` should fire before rule `0f20` if their corresponding relations are to contain the updates of `car` and `truck` respectively. After we put in writeback rules to synchronize the original relations with their updates, we should obtain a program that looks as follows:
+```
+Stage 0:
+	0f10(?x ?y) :- car(?x ?y), truck(?y ?x).
+Stage 1:
+	0f20(?x ?y) :- 0f10(?y ?x).
+Stage 2:
+	car(?x ?y) :- 0f10(?x ?y).
+	truck(?x ?y) :- 0f20(?x ?y).
+	~0f10(?x ?y) :- 0f10(?x ?y).
+	~0f20(?x ?y) :- 0f20(?x ?y).
+```
+Note the two deletion rules in stage 2; these are done to prevent the temporary "version" relations from a previous stage from affecting the execution of future stages. The last program above is only pseudo-code, in actuallity the staging would be done by conditioning each of these rules upon the stages of some clock construction.
+
+
 # JS (emscripten) build
 
 There is an emscripten binding allowing TML run in browsers or with Node.js.

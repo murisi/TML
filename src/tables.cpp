@@ -2820,12 +2820,19 @@ bool tables::pfp(size_t nsteps, size_t break_on_step) {
 			o::inf() << "# step: " << nstep << endl;
 		++nstep;
 		if (!fwd()) return true; // FP found
+		if(nstep == 43) {
+			std::cout << "# step: " << nstep << endl;
+			out(std::cout);
+			std::cout << std:: endl << std::endl;
+		}
 		if (unsat) return contradiction_detected();
 		if ((break_on_step && nstep == break_on_step) ||
 			(nsteps && nstep == nsteps)) return false; // no FP yet
 		l = get_front();
-		if (!datalog && !fronts.emplace(l).second)
+		if (!datalog && !fronts.emplace(l).second) {
+			std::cout << "Final step: " << nstep << std::endl;
 			return infloop_detected();
+		}
 		if (bproof) levels.push_back(move(l));
 	}
 	DBGFAIL;

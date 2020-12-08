@@ -348,6 +348,77 @@ Stage 2:
 ```
 Note the two deletion rules in stage 2; these are done to prevent the temporary "version" relations from a previous stage from affecting the execution of future stages. The last program above is only pseudo-code, in actuallity the staging would be done by conditioning each of these rules upon the stages of some clock construction.
 
+## Purification
+
+The purification transformation converts TML rules written in first-order logic syntax to (possibly more) rules that are conjunctions of possibly negated negated terms. This is an unsequenced transformation, meaning that the rules that it creates should be treated like macros when reasoning about execution ordering. The transformation works its way up the syntax tree of a first-order logic formula doing the following conversions:
+
+### Conjunction
+Handled by creating a new relation whose defining rule has multiple conjuncts.
+```
+r(...) :- ... { a(?x ?z) && b(?y ?z) } ...
+TO
+c(?x ?y ?z) :- a(?x ?z), b(?y ?z).
+r(...) :- ... c(?x ?y ?z) ...
+```
+
+### Disjunction
+Handled by creating a new relation whose defining rule has multiple clauses.
+```
+r(...) :- ... { a(?x ?z) || b(?y ?z) } ...
+TO
+c(?x ?y ?z) :- a(?x ?z).
+c(?x ?y ?z) :- b(?y ?z).
+r(...) :- ... c(?x ?y ?z) ...
+```
+
+### Negation
+Handled by factoring the negation into a separate rule.
+```
+r(...) :- ... { ~ a(?x ?z) } ...
+TO
+c(?x ?z) :- ~a(?x ?z).
+r(...) :- ... c(?x ?z) ...
+```
+
+### Implication
+Handled by reduction to negation and disjunction.
+```
+r(...) :- ... { a(?x ?z) -> b(?y ?z) } ...
+TO
+r(...) :- ... { { ~ a(?x ?z) } || b(?y ?z) } ...
+```
+
+### Coimplication
+Handled by reduction to conjunction of implications.
+```
+r(...) :- ... { a(?x ?z) <-> b(?y ?z) } ...
+TO
+r(...) :- ... { { a(?x ?z) -> b(?y ?z) } && { b(?y ?z) -> a(?x ?z) } } ...
+```
+
+### Existential Quantification
+Handled by creating a separate rule in which the quantified variable is free. The solver will find the correct variable assignments if they exist.
+```
+r(...) :- ... exists ?x { a(?x ?y) } ...
+TO
+c(?y) :- a(?x ?y).
+r(...) :- ... c(?y) ...
+```
+### Universal Quantification
+Handled by reduction to the lack of existence of an object that does not satisfy the given property.
+```
+r(...) :- ... forall ?x { a(?x ?y) } ...
+TO
+r(...) :- ... ~ { exists ?x { ~ a(?x ?y) } } ...
+```
+### Uniqueness Quantification
+Handled by reduction to universal and existential quantification and a coimplication.
+```
+r(...) :- ... unique ?x { a(?x ?y) } ...
+TO
+r(...) :- ... exists ?u { forall ?x { { ?u = ?x } <-> a(?x ?y) } } ...
+```
+
 
 # JS (emscripten) build
 

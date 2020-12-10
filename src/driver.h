@@ -166,6 +166,10 @@ class driver {
 	void to_pure_tml(raw_prog &rp);
 	void compute_required_vars(const raw_rule &rr, const terms_hom &hom,
 		std::set<elem> &orig_vars);
+	void collect_free_vars(const std::vector<std::vector<raw_term>> &b,
+		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
+	void collect_free_vars(const raw_rule &rr, std::set<elem> &free_vars);
+	std::set<elem> collect_free_vars(const raw_rule &rr);
 	void collect_free_vars(const raw_term &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	std::set<elem> collect_free_vars(const raw_term &t);
@@ -174,38 +178,43 @@ class driver {
 	std::set<elem> collect_free_vars(const sprawformtree &t);
 	raw_term relation_to_term(const std::tuple<elem, int_t> &ri);
 	void populate_universe(const raw_term &rt, std::set<elem> &universe);
-	void populate_universe(const sprawformtree &rft,
-		std::set<elem> &universe);
 	void populate_universe(const raw_prog &rp,
 		std::set<elem> &universe);
-	void interpret_rule(size_t hd_idx, size_t inp_idx, const raw_rule &rul,
-		const std::map<const elem*, std::set<elem>> &universes,
-		std::map<elem, elem> &bindings, std::set<raw_term> &database);
+	void interpret_rule(size_t hd_idx, std::set<elem> &free_vars,
+		const raw_rule &rul, const std::map<elem, std::set<elem>> &universes,
+		std::map<elem, elem> &bindings,
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
 	bool evaluate_term(const raw_term &rt, std::map<elem, elem> &bindings,
-		std::set<raw_term> &database);
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
 	sprawformtree fix_variables(const elem &fv_rel, const elem &qva,
 		const elem &rva, const elem &qvb, const elem &rvb);
 	sprawformtree fix_symbols(const elem &fs_rel, const elem &qva,
 		const elem &rva);
 	void subsume_queries(raw_prog &rp);
-	bool evaluate_form_tree(const raw_form_tree &rft,
-		const std::map<const elem*, std::set<elem>> &universes,
-		std::map<elem, elem> &bindings, std::set<raw_term> &database);
-	void reduce_universe(const elem &var, const raw_form_tree &t,
-		std::set<elem> &universe, std::set<raw_term> &database);
-	void reduce_universe(const elem &var, const raw_term &rt,
-		std::set<elem> &universe, std::set<raw_term> &database);
-	void reduce_universe(const elem &var, const raw_rule &rul,
-		std::set<elem> &universe, std::set<raw_term> &database);
-	void populate_universes(const raw_rule &rul, std::set<elem> &universe,
-		std::map<const elem*, std::set<elem>> &universes,
-		std::set<raw_term> &database);
-	void populate_universes(const raw_form_tree &rft,
+	bool evaluate_conjunction(const std::vector<raw_term> &conj,
+		std::map<elem, elem> &bindings,
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+	bool evaluate_disjunction(const std::vector<std::vector<raw_term>> &disj,
+		std::map<elem, elem> &bindings,
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+	void reduce_universe(const elem &var, const std::vector<raw_term> &conj,
 		std::set<elem> &universe,
-		std::map<const elem*, std::set<elem>> &universes,
-		std::set<raw_term> &database);
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+	void reduce_universe(const elem &var,
+		const std::vector<std::vector<raw_term>> &disj,
+		std::set<elem> &universe,
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+	void reduce_universe(const elem &var, const raw_term &rt,
+		std::set<elem> &universe,
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+	void reduce_universe(const elem &var, const raw_rule &rul,
+		std::set<elem> &universe,
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+	void populate_universes(const raw_rule &rul, std::set<elem> &universe,
+		std::map<elem, std::set<elem>> &universes,
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
 	void naive_pfp(const raw_prog &rp, std::set<elem> &universe,
-		std::set<raw_term> &database);
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
 	raw_prog reify(const raw_prog& p);
 	raw_term from_grammar_elem(const elem& v, int_t v1, int_t v2);
 	raw_term from_grammar_elem_nt(const lexeme& r, const elem& c,

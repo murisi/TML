@@ -531,7 +531,7 @@ sprawformtree raw_rule::get_prft() const {
 		return prft = raw_form_tree::simplify(disj);
 	}
 }
-bool raw_rule::is_b() {
+bool raw_rule::is_b() const {
 	return !b.empty() || prft == nullptr ||
 		(prft && prft->type == elem::NONE && prft->rt->is_true());
 }

@@ -466,7 +466,7 @@ struct raw_rule {
 	// If prft not set, convert b to prft, then return prft
 	sprawformtree get_prft() const;
 	// Return true iff b not empty or prft represents true or prft is null
-	bool is_b();
+	bool is_b() const;
 	// Returns b in an option type predicated on is_b
 	std::optional<std::vector<std::vector<raw_term>>> get_b() {
 		return is_b() ? std::optional<std::vector<std::vector<raw_term>>>(b) : std::nullopt;

@@ -183,7 +183,8 @@ class driver {
 	void interpret_rule(size_t hd_idx, std::set<elem> &free_vars,
 		const raw_rule &rul, const std::map<elem, std::set<elem>> &universes,
 		std::map<elem, elem> &bindings,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database,
+		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &next_database);
 	bool evaluate_term(const raw_term &rt, std::map<elem, elem> &bindings,
 		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
 	sprawformtree fix_variables(const elem &fv_rel, const elem &qva,
@@ -191,6 +192,7 @@ class driver {
 	sprawformtree fix_symbols(const elem &fs_rel, const elem &qva,
 		const elem &rva);
 	void subsume_queries(raw_prog &rp);
+	void print_database(const std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
 	bool evaluate_conjunction(const std::vector<raw_term> &conj,
 		std::map<elem, elem> &bindings,
 		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);

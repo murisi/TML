@@ -575,7 +575,11 @@ struct raw_progs {
 
 struct lexeme_hash {
 	std::size_t operator()(lexeme const& s) const noexcept {
-		return std::hash<ccs>()(s[0]) ^ (std::hash<ccs>()(s[1]) << 1);
+		std::size_t h = 0;
+		for(ccs i = s[0]; i < s[1]; i++) {
+			h = (h << 1) ^ (*i);
+		}
+		return h;
 	}
 };
 

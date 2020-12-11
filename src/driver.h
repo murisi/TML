@@ -28,9 +28,11 @@
 #define mknum(x) ((((int_t)x)<<2)|2)
 
 typedef enum prolog_dialect { XSB, SWIPL } prolog_dialect;
-typedef std::set<raw_term> raw_terms;
+typedef std::unordered_set<raw_term, raw_term_hash> raw_terms;
 typedef std::map<elem, elem> var_subs;
-typedef std::pair<raw_terms, var_subs> terms_hom;
+typedef std::pair<std::set<raw_term>, var_subs> terms_hom;
+typedef std::tuple<elem, int_t> rel_info;
+typedef std::map<rel_info, raw_terms> idatabase;
 
 #define QVARS 0
 #define QRULE 1
@@ -176,47 +178,39 @@ class driver {
 	void collect_free_vars(const sprawformtree &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
 	std::set<elem> collect_free_vars(const sprawformtree &t);
-	raw_term relation_to_term(const std::tuple<elem, int_t> &ri);
+	raw_term relation_to_term(const rel_info &ri);
 	void populate_universe(const raw_term &rt, std::set<elem> &universe);
 	void populate_universe(const raw_prog &rp,
 		std::set<elem> &universe);
 	void interpret_rule(size_t hd_idx, std::set<elem> &free_vars,
 		const raw_rule &rul, const std::map<elem, std::set<elem>> &universes,
-		std::map<elem, elem> &bindings,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &next_database);
-	bool evaluate_term(const raw_term &rt, std::map<elem, elem> &bindings,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database,
+		idatabase &next_database);
+	bool evaluate_term(const raw_term &rt,
+		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database);
 	sprawformtree fix_variables(const elem &fv_rel, const elem &qva,
 		const elem &rva, const elem &qvb, const elem &rvb);
 	sprawformtree fix_symbols(const elem &fs_rel, const elem &qva,
 		const elem &rva);
 	void subsume_queries(raw_prog &rp);
-	void print_database(const std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+	void print_database(const idatabase &database);
 	bool evaluate_conjunction(const std::vector<raw_term> &conj,
-		std::map<elem, elem> &bindings,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database);
 	bool evaluate_disjunction(const std::vector<std::vector<raw_term>> &disj,
-		std::map<elem, elem> &bindings,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database);
 	void reduce_universe(const elem &var, const std::vector<raw_term> &conj,
-		std::set<elem> &universe,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+		std::set<elem> &universe, idatabase &database);
 	void reduce_universe(const elem &var,
 		const std::vector<std::vector<raw_term>> &disj,
-		std::set<elem> &universe,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+		std::set<elem> &universe, idatabase &database);
 	void reduce_universe(const elem &var, const raw_term &rt,
-		std::set<elem> &universe,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+		std::set<elem> &universe, idatabase &database);
 	void reduce_universe(const elem &var, const raw_rule &rul,
-		std::set<elem> &universe,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+		std::set<elem> &universe, idatabase &database);
 	void populate_universes(const raw_rule &rul, std::set<elem> &universe,
-		std::map<elem, std::set<elem>> &universes,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+		std::map<elem, std::set<elem>> &universes, idatabase &database);
 	void naive_pfp(const raw_prog &rp, std::set<elem> &universe,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database);
+		idatabase &database);
 	raw_prog reify(const raw_prog& p);
 	raw_term from_grammar_elem(const elem& v, int_t v1, int_t v2);
 	raw_term from_grammar_elem_nt(const lexeme& r, const elem& c,

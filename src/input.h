@@ -573,6 +573,33 @@ struct raw_progs {
 	bool parse(input* in, dict_t& dict);
 };
 
+struct lexeme_hash {
+	std::size_t operator()(lexeme const& s) const noexcept {
+		return std::hash<ccs>()(s[0]) ^ (std::hash<ccs>()(s[1]) << 1);
+	}
+};
+
+struct elem_hash {
+	std::size_t operator()(elem const& s) const noexcept {
+		if (s.type == elem::NUM) return s.num;
+		if (s.type == elem::CHR) return s.ch;
+		return lexeme_hash{}(s.e);
+	}
+};
+
+struct raw_term_hash {
+	std::size_t operator()(raw_term const& s) const noexcept {
+		std::size_t h = s.neg ^ (s.extype << 1);
+		for(const int_t &v : s.arity) {
+			h = (h << 1) ^ v;
+		}
+		for(const elem &e : s.e) {
+			h = (h << 1) ^ elem_hash{}(e);
+		}
+		return h;
+	}
+};
+
 bool throw_runtime_error(std::string err, std::string details = "");
 
 bool parse_error(const char* o, const char* e, ccs s);

@@ -248,7 +248,7 @@ bool driver::is_cqn(const raw_rule &rr) {
 /* Convenience function for getting relation name and arity from
  * term. */
 
-std::tuple<elem, int_t> get_relation_info(const raw_term &rt) {
+rel_info get_relation_info(const raw_term &rt) {
 	return std::make_tuple(rt.e[0], rt.e.size() - 3);
 }
 
@@ -371,7 +371,7 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 			raw_term hd_src = rr2.h[0];
 			if(res.e[0] == hd_src.e[0]) {
 				var_subs var_map;
-				raw_terms target_terms;
+				std::set<raw_term> target_terms;
 				// Now we want to express the homomorphism in terms of the
 				// original (non-frozen) variables and terms of rr1.
 				for(size_t i = 2; i < res.e.size() - 1; i++) {
@@ -403,7 +403,7 @@ void driver::compute_required_vars(const raw_rule &rr,
 		const terms_hom &hom, std::set<elem> &orig_vars) {
 	auto &[rts, vs] = hom;
 	// Get all the terms used by the given rule.
-	raw_terms aggregate(rr.h.begin(), rr.h.end());
+	std::set<raw_term> aggregate(rr.h.begin(), rr.h.end());
 	aggregate.insert(rr.b[0].begin(), rr.b[0].end());
 	// Make a vector containing all terms used by the given rule that are
 	// not in homomorphism target.
@@ -1555,7 +1555,7 @@ bool rule_relation_precedes(const raw_rule &rr1, const raw_rule &rr2) {
 /* Convenience function for creating most general rule head for the
  * given relation. */
 
-raw_term driver::relation_to_term(const std::tuple<elem, int_t> &ri) {
+raw_term driver::relation_to_term(const rel_info &ri) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	
@@ -1635,11 +1635,11 @@ void driver::step_transform(raw_prog &rp,
 	
 	// Partition the rules by relations
 	typedef std::set<raw_rule> relation;
-	std::map<std::tuple<elem, int_t>, relation> rels;
+	std::map<rel_info, relation> rels;
 	for(const raw_rule &rr : rp.r) {
 		rels[get_relation_info(rr.h[0])].insert(rr);
 	}
-	std::map<const relation *, std::tuple<elem, int_t>> rrels;
+	std::map<const relation *, rel_info> rrels;
 	for(const auto &[ri, r] : rels) {
 		rrels[&r] = ri;
 	}
@@ -1654,7 +1654,7 @@ void driver::step_transform(raw_prog &rp,
 		for(const raw_rule &rr : v) {
 			for(const std::vector<raw_term> &bodie : rr.b) {
 				for(const raw_term &rt : bodie) {
-					std::tuple<elem, int_t> target = get_relation_info(rt);
+					rel_info target = get_relation_info(rt);
 					if(rels.find(target) != rels.end()) {
 						// Store the edges in both directions so that reverse
 						// lookups are easy
@@ -2011,8 +2011,7 @@ void driver::collect_free_vars(const sprawformtree &t,
  * by statically analyzing the term and determining what is impossible. */
 
 void driver::reduce_universe(const elem &var, const raw_term &rt,
-		std::set<elem> &universe,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database) {
+		std::set<elem> &universe, idatabase &database) {
 	if(rt.extype == raw_term::REL && !rt.neg) {
 		if(database[get_relation_info(rt)].size() == 0) {
 			universe.clear();
@@ -2044,7 +2043,7 @@ void driver::reduce_universe(const elem &var, const raw_term &rt,
  
  void driver::reduce_universe(const elem &var,
 		const std::vector<raw_term> &conj, std::set<elem> &universe,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database) {
+		idatabase &database) {
 	for(const raw_term &rt : conj) {
 		reduce_universe(var, rt, universe, database);
 	}
@@ -2052,8 +2051,7 @@ void driver::reduce_universe(const elem &var, const raw_term &rt,
 
 void driver::reduce_universe(const elem &var,
 		const std::vector<std::vector<raw_term>> &disj,
-		std::set<elem> &universe,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database) {
+		std::set<elem> &universe, idatabase &database) {
 	if(!disj.empty()) {
 		std::set<elem> universe_copy = universe;
 		universe = {};
@@ -2070,8 +2068,7 @@ void driver::reduce_universe(const elem &var,
  * impossible. */
 
 void driver::reduce_universe(const elem &var, const raw_rule &rul,
-		std::set<elem> &universe,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database) {
+		std::set<elem> &universe, idatabase &database) {
 	reduce_universe(var, rul.b, universe, database);
 }
 
@@ -2081,7 +2078,7 @@ void driver::reduce_universe(const elem &var, const raw_rule &rul,
 
 void driver::populate_universes(const raw_rule &rul,
 		std::set<elem> &universe, std::map<elem, std::set<elem>> &universes,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database) {
+		idatabase &database) {
 	const std::set<elem> &free_vars = collect_free_vars(rul);
 	for(const elem &elt : free_vars) {
 		std::set<elem> universe2 = universe;
@@ -2093,8 +2090,8 @@ void driver::populate_universes(const raw_rule &rul,
 /* Evaluate the given logical term over the given database in the context
  * of the given bindings and return whether it is true or false. */
 
-bool driver::evaluate_term(const raw_term &query, std::map<elem, elem> &bindings,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database) {
+bool driver::evaluate_term(const raw_term &query,
+		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database) {
 	if(query.extype == raw_term::REL) {
 		raw_term query_substituted = query;
 		query_substituted.neg = false;
@@ -2103,7 +2100,7 @@ bool driver::evaluate_term(const raw_term &query, std::map<elem, elem> &bindings
 				query_substituted.e[i] = bindings[query.e[i]];
 			}
 		}
-		std::set<raw_term> tab = database[get_relation_info(query)];
+		raw_terms tab = database[get_relation_info(query)];
 		if(tab.find(query_substituted) != tab.end()) {
 			return !query.neg;
 		} else {
@@ -2124,8 +2121,7 @@ bool driver::evaluate_term(const raw_term &query, std::map<elem, elem> &bindings
  * quantification. */
 
 bool driver::evaluate_conjunction(const std::vector<raw_term> &conj,
-		std::map<elem, elem> &bindings,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database) {
+		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database) {
 	bool succ = true;
 	for(const raw_term &t : conj) {
 		succ &= evaluate_term(t, bindings, database);
@@ -2134,8 +2130,7 @@ bool driver::evaluate_conjunction(const std::vector<raw_term> &conj,
 }
 
 bool driver::evaluate_disjunction(const std::vector<std::vector<raw_term>> &disj,
-		std::map<elem, elem> &bindings,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database) {
+		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database) {
 	if(disj.empty()) {
 		return true;
 	} else {
@@ -2152,9 +2147,8 @@ bool driver::evaluate_disjunction(const std::vector<std::vector<raw_term>> &disj
 
 void driver::interpret_rule(size_t hd_idx, std::set<elem> &free_vars,
 		const raw_rule &rul, const std::map<elem, std::set<elem>> &universes,
-		std::map<elem, elem> &bindings,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &next_database) {
+		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database,
+		idatabase &next_database) {
 	const raw_term &head = rul.h[hd_idx];
 	if(!free_vars.empty()) {
 		const elem var = *free_vars.begin();
@@ -2212,7 +2206,7 @@ void driver::populate_universe(const raw_prog &rp,
 	}
 }
 
-void driver::print_database(const std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database) {
+void driver::print_database(const idatabase &database) {
 	for(const auto &[ri, tab] : database) {
 		for(const raw_term &entry : tab) {
 			std::cout << entry << "." << std::endl;
@@ -2221,10 +2215,10 @@ void driver::print_database(const std::map<std::tuple<elem, int_t>, std::set<raw
 }
 
 void driver::naive_pfp(const raw_prog &rp, std::set<elem> &universe,
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database) {
+		idatabase &database) {
 	populate_universe(rp, universe);
-	std::map<std::tuple<elem, int_t>, std::set<raw_term>> prev_database;
-	std::vector<std::map<std::tuple<elem, int_t>, std::set<raw_term>>> stages;
+	idatabase prev_database;
+	std::vector<idatabase> stages;
 	// Interpret program
 	do {
 		std::cout << "Step:" << std::endl;
@@ -2236,7 +2230,7 @@ void driver::naive_pfp(const raw_prog &rp, std::set<elem> &universe,
 			for(size_t hd_idx = 0; hd_idx < rr.h.size(); hd_idx++) {
 				std::map<elem, std::set<elem>> universes;
 				populate_universes(rr, universe, universes, prev_database);
-				std::map<elem, elem> bindings;
+				std::unordered_map<elem, elem, elem_hash> bindings;
 				std::set<elem> free_vars = collect_free_vars(rr);
 				interpret_rule(hd_idx, free_vars, rr, universes, bindings, prev_database, database);
 			}
@@ -2299,7 +2293,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		});
 		std::cout << "Step Transformed Program:" << std::endl << std::endl << rp << std::endl;
 		std::set<elem> universe;
-		std::map<std::tuple<elem, int_t>, std::set<raw_term>> database;
+		idatabase database;
 		naive_pfp(rp, universe, database);
 		std::cout << "Fixed Point:" << std::endl << std::endl;
 		print_database(database);

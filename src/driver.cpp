@@ -2096,20 +2096,19 @@ void driver::populate_universes(const raw_rule &rul,
 bool driver::evaluate_term(const raw_term &query, std::map<elem, elem> &bindings,
 		std::map<std::tuple<elem, int_t>, std::set<raw_term>> &database) {
 	if(query.extype == raw_term::REL) {
-		for(const raw_term &entry : database[get_relation_info(query)]) {
-			if(query.extype == raw_term::REL) {
-				bool match = true;
-				for(size_t i = 0; i < query.e.size(); i++) {
-					if(!((query.e[i].type == elem::VAR && bindings[query.e[i]] == entry.e[i]) ||
-							query.e[i] == entry.e[i])) {
-						match = false;
-						break;
-					} 
-				}
-				if(match) return !query.neg;
+		raw_term query_substituted = query;
+		query_substituted.neg = false;
+		for(size_t i = 0; i < query.e.size(); i++) {
+			if(query.e[i].type == elem::VAR) {
+				query_substituted.e[i] = bindings[query.e[i]];
 			}
 		}
-		return query.neg;
+		std::set<raw_term> tab = database[get_relation_info(query)];
+		if(tab.find(query_substituted) != tab.end()) {
+			return !query.neg;
+		} else {
+			return query.neg;
+		}
 	} else if(query.extype == raw_term::EQ) {
 		elem lhs = query.e[0], rhs = query.e[2];
 		if(lhs.type == elem::VAR) lhs = bindings[lhs];

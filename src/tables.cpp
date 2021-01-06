@@ -1522,10 +1522,8 @@ void tables::get_rules(flat_prog p) {
 				get_alt(al, t, as);
 
 		for (alt x : as)
-			if ((ait = alts.find(&x)) != alts.end())
-				r.push_back(*ait);
-			else	*(aa = new alt) = x,
-				r.push_back(aa), alts.insert(aa);
+			*(aa = new alt) = x,
+			r.push_back(aa), alts.insert(aa);
 		rs.insert(r);
 	}
 	for (rule r : rs)

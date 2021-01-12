@@ -108,19 +108,6 @@ class driver {
 	void transform_proofs(raw_prog& r, const lexeme& rel);
 //	void transform_string(const sysstring_t&, raw_prog&, int_t);
 	void transform_grammar(raw_prog& r, lexeme rel, size_t len);
-	void generate_binary_eval(raw_prog &rp, const int_t qtype,
-		const elem::etype &eltype, const elem &quote_sym,
-		const elem &und_sym, const elem &aux_rel, const elem &fv_rel,
-		const std::vector<elem> &iparams, const std::vector<elem> &qparams);
-	void generate_quantified_eval(raw_prog &rp, const int_t qtype,
-		const elem::etype &eltype, const elem &quote_sym, const elem &aux_rel,
-		const elem &fv_rel, const std::vector<elem> &iparams,
-		const std::vector<elem> &qparams);
-	void generate_rule_eval(raw_prog &rp, bool neg, const elem &out_rel,
-		const elem &quote_sym, const elem &aux_rel, const elem &fs_rel,
-		const elem &fv_rel, const std::vector<elem> &iparams,
-		const std::vector<elem> &qparams, const std::vector<elem> &iargs,
-		const std::vector<elem> &qargs);
 	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
 	sprawformtree inline_rule(const raw_term &rt1, const raw_term &rt2,
@@ -151,13 +138,13 @@ class driver {
 	elem quote_elem(const elem &e, std::map<elem, elem> &variables,
 		dict_t &d);
 	elem quote_term(const raw_term &head, const elem &rel_name,
-		raw_prog &rp, std::map<elem, elem> &variables);
+		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables);
 	elem quote_formula(const sprawformtree &t, const elem &rel_name,
-		raw_prog &rp, std::map<elem, elem> &variables);
+		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables);
 	std::vector<elem> quote_rule(const raw_rule &rr, const elem &rel_name,
-		raw_prog &rp, std::map<elem, elem> &variables);
+		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables);
 	void quote_prog(const raw_prog nrp, const elem &rel_name,
-		raw_prog &rp);
+		const elem &domain_name, raw_prog &rp);
 	raw_term to_pure_tml(const sprawformtree &t, std::vector<raw_rule> &rp,
 		const std::set<elem> &fv);
 	void collect_positive_vars(const raw_rule &rr, std::set<elem> &vars);

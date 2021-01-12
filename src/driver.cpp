@@ -2072,6 +2072,7 @@ string_t driver::generate_cpp(const raw_term &rt, string_t &prog_constr, uint_t 
 	for(const string_t &en : elem_names) {
 		prog_constr += rt_name + to_string_t(".e.push_back(") + en + to_string_t(");\n");
 	}
+	prog_constr += rt_name + to_string_t(".calc_arity(nullptr);\n");
 	return rt_name;
 }
 

@@ -194,6 +194,11 @@ class driver {
 		const elem &rva);
 	void subsume_queries(raw_prog &rp);
 	void print_database(const idatabase &database);
+	string_t generate_cpp(const elem &e, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
+	string_t generate_cpp(const raw_term &rt, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
+	string_t generate_cpp(const sprawformtree &prft, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
+	string_t generate_cpp(const raw_rule &rr, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
+	string_t generate_cpp(const raw_prog &rp, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
 	bool evaluate_conjunction(const std::vector<raw_term> &conj,
 		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database);
 	bool evaluate_disjunction(const std::vector<std::vector<raw_term>> &disj,

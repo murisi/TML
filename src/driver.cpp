@@ -2007,6 +2007,154 @@ void driver::collect_free_vars(const sprawformtree &t,
 	}
 }
 
+string_t driver::generate_cpp(const elem &e, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache) {
+	if(elem_cache.find(e) != elem_cache.end()) {
+		return elem_cache[e];
+	}
+	string_t e_name = to_string_t("e") + to_string_t(std::to_string(cid++).c_str());
+	elem_cache[e] = e_name;
+	prog_constr += to_string_t("elem ") + e_name + to_string_t(";\n");
+	prog_constr += e_name + to_string_t(".type = ") + to_string_t(
+		e.type == elem::NONE ? "elem::NONE" :
+		e.type == elem::SYM ? "elem::SYM" :
+		e.type == elem::NUM ? "elem::NUM" :
+		e.type == elem::CHR ? "elem::CHR" :
+		e.type == elem::VAR ? "elem::VAR" :
+		e.type == elem::OPENP ? "elem::OPENP" :
+		e.type == elem::CLOSEP ? "elem::CLOSEP" :
+		e.type == elem::ALT ? "elem::ALT" :
+		e.type == elem::STR ? "elem::STR" :
+		e.type == elem::EQ ? "elem::EQ" :
+		e.type == elem::NEQ ? "elem::NEQ" :
+		e.type == elem::LEQ ? "elem::LEQ" :
+		e.type == elem::GT ? "elem::GT" :
+		e.type == elem::LT ? "elem::LT" :
+		e.type == elem::GEQ ? "elem::GEQ" :
+		e.type == elem::BLTIN ? "elem::BLTIN" :
+		e.type == elem::NOT ? "elem::NOT" :
+		e.type == elem::AND ? "elem::AND" :
+		e.type == elem::OR ? "elem::OR" :
+		e.type == elem::FORALL ? "elem::FORALL" :
+		e.type == elem::EXISTS ? "elem::EXISTS" :
+		e.type == elem::UNIQUE ? "elem::UNIQUE" :
+		e.type == elem::IMPLIES ? "elem::IMPLIES" :
+		e.type == elem::COIMPLIES ? "elem::COIMPLIES" :
+		e.type == elem::ARITH ? "elem::ARITH" :
+		e.type == elem::OPENB ? "elem::OPENB" :
+		e.type == elem::CLOSEB ? "elem::CLOSEB" :
+		e.type == elem::OPENSB ? "elem::OPENSB" :
+		e.type == elem::CLOSESB ? "elem::CLOSESB" : "") + to_string_t(";\n");
+	if(e.type == elem::CHR) {
+		prog_constr += e_name + to_string_t(".ch = ") + to_string_t(std::to_string(e.ch).c_str()) + to_string_t(";\n");
+	} else if(e.type == elem::NUM) {
+		prog_constr += e_name + to_string_t(".num = ") + to_string_t(std::to_string(e.num).c_str()) + to_string_t(";\n");
+	} else {
+		prog_constr += e_name + to_string_t(".e = d.get_lexeme(\"") + lexeme2str(e.e) + to_string_t("\");\n");
+	}
+	return e_name;
+}
+
+string_t driver::generate_cpp(const raw_term &rt, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache) {
+	std::vector<string_t> elem_names;
+	for(const elem &e : rt.e) {
+		elem_names.push_back(generate_cpp(e, prog_constr, cid, dict_name, elem_cache));
+	}
+	string_t rt_name = to_string_t("rt") + to_string_t(std::to_string(cid++).c_str());
+	prog_constr += to_string_t("raw_term ") + rt_name + to_string_t(";\n");
+	prog_constr += rt_name + to_string_t(".neg = ") + to_string_t(rt.neg ? "true" : "false") + to_string_t(";\n");
+	prog_constr += rt_name + to_string_t(".extype = ") + to_string_t(
+		rt.extype == raw_term::REL ? "raw_term::REL" :
+		rt.extype == raw_term::EQ ? "raw_term::EQ" :
+		rt.extype == raw_term::LEQ ? "raw_term::LEQ" :
+		rt.extype == raw_term::BLTIN ? "raw_term::BLTIN" :
+		rt.extype == raw_term::ARITH ? "raw_term::ARITH" :
+		rt.extype == raw_term::CONSTRAINT ? "raw_term::CONSTRAINT" : "") + to_string_t(";\n");
+	for(const string_t &en : elem_names) {
+		prog_constr += rt_name + to_string_t(".e.push_back(") + en + to_string_t(");\n");
+	}
+	return rt_name;
+}
+
+string_t driver::generate_cpp(const sprawformtree &t, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache) {
+	string_t ft_name = to_string_t("ft") + to_string_t(std::to_string(cid++).c_str());
+	switch(t->type) {
+		case elem::IMPLIES: case elem::COIMPLIES: case elem::AND:
+		case elem::ALT: case elem::EXISTS: case elem::UNIQUE:
+		case elem::FORALL: {
+			string_t lft_name =
+				generate_cpp(t->l, prog_constr, cid, dict_name, elem_cache);
+			string_t rft_name = generate_cpp(t->r, prog_constr, cid, dict_name,
+				elem_cache);
+			string_t t_string = to_string_t(
+				t->type == elem::IMPLIES ? "elem::IMPLIES" :
+				t->type == elem::COIMPLIES ? "elem::COIMPLIES" :
+				t->type == elem::AND ? "elem::AND" :
+				t->type == elem::ALT ? "elem::ALT" :
+				t->type == elem::EXISTS ? "elem::EXISTS" :
+				t->type == elem::UNIQUE ? "elem::UNIQUE" :
+				t->type == elem::FORALL ? "elem::FORALL" : "");
+			prog_constr += to_string_t("sprawformtree ") + ft_name + to_string_t(" = "
+				"std::make_shared<raw_form_tree>(") + t_string + to_string_t(", ") +
+				lft_name + to_string_t(", ") + rft_name + to_string_t(");\n");
+			break;
+		} case elem::NOT: {
+			string_t body_name = generate_cpp(t->l, prog_constr, cid, dict_name,
+				elem_cache);
+			prog_constr += to_string_t("sprawformtree ") + ft_name + to_string_t(" = "
+				"std::make_shared<raw_form_tree>(elem::NOT, ") +
+				body_name + to_string_t(");\n");
+			break;
+		} case elem::NONE: {
+			string_t term_name = generate_cpp(*t->rt, prog_constr, cid, dict_name,
+				elem_cache);
+			prog_constr += to_string_t("sprawformtree ") + ft_name + to_string_t(" = "
+				"std::make_shared<raw_form_tree>(elem::NONE, ") +
+				term_name + to_string_t(");\n");
+			break;
+		} case elem::VAR: {
+			string_t var_name = generate_cpp(*t->el, prog_constr, cid, dict_name,
+				elem_cache);
+			prog_constr += to_string_t("sprawformtree ") + ft_name + to_string_t(" = "
+				"std::make_shared<raw_form_tree>(elem::VAR, ") +
+				var_name + to_string_t(");\n");
+			break;
+		} default:
+			assert(false); //should never reach here
+	}
+	return ft_name;
+}
+
+string_t driver::generate_cpp(const raw_rule &rr, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache) {
+	std::vector<string_t> term_names;
+	for(const raw_term &rt : rr.h) {
+		term_names.push_back(
+			generate_cpp(rt, prog_constr, cid, dict_name, elem_cache));
+	}
+	string_t prft_name =
+		generate_cpp(rr.get_prft(), prog_constr, cid, dict_name, elem_cache);
+	string_t rule_name = to_string_t("rr") + to_string_t(std::to_string(cid++).c_str());
+	prog_constr += to_string_t("raw_rule ") + rule_name + to_string_t(";\n");
+	for(const string_t &tn : term_names) {
+		prog_constr += rule_name + to_string_t(".h.push_back(") + tn + to_string_t(");\n");
+	}
+	prog_constr += rule_name + to_string_t(".set_prft(") + prft_name + to_string_t(");\n");
+	return rule_name;
+}
+
+string_t driver::generate_cpp(const raw_prog &rp, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache) {
+	std::vector<string_t> rule_names;
+	for(const raw_rule &rr : rp.r) {
+		rule_names.push_back(
+			generate_cpp(rr, prog_constr, cid, dict_name, elem_cache));
+	}
+	string_t prog_name = to_string_t("rp") + to_string_t(std::to_string(cid++).c_str());
+	prog_constr += to_string_t("raw_prog ") + prog_name + to_string_t(";\n");
+	for(const string_t &rn : rule_names) {
+		prog_constr += prog_name + to_string_t(".r.push_back(") + rn + to_string_t(");\n");
+	}
+	return prog_name;
+}
+
 /* Reduce the size of the universe that the given variable takes its values from
  * by statically analyzing the term and determining what is impossible. */
 
@@ -2275,6 +2423,12 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	static std::set<raw_prog *> transformed_progs;
 	if(transformed_progs.find(&rp) == transformed_progs.end()) {
 		transformed_progs.insert(&rp);
+		std::cout << "Program Generator:" << std::endl << std::endl;
+		uint_t cid = 0;
+		string_t rp_generator;
+		std::map<elem, string_t> elem_cache;
+		generate_cpp(rp, rp_generator, cid, to_string_t("d"), elem_cache);
+		std::cout << to_string(rp_generator) << std::endl << std::endl;
 		simplify_formulas(rp);
 		std::cout << "Simplified Program:" << std::endl << std::endl << rp << std::endl;
 		transform_quotes(rp);
@@ -2294,9 +2448,9 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		std::cout << "Step Transformed Program:" << std::endl << std::endl << rp << std::endl;
 		std::set<elem> universe;
 		idatabase database;
-		naive_pfp(rp, universe, database);
-		std::cout << "Fixed Point:" << std::endl << std::endl;
-		print_database(database);
+		//naive_pfp(rp, universe, database);
+		//std::cout << "Fixed Point:" << std::endl << std::endl;
+		//print_database(database);
 	}
 	std::cout << std::endl << std::endl;
 #ifdef TRANSFORM_BIN_DRIVER

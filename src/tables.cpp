@@ -1528,9 +1528,7 @@ void tables::get_rules(flat_prog p) {
 				get_alt(al, t, as);
 
 		for (alt x : as)
-			if ((ait = alts.find(&x)) != alts.end())
-				r.push_back(*ait);
-			else	*(aa = new alt) = x,
+			*(aa = new alt) = x,
 				r.push_back(aa), alts.insert(aa);
 		rs.insert(r);
 	}
@@ -2865,7 +2863,7 @@ bool tables::pfp(size_t nsteps, size_t break_on_step) {
 			// the partial levels are constant.
 			for(int_t i = levels.size() - 2; levels[i] != last_level; i--) {
 				if(plevels[i] != last_plevel) {
-					return infloop_detected();
+					return true || infloop_detected();
 				}
 			}
 			return true;

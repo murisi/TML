@@ -16,7 +16,6 @@
 # CONS(<id>).
 
 # The quoted program has the following schema:
-# QUOTE(VAR <var name>)
 # QUOTE(RULE <id> <head id> <body id>).
 # QUOTE(TERM <id> <name> <arg list id> <var indicator list id>).
 # QUOTE(EQUALS <id> <param1 name> <param2 name>).
@@ -468,15 +467,16 @@ FORMULA_OUT(?id ?as ?bs) :-
 # Interprets EQUALS
 
 FORMULA_OUT(?id ?as ?bs) :-
-  QUOTE(EQUALS ?id ?a1 ?a2) &&
-  {?b1=?b2} &&
+  QUOTE(EQUALS ?id ?a1 ?a2 ?c1 ?c2) &&
   LIST(?as ?a1 ?a2) &&
+  LIST(?cs ?c1 ?c2) &&
   LIST(?bs ?b1 ?b2) &&
-  FIX_SYMS(?as ?bs) &&
+  FIX_SYMS(?as ?cs ?bs) &&
+  {?b1=?b2} &&
   EXECUTE().
 
 FORMULA_DONE(?id ?as) :-
-  QUOTE(EQUALS ?id ?a1 ?a2) &&
+  QUOTE(EQUALS ?id ?a1 ?a2 ?c1 ?c2) &&
   LIST(?as ?a1 ?a2) &&
   EXECUTE().
 

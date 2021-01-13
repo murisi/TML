@@ -34,7 +34,7 @@ typedef std::pair<std::set<raw_term>, var_subs> terms_hom;
 typedef std::tuple<elem, int_t> rel_info;
 typedef std::map<rel_info, raw_terms> idatabase;
 
-#define QVARS 0
+#define QTRUE 0
 #define QRULE 1
 #define QTERM 2
 #define QEQUALS 3
@@ -137,12 +137,13 @@ class driver {
 	void simplify_formulas(raw_prog &rp);
 	elem quote_elem(const elem &e, std::map<elem, elem> &variables,
 		dict_t &d);
+	elem numeric_quote_elem(const elem &e, std::map<elem, elem> &variables);
 	elem quote_term(const raw_term &head, const elem &rel_name,
 		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables);
 	elem quote_formula(const sprawformtree &t, const elem &rel_name,
 		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables);
 	std::vector<elem> quote_rule(const raw_rule &rr, const elem &rel_name,
-		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables);
+		const elem &domain_name, raw_prog &rp);
 	void quote_prog(const raw_prog nrp, const elem &rel_name,
 		const elem &domain_name, raw_prog &rp);
 	raw_term to_pure_tml(const sprawformtree &t, std::vector<raw_rule> &rp,

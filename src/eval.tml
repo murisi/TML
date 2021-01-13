@@ -18,7 +18,7 @@
 # The quoted program has the following schema:
 # QUOTE(VAR <var name>)
 # QUOTE(RULE <id> <head id> <body id>).
-# QUOTE(TERM <id> <name> <arg list id>).
+# QUOTE(TERM <id> <name> <arg list id> <var indicator list id>).
 # QUOTE(EQUALS <id> <param1 name> <param2 name>).
 # QUOTE(FORALL <id> <var name> <body id>).
 # QUOTE(EXISTS <id> <var name> <body id>).
@@ -32,7 +32,7 @@
 
 # Does the given ID refer to a formula node?
 
-FORMULA_NODE(?id) :- QUOTE(TERM ?id).
+FORMULA_NODE(?id) :- QUOTE(TERM ?id ?nm ?args ?vars).
 FORMULA_NODE(?id) :- QUOTE(EQUALS ?id ?p1 ?p2).
 FORMULA_NODE(?id) :- QUOTE(AND ?id ?b1 ?b2).
 FORMULA_NODE(?id) :- QUOTE(OR ?id ?b1 ?b2).
@@ -81,8 +81,6 @@ COUNTDOWN6() :- COUNTDOWN5().
 
 EXECUTE() :- COUNTDOWN5() && ~COUNTDOWN6().
 
-LST(?a ?b ?c) :- CONS(?a ?b ?c).
-
 # Domain of the quoted program
 
 DOMAIN(?x) :- CONS(?w ?x ?y).
@@ -91,141 +89,72 @@ DOMAIN(?x) :- CONS(?w ?x ?y).
 
 # Get list specified by given elements
 
-LIST_CONS(?id) :- CONS(?id).
+LIST(?id) :- CONS(?id).
 
-LIST_CONS(?id ?a) :-
+LIST(?id ?a) :-
   CONS(?id ?a ?rst) &&
-  LIST_CONS(?rst).
+  LIST(?rst).
 
-LIST_CONS(?id ?a ?b) :-
+LIST(?id ?a ?b) :-
   CONS(?id ?a ?rst) &&
-  LIST_CONS(?rst ?b).
+  LIST(?rst ?b).
 
-LIST_CONS(?id ?a ?b ?c) :-
+LIST(?id ?a ?b ?c) :-
   CONS(?id ?a ?rst) &&
-  LIST_CONS(?rst ?b ?c).
+  LIST(?rst ?b ?c).
 
-LIST_CONS(?id ?a ?b ?c ?d) :-
+LIST(?id ?a ?b ?c ?d) :-
   CONS(?id ?a ?rst) &&
-  LIST_CONS(?rst ?b ?c ?d).
-
-# Get list specified by given elements
-
-LIST_LST(?id) :- LST(?id).
-
-LIST_LST(?id ?a) :-
-  LST(?id ?a ?rst) &&
-  LIST_LST(?rst).
-
-LIST_LST(?id ?a ?b) :-
-  LST(?id ?a ?rst) &&
-  LIST_LST(?rst ?b).
-
-LIST_LST(?id ?a ?b ?c) :-
-  LST(?id ?a ?rst) &&
-  LIST_LST(?rst ?b ?c).
-
-LIST_LST(?id ?a ?b ?c ?d) :-
-  LST(?id ?a ?rst) &&
-  LIST_LST(?rst ?b ?c ?d).
+  LIST(?rst ?b ?c ?d).
 
 # Get list corresponding to the one obtained from reversing ?cs and
-# appending ?bs: DO_RAPPEND_CONS(?xs ?ys) -> RAPPEND_CONS(?xs ?ys ?zs)
+# appending ?bs: DO_RAPPEND(?xs ?ys) -> RAPPEND(?xs ?ys ?zs)
 
-DO_RAPPEND0_CONS(?xs ?ys ?xs ?ys) :-
-  DO_RAPPEND_CONS(?xs ?ys) &&
-  ~{exists ?cs {RAPPEND_CONS(?cs ?xs ?ys)}}.
+DO_RAPPEND0(?xs ?ys ?xs ?ys) :-
+  DO_RAPPEND(?xs ?ys) &&
+  ~{exists ?cs {RAPPEND(?cs ?xs ?ys)}}.
 
-DO_RAPPEND0_CONS(?oxs ?oys ?xs_tl ?ys) :-
-  DO_RAPPEND0_CONS(?oxs ?oys ?xs ?ys_tl) &&
+DO_RAPPEND0(?oxs ?oys ?xs_tl ?ys) :-
+  DO_RAPPEND0(?oxs ?oys ?xs ?ys_tl) &&
   CONS(?xs ?xs_hd ?xs_tl) &&
   CONS(?ys ?xs_hd ?ys_tl) &&
-  ~{exists ?cs {RAPPEND_CONS(?cs ?oxs ?oys)}}.
+  ~{exists ?cs {RAPPEND(?cs ?oxs ?oys)}}.
 
-RAPPEND_CONS(?zs ?xs ?ys) :-
-  DO_RAPPEND0_CONS(?xs ?ys ?as ?zs) &&
+RAPPEND(?zs ?xs ?ys) :-
+  DO_RAPPEND0(?xs ?ys ?as ?zs) &&
   CONS(?as) &&
-  ~{exists ?cs {RAPPEND_CONS(?cs ?xs ?ys)}}.
+  ~{exists ?cs {RAPPEND(?cs ?xs ?ys)}}.
 
-~DO_RAPPEND0_CONS(?oxs ?oys ?xs ?ys) :-
-  RAPPEND_CONS(?cs ?oxs ?oys).
+~DO_RAPPEND0(?oxs ?oys ?xs ?ys) :-
+  RAPPEND(?cs ?oxs ?oys).
 
-# Get list corresponding to the one obtained from reversing ?cs and
-# appending ?bs: DO_RAPPEND_LST(?xs ?ys) -> RAPPEND_LST(?xs ?ys ?zs)
-
-DO_RAPPEND0_LST(?xs ?ys ?xs ?ys) :-
-  DO_RAPPEND_LST(?xs ?ys) &&
-  ~{exists ?cs {RAPPEND_LST(?cs ?xs ?ys)}}.
-
-DO_RAPPEND0_LST(?oxs ?oys ?xs_tl ?ys) :-
-  DO_RAPPEND0_LST(?oxs ?oys ?xs ?ys_tl) &&
-  LST(?xs ?xs_hd ?xs_tl) &&
-  LST(?ys ?xs_hd ?ys_tl) &&
-  ~{exists ?cs {RAPPEND_LST(?cs ?oxs ?oys)}}.
-
-RAPPEND_LST(?zs ?xs ?ys) :-
-  DO_RAPPEND0_LST(?xs ?ys ?as ?zs) &&
-  LST(?as) &&
-  ~{exists ?cs {RAPPEND_LST(?cs ?xs ?ys)}}.
-
-~DO_RAPPEND0_LST(?oxs ?oys ?xs ?ys) :-
-  RAPPEND_LST(?cs ?oxs ?oys).
-
-# Reverse the given list DO_REVERSE_CONS(?xs) -> REVERSE_CONS(?xs ?ys) where ?ys
+# Reverse the given list DO_REVERSE(?xs) -> REVERSE(?xs ?ys) where ?ys
 # is reverse of ?xs.
 
 # Wrapper function
 
-DO_REVERSE_CONS(?bs ?as ?bs) :-
-  DO_REVERSE_CONS(?bs) &&
+DO_REVERSE(?bs ?as ?bs) :-
+  DO_REVERSE(?bs) &&
   CONS(?as) &&
-  ~{exists ?a {REVERSE_CONS(?bs ?a)}}.
+  ~{exists ?a {REVERSE(?bs ?a)}}.
 
 # Add one more element to the head of the reverse
 
-DO_REVERSE_CONS(?obs ?as ?bs) :-
+DO_REVERSE(?obs ?as ?bs) :-
   CONS(?as ?as_hd ?as_tl) &&
   CONS(?nbs ?as_hd ?bs) &&
-  DO_REVERSE_CONS(?obs ?as_tl ?nbs) &&
-  ~{exists ?a {REVERSE_CONS(?obs ?a)}}.
+  DO_REVERSE(?obs ?as_tl ?nbs) &&
+  ~{exists ?a {REVERSE(?obs ?a)}}.
 
 # Present the reverse
 
-REVERSE_CONS(?obs ?as) :-
-  DO_REVERSE_CONS(?obs ?as ?bs) &&
+REVERSE(?obs ?as) :-
+  DO_REVERSE(?obs ?as ?bs) &&
   CONS(?bs) &&
-  ~{exists ?a {REVERSE_CONS(?obs ?a)}}.
+  ~{exists ?a {REVERSE(?obs ?a)}}.
 
-~DO_REVERSE_CONS(?obs ?as ?bs) :-
-  REVERSE_CONS(?obs ?cs).
-
-# Reverse the given list DO_REVERSE_LST(?xs) -> REVERSE_LST(?xs ?ys) where ?ys
-# is reverse of ?xs.
-
-# Wrapper function
-
-DO_REVERSE_LST(?bs ?as ?bs) :-
-  DO_REVERSE_LST(?bs) &&
-  LST(?as) &&
-  ~{exists ?a {REVERSE_LST(?bs ?a)}}.
-
-# Add one more element to the head of the reverse
-
-DO_REVERSE_LST(?obs ?as ?bs) :-
-  LST(?as ?as_hd ?as_tl) &&
-  LST(?nbs ?as_hd ?bs) &&
-  DO_REVERSE_LST(?obs ?as_tl ?nbs) &&
-  ~{exists ?a {REVERSE_LST(?obs ?a)}}.
-
-# Present the reverse
-
-REVERSE_LST(?obs ?as) :-
-  DO_REVERSE_LST(?obs ?as ?bs) &&
-  LST(?bs) &&
-  ~{exists ?a {REVERSE_LST(?obs ?a)}}.
-
-~DO_REVERSE_LST(?obs ?as ?bs) :-
-  REVERSE_LST(?obs ?cs).
+~DO_REVERSE(?obs ?as ?bs) :-
+  REVERSE(?obs ?cs).
 
 # Associate the given list ASSOC(?xs ?ys ?x) -> ASSOC(?xs ?ys ?x ?y)
 # where ?y is associated with ?x in (?xs ?ys).
@@ -324,7 +253,7 @@ ASSOC_LIST0(?ots ?xs ?ys ?ts_tl ?nus) :-
 
 # Trigger the reversal of ?us
 
-DO_REVERSE_CONS(?us), ASSOC_LIST2(?ots ?xs ?ys ?ts ?us) :-
+DO_REVERSE(?us), ASSOC_LIST2(?ots ?xs ?ys ?ts ?us) :-
   ASSOC_LIST0(?ots ?xs ?ys ?ts ?us) &&
   CONS(?ts) &&
   ~{exists ?a {ASSOC_LIST(?xs ?ys ?ots ?a)}}.
@@ -333,7 +262,7 @@ DO_REVERSE_CONS(?us), ASSOC_LIST2(?ots ?xs ?ys ?ts ?us) :-
 
 ASSOC_LIST(?xs ?ys ?ots ?nus) :-
   ASSOC_LIST2(?ots ?xs ?ys ?ts ?us) &&
-  REVERSE_CONS(?us ?nus) &&
+  REVERSE(?us ?nus) &&
   CONS(?ts) &&
   ~{exists ?a {ASSOC_LIST(?xs ?ys ?ots ?a)}}.
 
@@ -354,7 +283,7 @@ IS_CONSISTENT0(?xs ?ys ?xs ?ys ?x ?y) :-
 # If the association is first in dictionary, then continue
 
 IS_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
-  LST(?xs ?x ?xs_tl) &&
+  CONS(?xs ?x ?xs_tl) &&
   CONS(?ys ?y ?ys_tl) &&
   IS_CONSISTENT0(?oxs ?oys ?xs ?ys ?x ?y) &&
   ~CONSISTENT(?oxs ?oys ?x ?y) &&
@@ -363,8 +292,8 @@ IS_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
 # If association's key is not first in dictionary, then move on
 
 IS_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
-  ~LST(?xs ?x ?xs_tl) &&
-  LST(?xs ?xs_hd ?xs_tl) &&
+  ~CONS(?xs ?x ?xs_tl) &&
+  CONS(?xs ?xs_hd ?xs_tl) &&
   CONS(?ys ?ys_hd ?ys_tl) &&
   IS_CONSISTENT0(?oxs ?oys ?xs ?ys ?x ?y) &&
   ~CONSISTENT(?oxs ?oys ?x ?y) &&
@@ -373,7 +302,7 @@ IS_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
 # If the inconsistent association is first in dictionary, then break
 
 NOT_CONSISTENT(?oxs ?oys ?x ?y) :-
-  LST(?xs ?x ?xs_tl) &&
+  CONS(?xs ?x ?xs_tl) &&
   ~CONS(?ys ?y ?ys_tl) &&
   CONS(?ys ?ay ?ys_tl) &&
   IS_CONSISTENT0(?oxs ?oys ?xs ?ys ?x ?y) &&
@@ -384,7 +313,7 @@ NOT_CONSISTENT(?oxs ?oys ?x ?y) :-
 
 CONSISTENT(?oxs ?oys ?x ?y) :-
   IS_CONSISTENT0(?oxs ?oys ?xs ?ys ?x ?y) &&
-  LST(?xs) &&
+  CONS(?xs) &&
   CONS(?ys) &&
   ~CONSISTENT(?oxs ?oys ?x ?y) &&
   ~NOT_CONSISTENT(?oxs ?oys ?x ?y).
@@ -407,7 +336,7 @@ IS_DICT_CONSISTENT0(?xs ?ys ?xs ?ys) :-
 
 IS_ASSOC_CONSISTENT(?xs_tl ?ys_tl ?x ?y), IS_DICT_CONSISTENT1(?oxs ?oys ?xs ?ys) :-
   IS_DICT_CONSISTENT0(?oxs ?oys ?xs ?ys) &&
-  LST(?xs ?x ?xs_tl) &&
+  CONS(?xs ?x ?xs_tl) &&
   CONS(?ys ?y ?ys_tl) &&
   ~DICT_CONSISTENT(?oxs ?oys) &&
   ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
@@ -418,7 +347,7 @@ IS_ASSOC_CONSISTENT(?xs_tl ?ys_tl ?x ?y), IS_DICT_CONSISTENT1(?oxs ?oys ?xs ?ys)
 IS_DICT_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl) :-
   CONSISTENT(?xs_tl ?ys_tl ?x ?y) &&
   IS_DICT_CONSISTENT1(?oxs ?oys ?xs ?ys) &&
-  LST(?xs ?x ?xs_tl) &&
+  CONS(?xs ?x ?xs_tl) &&
   CONS(?ys ?y ?ys_tl) &&
   ~DICT_CONSISTENT(?oxs ?oys) &&
   ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
@@ -428,7 +357,7 @@ IS_DICT_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl) :-
 NOT_DICT_CONSISTENT(?oxs ?oys ?xs_tl ?ys_tl) :-
   NOT_CONSISTENT(?xs_tl ?ys_tl ?x ?y) &&
   IS_DICT_CONSISTENT1(?oxs ?oys ?xs ?ys) &&
-  LST(?xs ?x ?xs_tl) &&
+  CONS(?xs ?x ?xs_tl) &&
   CONS(?ys ?y ?ys_tl) &&
   ~DICT_CONSISTENT(?oxs ?oys) &&
   ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
@@ -437,7 +366,7 @@ NOT_DICT_CONSISTENT(?oxs ?oys ?xs_tl ?ys_tl) :-
 
 DICT_CONSISTENT(?oxs ?oys) :-
   IS_DICT_CONSISTENT0(?oxs ?oys ?xs ?ys) &&
-  LST(?xs) &&
+  CONS(?xs) &&
   CONS(?ys) &&
   ~DICT_CONSISTENT(?oxs ?oys) &&
   ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
@@ -446,62 +375,64 @@ DICT_CONSISTENT(?oxs ?oys) :-
   DICT_CONSISTENT(?oxs ?oys) ||
   NOT_DICT_CONSISTENT(?oxs ?oys ?axs ?ays).
 
-# Fix the values associated with symbols DO_FIX_SYMS(?as) ->
-# FIX_SYMS(?as ?bs) where elements in ?bs corresponding to symbols in
-# ?as are fixed to the same value.
+# Fix the values associated with symbols DO_FIX_SYMS(?as ?bs) ->
+# FIX_SYMS(?as ?bs ?cs) where elements in ?cs corresponding to symbols
+# in ?as marked as representing symbols by ?bs are fixed to the same
+# value.
 
-DO_FIX_SYMS0(?as ?as ?bs) :-
-  DO_FIX_SYMS(?as) &&
-  CONS(?bs) &&
-  ~{exists ?a {FIX_SYMS(?as ?a)}}.
+DO_FIX_SYMS0(?as ?bs ?as ?bs ?cs) :-
+  DO_FIX_SYMS(?as ?bs) &&
+  CONS(?cs) &&
+  ~{exists ?a {FIX_SYMS(?as ?bs ?a)}}.
 
-DO_FIX_SYMS0(?oas ?as_tl ?bs) :-
-  DO_FIX_SYMS0(?oas ?as ?bs_tl) &&
-  LST(?as ?as_hd ?as_tl) &&
-  {{QUOTE(VARS ?as_hd) && DOMAIN(?bs_hd)} || {QUOTE(SYM ?as_hd) && ?as_hd=?bs_hd}} &&
-  CONS(?bs ?bs_hd ?bs_tl) &&
-  ~{exists ?a {FIX_SYMS(?oas ?a)}}.
+DO_FIX_SYMS0(?oas ?obs ?as_tl ?bs_tl ?cs) :-
+  DO_FIX_SYMS0(?oas ?obs ?as ?bs ?cs_tl) &&
+  CONS(?as ?as_hd ?as_tl) &&
+  {{CONS(?bs 1 ?bs_tl) && DOMAIN(?cs_hd)} ||
+  {CONS(?bs 0 ?bs_tl) && ?as_hd=?cs_hd}} &&
+  CONS(?cs ?cs_hd ?cs_tl) &&
+  ~{exists ?a {FIX_SYMS(?oas ?obs ?a)}}.
 
-DO_REVERSE_CONS(?bs), DO_FIX_SYMS1(?oas ?bs) :-
-  DO_FIX_SYMS0(?oas ?as ?bs) &&
-  LST(?as) &&
-  ~{exists ?a {FIX_SYMS(?oas ?a)}}.
+DO_REVERSE(?cs), DO_FIX_SYMS1(?oas ?obs ?cs) :-
+  DO_FIX_SYMS0(?oas ?obs ?as ?bs ?cs) &&
+  CONS(?as) &&
+  ~{exists ?a {FIX_SYMS(?oas ?obs ?a)}}.
 
-FIX_SYMS(?as ?bs) :-
-  DO_FIX_SYMS1(?as ?cs) &&
-  REVERSE_CONS(?cs ?bs).
+FIX_SYMS(?as ?ds ?bs) :-
+  DO_FIX_SYMS1(?as ?ds ?cs) &&
+  REVERSE(?cs ?bs).
 
-~DO_FIX_SYMS0(?oas ?as ?bs), ~DO_FIX_SYMS1(?oas ?bs) :-
-  FIX_SYMS(?oas ?a).
+~DO_FIX_SYMS0(?oas ?obs ?as ?bs ?cs), ~DO_FIX_SYMS1(?oas ?obs ?cs) :-
+  FIX_SYMS(?oas ?obs ?a).
 
 # Interpret RULE
 
 RULE_DONE(?id) :-
   QUOTE(RULE ?id ?e0 ?e1) &&
-  QUOTE(TERM ?e0 ?nm ?cs) &&
+  QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
   ~{exists ?as exists ?bs { FORMULA_OUT(?e1 ?as ?bs)}} &&
   COMMIT() && ~COMMIT2().
 
-ASSOC_LIST(?as ?bs ?cs), IS_DICT_CONSISTENT(?as ?bs), DO_FIX_SYMS(?cs) :-
+ASSOC_LIST(?as ?bs ?cs), IS_DICT_CONSISTENT(?as ?bs), DO_FIX_SYMS(?cs ?fs) :-
   QUOTE(RULE ?id ?e0 ?e1) &&
-  QUOTE(TERM ?e0 ?nm ?cs) &&
+  QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
   FORMULA_OUT(?e1 ?as ?bs) &&
   COMMIT() && ~COMMIT2().
 
 RULE_DONE(?id) :-
   QUOTE(RULE ?id ?e0 ?e1) &&
-  QUOTE(TERM ?e0 ?nm ?cs) &&
+  QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
   FORMULA_OUT(?e1 ?as ?bs) &&
   ASSOC_LIST(?as ?bs ?cs ?ds1) &&
-  FIX_SYMS(?cs ?ds2) &&
+  FIX_SYMS(?cs ?fs ?ds2) &&
   {DICT_CONSISTENT(?as ?bs) || NOT_DICT_CONSISTENT(?as ?bs)} &&
   COMMIT().
 
 RULE_OUT(?nm ?ds) :-
   QUOTE(RULE ?id ?e0 ?e1) &&
-  QUOTE(TERM ?e0 ?nm ?cs) &&
+  QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
   FORMULA_OUT(?e1 ?as ?bs) &&
-  FIX_SYMS(?cs ?ds) &&
+  FIX_SYMS(?cs ?fs ?ds) &&
   ASSOC_LIST(?as ?bs ?cs ?ds) &&
   DICT_CONSISTENT(?as ?bs) &&
   COMMIT().
@@ -519,19 +450,19 @@ RULE_OUT(?nm ?ds) :-
 
 # Interprets a TERM
 
-DO_FIX_SYMS(?as) :-
-  QUOTE(TERM ?id ?n ?as) &&
+DO_FIX_SYMS(?as ?bs) :-
+  QUOTE(TERM ?id ?n ?as ?bs) &&
   EXECUTE() && ~EXECUTE2().
 
 FORMULA_DONE(?id ?as) :-
-  QUOTE(TERM ?id ?n ?as) &&
-  FIX_SYMS(?as ?bs) &&
+  QUOTE(TERM ?id ?n ?as ?bs) &&
+  FIX_SYMS(?as ?bs ?cs) &&
   EXECUTE().
 
 FORMULA_OUT(?id ?as ?bs) :-
-  QUOTE(TERM ?id ?n ?as) &&
-  RULE_OUT(?n ?bs) &&
-  FIX_SYMS(?as ?bs) &&
+  QUOTE(TERM ?id ?n ?as ?bs) &&
+  RULE_OUT(?n ?cs) &&
+  FIX_SYMS(?as ?bs ?cs) &&
   EXECUTE().
 
 # Interprets EQUALS
@@ -539,14 +470,14 @@ FORMULA_OUT(?id ?as ?bs) :-
 FORMULA_OUT(?id ?as ?bs) :-
   QUOTE(EQUALS ?id ?a1 ?a2) &&
   {?b1=?b2} &&
-  LIST_LST(?as ?a1 ?a2) &&
-  LIST_CONS(?bs ?b1 ?b2) &&
+  LIST(?as ?a1 ?a2) &&
+  LIST(?bs ?b1 ?b2) &&
   FIX_SYMS(?as ?bs) &&
   EXECUTE().
 
 FORMULA_DONE(?id ?as) :-
   QUOTE(EQUALS ?id ?a1 ?a2) &&
-  LIST_LST(?as ?a1 ?a2) &&
+  LIST(?as ?a1 ?a2) &&
   EXECUTE().
 
 # Interprets TRUE
@@ -564,7 +495,7 @@ FORMULA_DONE(?id ?as) :-
 
 # Interpret AND
 
-DO_RAPPEND_LST(?as1 ?as2), DO_RAPPEND_CONS(?bs1 ?bs2) :-
+DO_RAPPEND(?as1 ?as2), DO_RAPPEND(?bs1 ?bs2) :-
   QUOTE(AND ?id ?e1 ?e2) &&
   {FORMULA_OUT(?e1 ?as1 ?bs1) &&
   FORMULA_OUT(?e2 ?as2 ?bs2)} &&
@@ -574,11 +505,11 @@ FORMULA_OUT(?id ?as ?bs) :-
   QUOTE(AND ?id ?e1 ?e2) &&
   {FORMULA_OUT(?e1 ?as1 ?bs1) &&
   FORMULA_OUT(?e2 ?as2 ?bs2)} &&
-  RAPPEND_LST(?as ?as1 ?as2) &&
-  RAPPEND_CONS(?bs ?bs1 ?bs2) &&
+  RAPPEND(?as ?as1 ?as2) &&
+  RAPPEND(?bs ?bs1 ?bs2) &&
   EXECUTE().
 
-DO_RAPPEND_LST(?as1 ?as2) :-
+DO_RAPPEND(?as1 ?as2) :-
   QUOTE(AND ?id ?e1 ?e2) &&
   FORMULA_DONE(?e1 ?as1) &&
   FORMULA_DONE(?e2 ?as2) &&
@@ -588,12 +519,12 @@ FORMULA_DONE(?id ?as) :-
   QUOTE(AND ?id ?e1 ?e2) &&
   FORMULA_DONE(?e1 ?as1) &&
   FORMULA_DONE(?e2 ?as2) &&
-  RAPPEND_LST(?as ?as1 ?as2) &&
+  RAPPEND(?as ?as1 ?as2) &&
   EXECUTE().
 
 # Interpret OR
 
-DO_RAPPEND_LST(?as1 ?as2), DO_RAPPEND_CONS(?bs1 ?bs2) :-
+DO_RAPPEND(?as1 ?as2), DO_RAPPEND(?bs1 ?bs2) :-
   QUOTE(OR ?id ?e1 ?e2) &&
   {FORMULA_OUT(?e1 ?as1 ?bs1) &&
   FORMULA_OUT(?e2 ?as2 ?bs2)} &&
@@ -603,11 +534,11 @@ FORMULA_OUT(?id ?as ?bs) :-
   QUOTE(OR ?id ?e1 ?e2) &&
   {FORMULA_OUT(?e1 ?as1 ?bs1) ||
   FORMULA_OUT(?e2 ?as2 ?bs2)} &&
-  RAPPEND_LST(?as ?as1 ?as2) &&
-  RAPPEND_CONS(?bs ?bs1 ?bs2) &&
+  RAPPEND(?as ?as1 ?as2) &&
+  RAPPEND(?bs ?bs1 ?bs2) &&
   EXECUTE().
 
-DO_RAPPEND_LST(?as1 ?as2) :-
+DO_RAPPEND(?as1 ?as2) :-
   QUOTE(OR ?id ?e1 ?e2) &&
   FORMULA_DONE(?e1 ?as1) &&
   FORMULA_DONE(?e2 ?as2) &&
@@ -617,7 +548,7 @@ FORMULA_DONE(?id ?as) :-
   QUOTE(OR ?id ?e1 ?e2) &&
   FORMULA_DONE(?e1 ?as1) &&
   FORMULA_DONE(?e2 ?as2) &&
-  RAPPEND_LST(?as ?as1 ?as2) &&
+  RAPPEND(?as ?as1 ?as2) &&
   EXECUTE().
 
 /*

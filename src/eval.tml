@@ -1,0 +1,691 @@
+# The rule r interprets the quoted program in q. The only constraint
+# on the quoted program is that the linked lists used by the interpreter
+# to interpret it and retrieve/store its results must be preallocated
+# and supplied to the interpreter in linked lists. That is, if a quoted
+# program uses the term "teaches(teacher student maths)." anywhere, then
+# the linked list teacher -> student -> maths -> [] must be preallocated
+# as "CONS(l3). CONS(l2 maths l3). CONS(l1 student l2).
+# CONS(l0 teacher l1).". The interpreter requires this domain input to
+# not arbitrarily limit rule arities. For a domain of size N and maximum
+# term arity of M occuring in the quoted program, around
+# N^0 + N^1 + N^2 + ... + N^M = (N^{M+1} - 1)/(N-1) preallocations will
+# be required.
+
+# Lists have the following schema:
+# CONS(<id> <head> <tail id>).
+# CONS(<id>).
+
+# The quoted program has the following schema:
+# QUOTE(VAR <var name>)
+# QUOTE(RULE <id> <head id> <body id>).
+# QUOTE(TERM <id> <name> <arg list id>).
+# QUOTE(EQUALS <id> <param1 name> <param2 name>).
+# QUOTE(FORALL <id> <var name> <body id>).
+# QUOTE(EXISTS <id> <var name> <body id>).
+# QUOTE(NOT <id> <body id>).
+# QUOTE(AND <id> <body1 id> <body2 id>).
+# QUOTE(OR <id> <body1 id> <body2 id>).
+# QUOTE(TRUE <id>).
+
+# The encoded database has the following schema:
+# RULE_OUT(<name> <arg list id>).
+
+# Does the given ID refer to a formula node?
+
+FORMULA_NODE(?id) :- QUOTE(TERM ?id).
+FORMULA_NODE(?id) :- QUOTE(EQUALS ?id ?p1 ?p2).
+FORMULA_NODE(?id) :- QUOTE(AND ?id ?b1 ?b2).
+FORMULA_NODE(?id) :- QUOTE(OR ?id ?b1 ?b2).
+FORMULA_NODE(?id) :- QUOTE(TRUE ?id).
+
+# Does the given ID refer to a rule node?
+
+RULE_NODE(?id) :- QUOTE(RULE ?id ?h ?b).
+
+# The execute phase executes a quoted program with inputs coming from
+# the non-temporary relation and stores the intermediate results in the
+# temporary relation. The COMMIT phase writes the intermediate results
+# stored in the temporary relation back to the non-temporary relation.
+
+# Transition from the execute to the COMMIT phase
+
+COMMIT(), ~EXECUTE(), ~RULE_DONE(?y) :- EXECUTE2() && ~COMMIT() && forall ?x { exists ?z { FORMULA_NODE(?x) -> FORMULA_DONE(?x ?z) }}.
+
+COMMIT2() :- COMMIT().
+
+~EXECUTE2() :- COMMIT().
+
+# Transition from the COMMIT to the execute phase.
+
+EXECUTE(), ~COMMIT(), ~FORMULA_DONE(?y) :- COMMIT2() && ~EXECUTE() && forall ?x { RULE_NODE(?x) -> RULE_DONE(?x) }.
+
+EXECUTE2() :- EXECUTE().
+
+~COMMIT2() :- EXECUTE().
+
+# Start the interpreter after the list initialization is done.
+
+COUNTDOWN0().
+
+COUNTDOWN1() :- COUNTDOWN0().
+
+COUNTDOWN2() :- COUNTDOWN1().
+
+COUNTDOWN3() :- COUNTDOWN2().
+
+COUNTDOWN4() :- COUNTDOWN3().
+
+COUNTDOWN5() :- COUNTDOWN4().
+
+COUNTDOWN6() :- COUNTDOWN5().
+
+EXECUTE() :- COUNTDOWN5() && ~COUNTDOWN6().
+
+# Domain of the quoted program
+
+DOMAIN(?x) :- CONS(?w ?x ?y).
+
+# List operations
+
+# Get list specified by given elements
+
+LIST(?id) :- CONS(?id).
+
+LIST(?id ?a) :-
+  CONS(?id ?a ?rst) &&
+  LIST(?rst).
+
+LIST(?id ?a ?b) :-
+  CONS(?id ?a ?rst) &&
+  LIST(?rst ?b).
+
+LIST(?id ?a ?b ?c) :-
+  CONS(?id ?a ?rst) &&
+  LIST(?rst ?b ?c).
+
+LIST(?id ?a ?b ?c ?d) :-
+  CONS(?id ?a ?rst) &&
+  LIST(?rst ?b ?c ?d).
+
+# Get list corresponding to the one obtained from reversing ?cs and
+# appending ?bs: DO_RAPPEND(?xs ?ys) -> RAPPEND(?xs ?ys ?zs)
+
+DO_RAPPEND0(?xs ?ys ?xs ?ys) :-
+  DO_RAPPEND(?xs ?ys) &&
+  ~{exists ?cs {RAPPEND(?cs ?xs ?ys)}}.
+
+DO_RAPPEND0(?oxs ?oys ?xs_tl ?ys) :-
+  DO_RAPPEND0(?oxs ?oys ?xs ?ys_tl) &&
+  CONS(?xs ?xs_hd ?xs_tl) &&
+  CONS(?ys ?xs_hd ?ys_tl) &&
+  ~{exists ?cs {RAPPEND(?cs ?oxs ?oys)}}.
+
+RAPPEND(?zs ?xs ?ys) :-
+  DO_RAPPEND0(?xs ?ys ?as ?zs) &&
+  CONS(?as) &&
+  ~{exists ?cs {RAPPEND(?cs ?xs ?ys)}}.
+
+~DO_RAPPEND0(?oxs ?oys ?xs ?ys) :-
+  RAPPEND(?cs ?oxs ?oys).
+
+# Reverse the given list DO_REVERSE(?xs) -> REVERSE(?xs ?ys) where ?ys
+# is reverse of ?xs.
+
+# Wrapper function
+
+DO_REVERSE(?bs ?as ?bs) :-
+  DO_REVERSE(?bs) &&
+  CONS(?as) &&
+  ~{exists ?a {REVERSE(?bs ?a)}}.
+
+# Add one more element to the head of the reverse
+
+DO_REVERSE(?obs ?as ?bs) :-
+  CONS(?as ?as_hd ?as_tl) &&
+  CONS(?nbs ?as_hd ?bs) &&
+  DO_REVERSE(?obs ?as_tl ?nbs) &&
+  ~{exists ?a {REVERSE(?obs ?a)}}.
+
+# Present the reverse
+
+REVERSE(?obs ?as) :-
+  DO_REVERSE(?obs ?as ?bs) &&
+  CONS(?bs) &&
+  ~{exists ?a {REVERSE(?obs ?a)}}.
+
+~DO_REVERSE(?obs ?as ?bs) :-
+  REVERSE(?obs ?cs).
+
+# Associate the given list ASSOC(?xs ?ys ?x) -> ASSOC(?xs ?ys ?x ?y)
+# where ?y is associated with ?x in (?xs ?ys).
+
+# Wrapper function
+
+ASSOC0(?xs ?ys ?xs ?ys ?x) :-
+  ASSOC(?xs ?ys ?x) &&
+  ~{exists ?y {ASSOC(?xs ?ys ?x ?y)}} &&
+  ~NO_ASSOC(?xs ?ys ?x).
+
+# If this is a match and there is no existing association, then add one
+
+ASSOC0(?oxs ?oys ?xs_tl ?ys_tl ?x ?yn) :-
+  CONS(?xs ?x ?xs_tl) &&
+  CONS(?ys ?yn ?ys_tl) &&
+  ASSOC0(?oxs ?oys ?xs ?ys ?x) &&
+  ~{exists ?y {ASSOC(?oxs ?oys ?x ?y)}} &&
+  ~NO_ASSOC(?oxs ?oys ?x).
+
+# If this is a match and there is an existing association, then remove it
+
+NO_ASSOC(?oxs ?oys ?x) :-
+  CONS(?xs ?x ?xs_tl) &&
+  CONS(?ys ?yn ?ys_tl) &&
+  ASSOC0(?oxs ?oys ?xs ?ys ?x ?y) &&
+  ~{exists ?y {ASSOC(?oxs ?oys ?x ?y)}} &&
+  ~NO_ASSOC(?oxs ?oys ?x).
+
+# If there is no match and there is no existing association, then continue
+
+ASSOC0(?oxs ?oys ?xs_tl ?ys_tl ?x) :-
+  CONS(?xs ?xn ?xs_tl) &&
+  CONS(?ys ?yn ?ys_tl) &&
+  ASSOC0(?oxs ?oys ?xs ?ys ?x) &&
+  {~?xn=?x} &&
+  ~{exists ?y {ASSOC(?oxs ?oys ?x ?y)}} &&
+  ~NO_ASSOC(?oxs ?oys ?x).
+
+# If there is no match and there is an existing association, then preserve
+
+ASSOC0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
+  CONS(?xs ?xn ?xs_tl) &&
+  CONS(?ys ?yn ?ys_tl) &&
+  ASSOC0(?oxs ?oys ?xs ?ys ?x ?y) &&
+  {~?xn=?x} &&
+  ~{exists ?y {ASSOC(?oxs ?oys ?x ?y)}} &&
+  ~NO_ASSOC(?oxs ?oys ?x).
+
+# Wrapper function
+
+ASSOC(?oxs ?oys ?x ?y) :-
+  ASSOC0(?oxs ?oys ?xs ?ys ?x ?y) &&
+  CONS(?xs) &&
+  CONS(?ys) &&
+  ~{exists ?y {ASSOC(?oxs ?oys ?x ?y)}} &&
+  ~NO_ASSOC(?oxs ?oys ?x).
+
+ASSOC(?oxs ?oys ?x ?y) :-
+  DOMAIN(?y) &&
+  ASSOC0(?oxs ?oys ?xs ?ys ?x) &&
+  CONS(?xs) &&
+  CONS(?ys) &&
+  ~{exists ?y {ASSOC(?oxs ?oys ?x ?y)}} &&
+  ~NO_ASSOC(?oxs ?oys ?x).
+
+~ASSOC0(?oxs ?oys ?xs ?ys ?x), ~ASSOC0(?oxs ?oys ?xs ?ys ?x ?y) :-
+  ASSOC(?oxs ?oys ?x ?a) ||
+  NO_ASSOC(?oxs ?oys ?x).
+
+# Multiple associate the given list ASSOC_LIST(?xs ?ys ?ts) ->
+# ASSOC_LIST(?xs ?ys ?ts ?us).
+
+# Move computations into auxilliary relation
+
+ASSOC_LIST0(?ts ?xs ?ys ?ts ?us) :-
+  ASSOC_LIST(?xs ?ys ?ts) &&
+  CONS(?us) &&
+  ~{exists ?a {ASSOC_LIST(?xs ?ys ?ts ?a)}}.
+
+# Determine what is associated with the first element of ?ts
+
+ASSOC(?xs ?ys ?ts_hd), ASSOC_LIST1(?ots ?xs ?ys ?ts ?us) :-
+  ASSOC_LIST0(?ots ?xs ?ys ?ts ?us) &&
+  CONS(?ts ?ts_hd ?ts_tl) &&
+  ~{exists ?a {ASSOC_LIST(?xs ?ys ?ots ?a)}}.
+
+# Add what is associated with first element of ?ts ?nus
+
+ASSOC_LIST0(?ots ?xs ?ys ?ts_tl ?nus) :-
+  ASSOC_LIST1(?ots ?xs ?ys ?ts ?us) &&
+  CONS(?ts ?ts_hd ?ts_tl) &&
+  ASSOC(?xs ?ys ?ts_hd ?nus_hd) &&
+  CONS(?nus ?nus_hd ?us) &&
+  ~{exists ?a {ASSOC_LIST(?xs ?ys ?ots ?a)}}.
+
+# Trigger the reversal of ?us
+
+DO_REVERSE(?us), ASSOC_LIST2(?ots ?xs ?ys ?ts ?us) :-
+  ASSOC_LIST0(?ots ?xs ?ys ?ts ?us) &&
+  CONS(?ts) &&
+  ~{exists ?a {ASSOC_LIST(?xs ?ys ?ots ?a)}}.
+
+# Move the result into the main relation
+
+ASSOC_LIST(?xs ?ys ?ots ?nus) :-
+  ASSOC_LIST2(?ots ?xs ?ys ?ts ?us) &&
+  REVERSE(?us ?nus) &&
+  CONS(?ts) &&
+  ~{exists ?a {ASSOC_LIST(?xs ?ys ?ots ?a)}}.
+
+~ASSOC_LIST0(?ots ?xs ?ys ?ts_tl ?nus), ~ASSOC_LIST1(?ots ?xs ?ys ?ts ?us), ~ASSOC_LIST2(?ots ?xs ?ys ?ts ?us) :-
+  ASSOC_LIST(?xs ?ys ?ots ?a).
+
+# Check if an association is consistent with a dictionary
+# IS_ASSOC_CONSISTENT(?xs ?ys ?x ?y) -> CONSISTENT(?xs ?ys ?x ?y) OR
+# NOT_CONSISTENT(?xs ?ys ?x ?y).
+
+# Wrapper function
+
+IS_CONSISTENT0(?xs ?ys ?xs ?ys ?x ?y) :-
+  IS_ASSOC_CONSISTENT(?xs ?ys ?x ?y) &&
+  ~CONSISTENT(?xs ?ys ?x ?y) &&
+  ~NOT_CONSISTENT(?xs ?ys ?x ?y).
+
+# If the association is first in dictionary, then continue
+
+IS_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
+  CONS(?xs ?x ?xs_tl) &&
+  CONS(?ys ?y ?ys_tl) &&
+  IS_CONSISTENT0(?oxs ?oys ?xs ?ys ?x ?y) &&
+  ~CONSISTENT(?oxs ?oys ?x ?y) &&
+  ~NOT_CONSISTENT(?oxs ?oys ?x ?y).
+
+# If association's key is not first in dictionary, then move on
+
+IS_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
+  ~CONS(?xs ?x ?xs_tl) &&
+  CONS(?xs ?xs_hd ?xs_tl) &&
+  CONS(?ys ?ys_hd ?ys_tl) &&
+  IS_CONSISTENT0(?oxs ?oys ?xs ?ys ?x ?y) &&
+  ~CONSISTENT(?oxs ?oys ?x ?y) &&
+  ~NOT_CONSISTENT(?oxs ?oys ?x ?y).
+
+# If the inconsistent association is first in dictionary, then break
+
+NOT_CONSISTENT(?oxs ?oys ?x ?y) :-
+  CONS(?xs ?x ?xs_tl) &&
+  ~CONS(?ys ?y ?ys_tl) &&
+  CONS(?ys ?ay ?ys_tl) &&
+  IS_CONSISTENT0(?oxs ?oys ?xs ?ys ?x ?y) &&
+  ~CONSISTENT(?oxs ?oys ?x ?y) &&
+  ~NOT_CONSISTENT(?oxs ?oys ?x ?y).
+
+# If the lists are empty, then the association is trivially consistent
+
+CONSISTENT(?oxs ?oys ?x ?y) :-
+  IS_CONSISTENT0(?oxs ?oys ?xs ?ys ?x ?y) &&
+  CONS(?xs) &&
+  CONS(?ys) &&
+  ~CONSISTENT(?oxs ?oys ?x ?y) &&
+  ~NOT_CONSISTENT(?oxs ?oys ?x ?y).
+
+~IS_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
+  CONSISTENT(?oxs ?oys ?x ?y) ||
+  NOT_CONSISTENT(?oxs ?oys ?x ?y).
+
+# Check if dictionary is consistent IS_DICT_CONSISTENT(?xs ?ys) ->
+# DICT_CONSISTENT(?xs ?ys).
+
+# Wrapper function
+
+IS_DICT_CONSISTENT0(?xs ?ys ?xs ?ys) :-
+  IS_DICT_CONSISTENT(?xs ?ys) &&
+  ~DICT_CONSISTENT(?xs ?ys) &&
+  ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
+
+# Trigger check if first entry of dictionary is consistent with rest
+
+IS_ASSOC_CONSISTENT(?xs_tl ?ys_tl ?x ?y), IS_DICT_CONSISTENT1(?oxs ?oys ?xs ?ys) :-
+  IS_DICT_CONSISTENT0(?oxs ?oys ?xs ?ys) &&
+  CONS(?xs ?x ?xs_tl) &&
+  CONS(?ys ?y ?ys_tl) &&
+  ~DICT_CONSISTENT(?oxs ?oys) &&
+  ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
+
+# If current entry was consistent, trigger consistency check on
+# remaining dictionary
+
+IS_DICT_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl) :-
+  CONSISTENT(?xs_tl ?ys_tl ?x ?y) &&
+  IS_DICT_CONSISTENT1(?oxs ?oys ?xs ?ys) &&
+  CONS(?xs ?x ?xs_tl) &&
+  CONS(?ys ?y ?ys_tl) &&
+  ~DICT_CONSISTENT(?oxs ?oys) &&
+  ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
+
+# If current entry is not consistent, then break
+
+NOT_DICT_CONSISTENT(?oxs ?oys ?xs_tl ?ys_tl) :-
+  NOT_CONSISTENT(?xs_tl ?ys_tl ?x ?y) &&
+  IS_DICT_CONSISTENT1(?oxs ?oys ?xs ?ys) &&
+  CONS(?xs ?x ?xs_tl) &&
+  CONS(?ys ?y ?ys_tl) &&
+  ~DICT_CONSISTENT(?oxs ?oys) &&
+  ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
+
+# If dictionary is empty, then it must be consistent
+
+DICT_CONSISTENT(?oxs ?oys) :-
+  IS_DICT_CONSISTENT0(?oxs ?oys ?xs ?ys) &&
+  CONS(?xs) &&
+  CONS(?ys) &&
+  ~DICT_CONSISTENT(?oxs ?oys) &&
+  ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
+
+~IS_DICT_CONSISTENT0(?oxs ?oys ?xs ?ys), ~IS_DICT_CONSISTENT1(?oxs ?oys ?xs ?ys) :-
+  DICT_CONSISTENT(?oxs ?oys) ||
+  NOT_DICT_CONSISTENT(?oxs ?oys ?axs ?ays).
+
+# Fix the values associated with symbols DO_FIX_SYMS(?as) ->
+# FIX_SYMS(?as ?bs) where elements in ?bs corresponding to symbols in
+# ?as are fixed to the same value.
+
+DO_FIX_SYMS0(?as ?as ?bs) :-
+  DO_FIX_SYMS(?as) &&
+  CONS(?bs) &&
+  ~{exists ?a {FIX_SYMS(?as ?a)}}.
+
+DO_FIX_SYMS0(?oas ?as_tl ?bs) :-
+  DO_FIX_SYMS0(?oas ?as ?bs_tl) &&
+  CONS(?as ?as_hd ?as_tl) &&
+  {{QUOTE(VARS ?as_hd) && DOMAIN(?bs_hd)} || {QUOTE(SYM ?as_hd) && ?as_hd=?bs_hd}} &&
+  CONS(?bs ?bs_hd ?bs_tl) &&
+  ~{exists ?a {FIX_SYMS(?oas ?a)}}.
+
+DO_REVERSE(?bs), DO_FIX_SYMS1(?oas ?bs) :-
+  DO_FIX_SYMS0(?oas ?as ?bs) &&
+  CONS(?as) &&
+  ~{exists ?a {FIX_SYMS(?oas ?a)}}.
+
+FIX_SYMS(?as ?bs) :-
+  DO_FIX_SYMS1(?as ?cs) &&
+  REVERSE(?cs ?bs).
+
+~DO_FIX_SYMS0(?oas ?as ?bs), ~DO_FIX_SYMS1(?oas ?bs) :-
+  FIX_SYMS(?oas ?a).
+
+# Interpret RULE
+
+RULE_DONE(?id) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(TERM ?e0 ?nm ?cs) &&
+  ~{exists ?as exists ?bs { FORMULA_OUT(?e1 ?as ?bs)}} &&
+  COMMIT() && ~COMMIT2().
+
+ASSOC_LIST(?as ?bs ?cs), IS_DICT_CONSISTENT(?as ?bs), DO_FIX_SYMS(?cs) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(TERM ?e0 ?nm ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  COMMIT() && ~COMMIT2().
+
+RULE_DONE(?id) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(TERM ?e0 ?nm ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  ASSOC_LIST(?as ?bs ?cs ?ds1) &&
+  FIX_SYMS(?cs ?ds2) &&
+  {DICT_CONSISTENT(?as ?bs) || NOT_DICT_CONSISTENT(?as ?bs)} &&
+  COMMIT().
+
+RULE_OUT(?nm ?ds) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(TERM ?e0 ?nm ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  FIX_SYMS(?cs ?ds) &&
+  ASSOC_LIST(?as ?bs ?cs ?ds) &&
+  DICT_CONSISTENT(?as ?bs) &&
+  COMMIT().
+
+# Interpret negative RULE
+
+/*~RULE_OUT(?nm ?ds) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(NOT ?e0 ?e2) &&
+  QUOTE(TERM ?e2 ?nm ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  FIX_SYMS(?cs ?ds) &&
+  FIX_VARS(?cs ?ds ?cs ?ds) &&
+  FIX_VARS(?as ?bs ?cs ?ds).*/
+
+# Interprets a TERM
+
+DO_FIX_SYMS(?as) :-
+  QUOTE(TERM ?id ?n ?as) &&
+  EXECUTE() && ~EXECUTE2().
+
+FORMULA_DONE(?id ?as) :-
+  QUOTE(TERM ?id ?n ?as) &&
+  FIX_SYMS(?as ?bs) &&
+  EXECUTE().
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(TERM ?id ?n ?as) &&
+  RULE_OUT(?n ?bs) &&
+  FIX_SYMS(?as ?bs) &&
+  EXECUTE().
+
+# Interprets EQUALS
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(EQUALS ?id ?a1 ?a2) &&
+  {?b1=?b2} &&
+  LIST(?as ?a1 ?a2) &&
+  LIST(?bs ?b1 ?b2) &&
+  FIX_SYMS(?as ?bs) &&
+  EXECUTE().
+
+FORMULA_DONE(?id ?as) :-
+  QUOTE(EQUALS ?id ?a1 ?a2) &&
+  LIST(?as ?a1 ?a2) &&
+  EXECUTE().
+
+# Interprets TRUE
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(TRUE ?id) &&
+  CONS(?as) &&
+  CONS(?bs) &&
+  EXECUTE().
+
+FORMULA_DONE(?id ?as) :-
+  QUOTE(TRUE ?id) &&
+  CONS(?as) &&
+  EXECUTE().
+
+# Interpret AND
+
+DO_RAPPEND(?as1 ?as2), DO_RAPPEND(?bs1 ?bs2) :-
+  QUOTE(AND ?id ?e1 ?e2) &&
+  {FORMULA_OUT(?e1 ?as1 ?bs1) &&
+  FORMULA_OUT(?e2 ?as2 ?bs2)} &&
+  EXECUTE().
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(AND ?id ?e1 ?e2) &&
+  {FORMULA_OUT(?e1 ?as1 ?bs1) &&
+  FORMULA_OUT(?e2 ?as2 ?bs2)} &&
+  RAPPEND(?as ?as1 ?as2) &&
+  RAPPEND(?bs ?bs1 ?bs2) &&
+  EXECUTE().
+
+DO_RAPPEND(?as1 ?as2) :-
+  QUOTE(AND ?id ?e1 ?e2) &&
+  FORMULA_DONE(?e1 ?as1) &&
+  FORMULA_DONE(?e2 ?as2) &&
+  EXECUTE().
+
+FORMULA_DONE(?id ?as) :-
+  QUOTE(AND ?id ?e1 ?e2) &&
+  FORMULA_DONE(?e1 ?as1) &&
+  FORMULA_DONE(?e2 ?as2) &&
+  RAPPEND(?as ?as1 ?as2) &&
+  EXECUTE().
+
+# Interpret OR
+
+DO_RAPPEND(?as1 ?as2), DO_RAPPEND(?bs1 ?bs2) :-
+  QUOTE(OR ?id ?e1 ?e2) &&
+  {FORMULA_OUT(?e1 ?as1 ?bs1) &&
+  FORMULA_OUT(?e2 ?as2 ?bs2)} &&
+  EXECUTE().
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(OR ?id ?e1 ?e2) &&
+  {FORMULA_OUT(?e1 ?as1 ?bs1) ||
+  FORMULA_OUT(?e2 ?as2 ?bs2)} &&
+  RAPPEND(?as ?as1 ?as2) &&
+  RAPPEND(?bs ?bs1 ?bs2) &&
+  EXECUTE().
+
+DO_RAPPEND(?as1 ?as2) :-
+  QUOTE(OR ?id ?e1 ?e2) &&
+  FORMULA_DONE(?e1 ?as1) &&
+  FORMULA_DONE(?e2 ?as2) &&
+  EXECUTE().
+
+FORMULA_DONE(?id ?as) :-
+  QUOTE(OR ?id ?e1 ?e2) &&
+  FORMULA_DONE(?e1 ?as1) &&
+  FORMULA_DONE(?e2 ?as2) &&
+  RAPPEND(?as ?as1 ?as2) &&
+  EXECUTE().
+
+/*
+# Rules for supporting self-referential quotations. Optional
+
+# Interpret self-modification
+
+QUOTE() :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(TERM ?e0 this ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  LIST(?ds) &&
+  FIX_SYMS(?cs ?ds) &&
+  FIX_VARS(?cs ?ds ?cs ?ds) &&
+  FIX_VARS(?as ?bs ?cs ?ds).
+
+QUOTE(?d0) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(TERM ?e0 this ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  LIST(?ds ?d0) &&
+  FIX_SYMS(?cs ?ds) &&
+  FIX_VARS(?cs ?ds ?cs ?ds) &&
+  FIX_VARS(?as ?bs ?cs ?ds).
+
+QUOTE(?d0 ?d1) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(TERM ?e0 this ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  LIST(?ds ?d0 ?d1) &&
+  FIX_SYMS(?cs ?ds) &&
+  FIX_VARS(?cs ?ds ?cs ?ds) &&
+  FIX_VARS(?as ?bs ?cs ?ds).
+
+QUOTE(?d0 ?d1 ?d2) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(TERM ?e0 this ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  LIST(?ds ?d0 ?d1 ?d2) &&
+  FIX_SYMS(?cs ?ds) &&
+  FIX_VARS(?cs ?ds ?cs ?ds) &&
+  FIX_VARS(?as ?bs ?cs ?ds).
+
+QUOTE(?d0 ?d1 ?d2 ?d3) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(TERM ?e0 this ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  LIST(?ds ?d0 ?d1 ?d2 ?d3) &&
+  FIX_SYMS(?cs ?ds) &&
+  FIX_VARS(?cs ?ds ?cs ?ds) &&
+  FIX_VARS(?as ?bs ?cs ?ds).
+
+# Interpret negative self-modification
+
+~QUOTE() :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(NOT ?e0 ?e2) &&
+  QUOTE(TERM ?e2 this ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  LIST(?ds) &&
+  FIX_SYMS(?cs ?ds) &&
+  FIX_VARS(?cs ?ds ?cs ?ds) &&
+  FIX_VARS(?as ?bs ?cs ?ds).
+
+~QUOTE(?d0) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(NOT ?e0 ?e2) &&
+  QUOTE(TERM ?e2 this ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  LIST(?ds ?d0) &&
+  FIX_SYMS(?cs ?ds) &&
+  FIX_VARS(?cs ?ds ?cs ?ds) &&
+  FIX_VARS(?as ?bs ?cs ?ds).
+
+~QUOTE(?d0 ?d1) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(NOT ?e0 ?e2) &&
+  QUOTE(TERM ?e2 this ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  LIST(?ds ?d0 ?d1) &&
+  FIX_SYMS(?cs ?ds) &&
+  FIX_VARS(?cs ?ds ?cs ?ds) &&
+  FIX_VARS(?as ?bs ?cs ?ds).
+
+~QUOTE(?d0 ?d1 ?d2) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(NOT ?e0 ?e2) &&
+  QUOTE(TERM ?e2 this ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  LIST(?ds ?d0 ?d1 ?d2) &&
+  FIX_SYMS(?cs ?ds) &&
+  FIX_VARS(?cs ?ds ?cs ?ds) &&
+  FIX_VARS(?as ?bs ?cs ?ds).
+
+~QUOTE(?d0 ?d1 ?d2 ?d3) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(NOT ?e0 ?e2) &&
+  QUOTE(TERM ?e2 this ?cs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  LIST(?ds ?d0 ?d1 ?d2 ?d3) &&
+  FIX_SYMS(?cs ?ds) &&
+  FIX_VARS(?cs ?ds ?cs ?ds) &&
+  FIX_VARS(?as ?bs ?cs ?ds).
+  
+# Interprets a self-referential TERM
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(TERM ?id this ?as) &&
+  LIST(?bs) &&
+  QUOTE() &&
+  FIX_SYMS(?as ?bs) &&
+  FIX_VARS(?as ?bs ?as ?bs).
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(TERM ?id this ?as) &&
+  LIST(?bs ?b0) &&
+  QUOTE(?b0) &&
+  FIX_SYMS(?as ?bs) &&
+  FIX_VARS(?as ?bs ?as ?bs).
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(TERM ?id this ?as) &&
+  LIST(?bs ?b0 ?b1) &&
+  QUOTE(?b0 ?b1) &&
+  FIX_SYMS(?as ?bs) &&
+  FIX_VARS(?as ?bs ?as ?bs).
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(TERM ?id this ?as) &&
+  LIST(?bs ?b0 ?b1 ?b2) &&
+  QUOTE(?b0 ?b1 ?b2) &&
+  FIX_SYMS(?as ?bs) &&
+  FIX_VARS(?as ?bs ?as ?bs).
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(TERM ?id this ?as) &&
+  LIST(?bs ?b0 ?b1 ?b2 ?b3) &&
+  QUOTE(?b0 ?b1 ?b2 ?b3) &&
+  FIX_SYMS(?as ?bs) &&
+  FIX_VARS(?as ?bs ?as ?bs).
+
+*/

@@ -1,4 +1,4 @@
-# The rule r interprets the quoted program in q. The only constraint
+# The rule r interprets the quoted program in QUOTE. The only constraint
 # on the quoted program is that the linked lists used by the interpreter
 # to interpret it and retrieve/store its results must be preallocated
 # and supplied to the interpreter in linked lists. That is, if a quoted
@@ -374,35 +374,75 @@ DICT_CONSISTENT(?oxs ?oys) :-
   DICT_CONSISTENT(?oxs ?oys) ||
   NOT_DICT_CONSISTENT(?oxs ?oys ?axs ?ays).
 
-# Fix the values associated with symbols DO_FIX_SYMS(?as ?bs) ->
-# FIX_SYMS(?as ?bs ?cs) where elements in ?cs corresponding to symbols
-# in ?as marked as representing symbols by ?bs are fixed to the same
-# value.
+# Select the indicated values DO_SELECTION(?as ?bs) -> SELECTION(?as ?bs ?cs)
+# where ?cs is the subsequence of ?as formed by selecting the entries
+# corresponding to 1s in ?bs.
 
-DO_FIX_SYMS0(?as ?bs ?as ?bs ?cs) :-
-  DO_FIX_SYMS(?as ?bs) &&
+DO_SELECTION0(?as ?bs ?as ?bs ?cs) :-
+  DO_SELECTION(?as ?bs) &&
   CONS(?cs) &&
-  ~{exists ?a {FIX_SYMS(?as ?bs ?a)}}.
+  ~{exists ?a {SELECTION(?as ?bs ?a)}}.
 
-DO_FIX_SYMS0(?oas ?obs ?as_tl ?bs_tl ?cs) :-
-  DO_FIX_SYMS0(?oas ?obs ?as ?bs ?cs_tl) &&
+DO_SELECTION0(?oas ?obs ?as_tl ?bs_tl ?cs) :-
+  DO_SELECTION0(?oas ?obs ?as ?bs ?cs_tl) &&
   CONS(?as ?as_hd ?as_tl) &&
-  {{CONS(?bs 1 ?bs_tl) && DOMAIN(?cs_hd)} ||
-  {CONS(?bs 0 ?bs_tl) && ?as_hd=?cs_hd}} &&
-  CONS(?cs ?cs_hd ?cs_tl) &&
-  ~{exists ?a {FIX_SYMS(?oas ?obs ?a)}}.
+  CONS(?bs 1 ?bs_tl) &&
+  CONS(?cs ?as_hd ?cs_tl) &&
+  ~{exists ?a {SELECTION(?oas ?obs ?a)}}.
 
-DO_REVERSE(?cs), DO_FIX_SYMS1(?oas ?obs ?cs) :-
-  DO_FIX_SYMS0(?oas ?obs ?as ?bs ?cs) &&
+DO_SELECTION0(?oas ?obs ?as_tl ?bs_tl ?cs) :-
+  DO_SELECTION0(?oas ?obs ?as ?bs ?cs) &&
+  CONS(?as ?as_hd ?as_tl) &&
+  CONS(?bs 0 ?bs_tl) &&
+  ~{exists ?a {SELECTION(?oas ?obs ?a)}}.
+
+DO_REVERSE(?cs), DO_SELECTION1(?oas ?obs ?cs) :-
+  DO_SELECTION0(?oas ?obs ?as ?bs ?cs) &&
   CONS(?as) &&
-  ~{exists ?a {FIX_SYMS(?oas ?obs ?a)}}.
+  CONS(?bs) &&
+  ~{exists ?a {SELECTION(?oas ?obs ?a)}}.
 
-FIX_SYMS(?as ?ds ?bs) :-
-  DO_FIX_SYMS1(?as ?ds ?cs) &&
+SELECTION(?as ?ds ?bs) :-
+  DO_SELECTION1(?as ?ds ?cs) &&
   REVERSE(?cs ?bs).
 
-~DO_FIX_SYMS0(?oas ?obs ?as ?bs ?cs), ~DO_FIX_SYMS1(?oas ?obs ?cs) :-
-  FIX_SYMS(?oas ?obs ?a).
+~DO_SELECTION0(?oas ?obs ?as ?bs ?cs), ~DO_SELECTION1(?oas ?obs ?cs) :-
+  SELECTION(?oas ?obs ?a).
+
+# Select the indicated values DO_SELECTION(?as ?bs) -> SELECTION(?as ?bs ?cs)
+# where ?cs is the subsequence of ?as formed by selecting the entries
+# corresponding to 0s in ?bs.
+
+DO_DESELECTION0(?as ?bs ?as ?bs ?cs) :-
+  DO_DESELECTION(?as ?bs) &&
+  CONS(?cs) &&
+  ~{exists ?a {DESELECTION(?as ?bs ?a)}}.
+
+DO_DESELECTION0(?oas ?obs ?as_tl ?bs_tl ?cs) :-
+  DO_DESELECTION0(?oas ?obs ?as ?bs ?cs_tl) &&
+  CONS(?as ?as_hd ?as_tl) &&
+  CONS(?bs 0 ?bs_tl) &&
+  CONS(?cs ?as_hd ?cs_tl) &&
+  ~{exists ?a {DESELECTION(?oas ?obs ?a)}}.
+
+DO_DESELECTION0(?oas ?obs ?as_tl ?bs_tl ?cs) :-
+  DO_DESELECTION0(?oas ?obs ?as ?bs ?cs) &&
+  CONS(?as ?as_hd ?as_tl) &&
+  CONS(?bs 1 ?bs_tl) &&
+  ~{exists ?a {DESELECTION(?oas ?obs ?a)}}.
+
+DO_REVERSE(?cs), DO_DESELECTION1(?oas ?obs ?cs) :-
+  DO_DESELECTION0(?oas ?obs ?as ?bs ?cs) &&
+  CONS(?as) &&
+  CONS(?bs) &&
+  ~{exists ?a {DESELECTION(?oas ?obs ?a)}}.
+
+DESELECTION(?as ?ds ?bs) :-
+  DO_DESELECTION1(?as ?ds ?cs) &&
+  REVERSE(?cs ?bs).
+
+~DO_DESELECTION0(?oas ?obs ?as ?bs ?cs), ~DO_DESELECTION1(?oas ?obs ?cs) :-
+  DESELECTION(?oas ?obs ?a).
 
 # Interpret RULE
 
@@ -412,18 +452,26 @@ RULE_DONE(?id) :-
   ~{exists ?as exists ?bs { FORMULA_OUT(?e1 ?as ?bs)}} &&
   COMMIT() && ~COMMIT2().
 
-ASSOC_LIST(?as ?bs ?cs), IS_DICT_CONSISTENT(?as ?bs), DO_FIX_SYMS(?cs ?fs) :-
+ASSOC_LIST(?as ?bs ?cs), IS_DICT_CONSISTENT(?as ?bs), DO_DESELECTION(?cs ?fs) :-
   QUOTE(RULE ?id ?e0 ?e1) &&
   QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
   FORMULA_OUT(?e1 ?as ?bs) &&
   COMMIT() && ~COMMIT2().
+
+DO_DESELECTION(?ds1 ?fs) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
+  FORMULA_OUT(?e1 ?as ?bs) &&
+  ASSOC_LIST(?as ?bs ?cs ?ds1) &&
+  COMMIT().
 
 RULE_DONE(?id) :-
   QUOTE(RULE ?id ?e0 ?e1) &&
   QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
   FORMULA_OUT(?e1 ?as ?bs) &&
   ASSOC_LIST(?as ?bs ?cs ?ds1) &&
-  FIX_SYMS(?cs ?fs ?ds2) &&
+  DESELECTION(?ds1 ?fs ?ds2) &&
+  DESELECTION(?cs ?fs ?ds3) &&
   {DICT_CONSISTENT(?as ?bs) || NOT_DICT_CONSISTENT(?as ?bs)} &&
   COMMIT().
 
@@ -431,7 +479,8 @@ RULE_OUT(?nm ?ds) :-
   QUOTE(RULE ?id ?e0 ?e1) &&
   QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
   FORMULA_OUT(?e1 ?as ?bs) &&
-  FIX_SYMS(?cs ?fs ?ds) &&
+  DESELECTION(?cs ?fs ?gs) &&
+  DESELECTION(?ds ?fs ?gs) &&
   ASSOC_LIST(?as ?bs ?cs ?ds) &&
   DICT_CONSISTENT(?as ?bs) &&
   COMMIT().
@@ -449,34 +498,83 @@ RULE_OUT(?nm ?ds) :-
 
 # Interprets a TERM
 
-DO_FIX_SYMS(?as ?bs) :-
+DO_DESELECTION(?as ?bs), DO_SELECTION(?as ?bs) :-
   QUOTE(TERM ?id ?n ?as ?bs) &&
   EXECUTE() && ~EXECUTE2().
 
 FORMULA_DONE(?id ?as) :-
   QUOTE(TERM ?id ?n ?as ?bs) &&
-  FIX_SYMS(?as ?bs ?cs) &&
+  DESELECTION(?as ?bs ?cs) &&
+  SELECTION(?as ?bs ?ds) &&
   EXECUTE().
 
-FORMULA_OUT(?id ?as ?bs) :-
+DO_DESELECTION(?cs ?bs), DO_SELECTION(?cs ?bs) :-
   QUOTE(TERM ?id ?n ?as ?bs) &&
   RULE_OUT(?n ?cs) &&
-  FIX_SYMS(?as ?bs ?cs) &&
+  EXECUTE() && ~EXECUTE2().
+
+FORMULA_OUT(?id ?es ?fs) :-
+  QUOTE(TERM ?id ?n ?as ?bs) &&
+  RULE_OUT(?n ?cs) &&
+  SELECTION(?as ?bs ?es) &&
+  SELECTION(?cs ?bs ?fs) &&
+  DESELECTION(?cs ?bs ?ds) &&
+  DESELECTION(?as ?bs ?ds) &&
   EXECUTE().
 
 # Interprets EQUALS
 
+# First and second operands are symbols
+
 FORMULA_OUT(?id ?as ?bs) :-
-  QUOTE(EQUALS ?id ?a1 ?a2 ?c1 ?c2) &&
+  QUOTE(EQUALS ?id ?a1 ?a2 0 0) &&
+  LIST(?as) &&
+  LIST(?bs) &&
+  {?a1=?a2} &&
+  EXECUTE().
+
+FORMULA_DONE(?id ?as) :-
+  QUOTE(EQUALS ?id ?a1 ?a2 0 0) &&
+  LIST(?as) &&
+  EXECUTE().
+
+# First operand is a symbol whilst the second is a variable
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(EQUALS ?id ?a1 ?a2 0 1) &&
+  LIST(?as ?a2) &&
+  LIST(?bs ?a1) &&
+  EXECUTE().
+
+FORMULA_DONE(?id ?as) :-
+  QUOTE(EQUALS ?id ?a1 ?a2 0 1) &&
+  LIST(?as ?a2) &&
+  EXECUTE().
+
+# First operand is a variable whilst the second is a symbol
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(EQUALS ?id ?a1 ?a2 1 0) &&
+  LIST(?as ?a1) &&
+  LIST(?bs ?a2) &&
+  EXECUTE().
+
+FORMULA_DONE(?id ?as) :-
+  QUOTE(EQUALS ?id ?a1 ?a2 1 0) &&
+  LIST(?as ?a1) &&
+  EXECUTE().
+
+# Both operands are variables
+
+FORMULA_OUT(?id ?as ?bs) :-
+  QUOTE(EQUALS ?id ?a1 ?a2 1 1) &&
   LIST(?as ?a1 ?a2) &&
-  LIST(?cs ?c1 ?c2) &&
   LIST(?bs ?b1 ?b2) &&
-  FIX_SYMS(?as ?cs ?bs) &&
   {?b1=?b2} &&
   EXECUTE().
 
 FORMULA_DONE(?id ?as) :-
-  QUOTE(EQUALS ?id ?a1 ?a2 ?c1 ?c2) &&
+  QUOTE(EQUALS ?id ?a1 ?a2 1 1) &&
   LIST(?as ?a1 ?a2) &&
   EXECUTE().
 

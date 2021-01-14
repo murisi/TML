@@ -1167,14 +1167,6 @@ void driver::transform_evals(raw_prog &rp) {
 			elem quote_sym = curr_term.e[4];
 			// Get dictionary for generating fresh variables
 			dict_t &d = tbl->get_dict();
-			// This symbol is used when the variable allocation is finished
-			elem und_sym = elem::fresh_sym(d);
-			// This relation will house most of the interpreter
-			elem aux_rel = elem::fresh_temp_sym(d);
-			// This relation will be used to fix interpretations to literals
-			elem fs_rel = elem::fresh_temp_sym(d);
-			// This relation will be used to fix interpretations to each other
-			elem fv_rel = elem::fresh_temp_sym(d);
 			
 			{
 				elem e0;
@@ -7053,10 +7045,6 @@ void driver::transform_evals(raw_prog &rp) {
 				rp1390.r.push_back(rr1373);
 				rp1390.r.push_back(rr1389);
 			}
-			
-			// Allocate rule name, rule id, head id, body id
-			elem rule_name = elem::fresh_var(d), elt_id = elem::fresh_var(d),
-				forma_id = elem::fresh_var(d);
 		}
 	}
 }
@@ -7584,7 +7572,7 @@ string_t driver::generate_cpp(const elem &e, string_t &prog_constr, uint_t &cid,
 	} else if(e.type == elem::NUM) {
 		prog_constr += e_name + to_string_t(".num = ") + to_string_t(std::to_string(e.num).c_str()) + to_string_t(";\n");
 	} else {
-		prog_constr += e_name + to_string_t(".e = d.get_lexeme(\"") + lexeme2str(e.e) + to_string_t("\");\n");
+		prog_constr += e_name + to_string_t(".e = ") + dict_name + to_string_t(".get_lexeme(\"") + lexeme2str(e.e) + to_string_t("\");\n");
 	}
 	return e_name;
 }

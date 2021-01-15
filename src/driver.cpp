@@ -871,6 +871,69 @@ void driver::simplify_formulas(raw_prog &rp) {
 	}
 }
 
+void driver::make_domain(raw_prog &rp, const elem &out_rel,
+		std::set<elem> elts, int_t max_size, int_t rest_id, int_t &curr_id) {
+	if(max_size > 0) {
+		for(const elem &elt : elts) {
+			rp.r.push_back(raw_term({ out_rel, elem_openp, elem(curr_id++), elt,
+				elem(rest_id), elem_closep }));
+			make_domain(rp, out_rel, elts, max_size - 1, curr_id - 1, curr_id);
+		}
+	}
+}
+
+/* Loop through the rules of the given program checking if they use a
+ * function called "domain" in their bodies. Domain's first argument is
+ * the relation into which it should put the domain it creates, and
+ * it's second argument is the program to quote. */
+
+void driver::transform_domains(raw_prog &rp) {
+	for(size_t oridx = 0; oridx < rp.r.size(); oridx++) {
+		// Iterate through the bodies of the current rule looking for uses
+		// of the "eval" relation.
+		for(const raw_term &curr_term : rp.r[oridx].h) {
+			if(!(!curr_term.e.empty() && curr_term.e[0].type == elem::SYM &&
+				to_string_t("domain") == lexeme2str(curr_term.e[0].e))) continue;
+			// The first parenthesis marks the beginning of eval's three arguments.
+			//if(!(ssize(curr_term.e) == 6 && curr_term.e[1].type == elem::OPENP &&
+			//	curr_term.e[5].type == elem::CLOSEP)) continue;
+			// The relation to contain the evaled relation is the first symbol
+			// between the parentheses
+			elem out_rel = curr_term.e[2];
+			// The maximum arity of the desired domain is the first symbol
+			// between the inner parentheses
+			int_t max_arity = curr_term.e[4].num;
+			// The number of times the linked lists should be nested is the
+			// second symbol between the inner parentheses
+			int_t nesting = curr_term.e[5].num;
+			// This transformation will automatically generate non-negative
+			// numbers up to this limit for inclusion in domain
+			int_t gen_limit = curr_term.e[6].num;
+			// After the above triple comes the list of symbols to be included
+			// in the desired domain
+			std::set<elem> elts;
+			for(int_t idx = 8; idx < curr_term.e.size() - 1; idx++) {
+				elts.insert(curr_term.e[idx]);
+			}
+			for(int_t nat = 0; nat < gen_limit; nat++) {
+				elts.insert(elem(nat));
+			}
+			int_t curr_id = 1;
+			rp.r.push_back(raw_term({ out_rel, elem_openp, elem(0), elem_closep }));
+			make_domain(rp, out_rel, elts, max_arity, 0, curr_id);
+			
+			/*elem quote_str = curr_term.e[4];
+			
+			if(quote_str.type == elem::STR && quote_str.e[1] > quote_str.e[0] &&
+					*quote_str.e[0] == '`') {
+				raw_prog nrp = read_prog(quote_str, rp);
+				// Create the quotation relation
+				quote_prog(nrp, out_rel, domain_sym, rp);
+			}*/
+		}
+	}
+}
+
 /* In the case that the argument is a variable, get the symbol
  * associated with it and return that. If there is no such association,
  * make one. */
@@ -7957,6 +8020,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		std::map<elem, string_t> elem_cache;
 		generate_cpp(rp, rp_generator, cid, to_string_t("d"), elem_cache);
 		std::cout << to_string(rp_generator) << std::endl << std::endl;
+		transform_domains(rp);
 		transform_quotes(rp);
 		std::cout << "Quoted Program:" << std::endl << std::endl << rp << std::endl;
 		transform_evals(rp);

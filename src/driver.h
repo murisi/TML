@@ -110,6 +110,9 @@ class driver {
 	void transform_grammar(raw_prog& r, lexeme rel, size_t len);
 	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
+	void transform_domains(raw_prog &rp);
+	void make_domain(raw_prog &rp, const elem &out_rel, std::set<elem> elts,
+		int_t max_size, int_t rest_id, int_t &curr_id);
 	sprawformtree inline_rule(const raw_term &rt1, const raw_term &rt2,
 		const raw_rule &rr);
 	elem hygienic_copy(const elem &e, std::map<elem, elem> &vars);

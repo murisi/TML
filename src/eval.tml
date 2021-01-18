@@ -1,35 +1,48 @@
-# The rule r interprets the quoted program in QUOTE. The only constraint
-# on the quoted program is that the linked lists used by the interpreter
-# to interpret it and retrieve/store its results must be preallocated
-# and supplied to the interpreter in linked lists. That is, if a quoted
-# program uses the term "teaches(teacher student maths)." anywhere, then
-# the linked list teacher -> student -> maths -> [] must be preallocated
-# as "CONS(l3). CONS(l2 maths l3). CONS(l1 student l2).
-# CONS(l0 teacher l1).". The interpreter requires this domain input to
-# not arbitrarily limit rule arities. For a domain of size N and maximum
-# term arity of M occuring in the quoted program, around
-# N^0 + N^1 + N^2 + ... + N^M = (N^{M+1} - 1)/(N-1) preallocations will
-# be required.
+/* The rule r interprets the quoted program in QUOTE. The only constraint
+ * on the quoted program is that the linked lists used by the interpreter
+ * to interpret it and retrieve/store its results must be preallocated
+ * and supplied to the interpreter in linked lists. That is, if a quoted
+ * program uses the term "teaches(teacher student maths)." anywhere, then
+ * the linked list teacher -> student -> maths -> [] must be preallocated
+ * as "CONS(l3). CONS(l2 maths l3). CONS(l1 student l2).
+ * CONS(l0 teacher l1).". The interpreter requires this domain input to
+ * not arbitrarily limit rule arities. For a domain of size N and maximum
+ * term arity of M occuring in the quoted program, around
+ * N^0 + N^1 + N^2 + ... + N^M = (N^{M+1} - 1)/(N-1) preallocations will
+ * be required. */
 
-# Lists have the following schema:
-# CONS(<id> <head> <tail id>).
-# CONS(<id>).
+/* Lists have the following schema:
+ * CONS(<id> <head> <tail id>).
+ * CONS(<id>). */
 
-# The quoted program has the following schema:
-# QUOTE(RULE <id> <head id> <body id>).
-# QUOTE(TERM <id> <name> <arg list id> <var indicator list id>).
-# QUOTE(EQUALS <id> <param1 name> <param2 name>).
-# QUOTE(FORALL <id> <var name> <body id>).
-# QUOTE(EXISTS <id> <var name> <body id>).
-# QUOTE(NOT <id> <body id>).
-# QUOTE(AND <id> <body1 id> <body2 id>).
-# QUOTE(OR <id> <body1 id> <body2 id>).
-# QUOTE(TRUE <id>).
+/* The quoted program has the following schema:
+ * QUOTE(RULE <id> <head id> <body id>).
+ * QUOTE(TERM <id> <name> <arg list id> <var indicator list id>).
+ * QUOTE(EQUALS <id> <param1 name> <param2 name>).
+ * QUOTE(FORALL <id> <var name> <body id>).
+ * QUOTE(EXISTS <id> <var name> <body id>).
+ * QUOTE(NOT <id> <body id>).
+ * QUOTE(AND <id> <body1 id> <body2 id>).
+ * QUOTE(OR <id> <body1 id> <body2 id>).
+ * QUOTE(TRUE <id>). */
 
-# The encoded database has the following schema:
-# RULE_OUT(<name> <arg list id>).
+/* The encoded database has the following schema:
+ * RULE_OUT(<name> <arg list id>). */
 
-# Does the given ID refer to a formula node?
+#define TRUE 0
+#define RULE 1
+#define TERM 2
+#define EQUALS 3
+#define FORALL 4
+#define EXISTS 5
+#define NOT 6
+#define AND 7
+#define OR 8
+#define IMPLIES 9
+#define UNIQUE 10
+#define COIMPLIES 11
+
+/* Does the given ID refer to a formula node? */
 
 FORMULA_NODE(?id) :- QUOTE(TERM ?id ?nm ?args ?vars).
 FORMULA_NODE(?id) :- QUOTE(EQUALS ?id ?p1 ?p2).
@@ -37,24 +50,24 @@ FORMULA_NODE(?id) :- QUOTE(AND ?id ?b1 ?b2).
 FORMULA_NODE(?id) :- QUOTE(OR ?id ?b1 ?b2).
 FORMULA_NODE(?id) :- QUOTE(TRUE ?id).
 
-# Does the given ID refer to a rule node?
+/* Does the given ID refer to a rule node? */
 
 RULE_NODE(?id) :- QUOTE(RULE ?id ?h ?b).
 
-# The execute phase executes a quoted program with inputs coming from
-# the non-temporary relation and stores the intermediate results in the
-# temporary relation. The COMMIT phase writes the intermediate results
-# stored in the temporary relation back to the non-temporary relation.
+/* The execute phase executes a quoted program with inputs coming from
+ * the non-temporary relation and stores the intermediate results in the
+ * temporary relation. The COMMIT phase writes the intermediate results
+ * stored in the temporary relation back to the non-temporary relation. */
 
-# Transition from the execute to the COMMIT phase
+/* Transition from the execute to the COMMIT phase */
 
-COMMIT(), ~EXECUTE(), ~RULE_DONE(?y) :- EXECUTE2() && ~COMMIT() && forall ?x { exists ?z { FORMULA_NODE(?x) -> FORMULA_DONE(?x ?z) }}.
+COMMIT(), ~EXECUTE(), ~RULE_DONE(?y) :- EXECUTE2() && ~COMMIT() && forall ?x { FORMULA_NODE(?x) -> FORMULA_DONE(?x) }.
 
 COMMIT2() :- COMMIT().
 
 ~EXECUTE2() :- COMMIT().
 
-# Transition from the COMMIT to the execute phase.
+/* Transition from the COMMIT to the execute phase. */
 
 EXECUTE(), ~COMMIT(), ~FORMULA_DONE(?y) :- COMMIT2() && ~EXECUTE() && forall ?x { RULE_NODE(?x) -> RULE_DONE(?x) }.
 
@@ -62,7 +75,13 @@ EXECUTE2() :- EXECUTE().
 
 ~COMMIT2() :- EXECUTE().
 
-# Start the interpreter after the list initialization is done.
+/* Track the previous state of FORMULA_DONE */
+
+FORMULA_DONE2(?id) :- FORMULA_DONE(?id).
+
+~FORMULA_DONE2(?id) :- ~FORMULA_DONE(?id).
+
+/* Start the interpreter after the list initialization is done. */
 
 COUNTDOWN0().
 
@@ -80,34 +99,32 @@ COUNTDOWN6() :- COUNTDOWN5().
 
 EXECUTE() :- COUNTDOWN5() && ~COUNTDOWN6().
 
-# Domain of the quoted program
+/* Domain of the quoted program */
 
 DOMAIN(?x) :- CONS(?w ?x ?y).
 
-# List operations
+/* List operations */
 
-# Get list specified by given elements
+/* Get list specified by given elements */
 
-LIST(?id) :- CONS(?id).
+#define LIST0(id) CONS(id)
 
-LIST(?id ?a) :-
-  CONS(?id ?a ?rst) &&
-  LIST(?rst).
+#define LIST1(id, a) {exists id##rst {CONS(id a id##rst) && LIST0(id##rst)}}
 
-LIST(?id ?a ?b) :-
-  CONS(?id ?a ?rst) &&
-  LIST(?rst ?b).
+#define LIST2(id, a, b) {exists id##rst {CONS(id a id##rst) && LIST1(id##rst, b)}}
 
-LIST(?id ?a ?b ?c) :-
-  CONS(?id ?a ?rst) &&
-  LIST(?rst ?b ?c).
+#define LIST3(id, a, b, c) {exists id##rst {CONS(id a id##rst) && LIST2(id##rst, b, c)}}
 
-LIST(?id ?a ?b ?c ?d) :-
-  CONS(?id ?a ?rst) &&
-  LIST(?rst ?b ?c ?d).
+#define LIST4(id, a, b, c, d) {exists id##rst {CONS(id a id##rst) && LIST3(id##rst, b, c, d)}}
 
-# Get list corresponding to the one obtained from reversing ?cs and
-# appending ?bs: DO_RAPPEND(?xs ?ys) -> RAPPEND(?xs ?ys ?zs)
+/* Get list corresponding to the one obtained from reversing ?cs and
+ * appending ?bs: DO_RAPPEND(?xs ?ys) -> RAPPEND(?xs ?ys ?zs) */
+
+#define RAPPEND_PENDING() {exists ?xs exists ?ys exists ?as exists ?bs { DO_RAPPEND0(?xs ?ys ?as ?bs) }}
+
+RAPPEND_PENDING2() :- RAPPEND_PENDING().
+
+~RAPPEND_PENDING2() :- ~RAPPEND_PENDING().
 
 DO_RAPPEND0(?xs ?ys ?xs ?ys) :-
   DO_RAPPEND(?xs ?ys) &&
@@ -127,17 +144,17 @@ RAPPEND(?zs ?xs ?ys) :-
 ~DO_RAPPEND0(?oxs ?oys ?xs ?ys) :-
   RAPPEND(?cs ?oxs ?oys).
 
-# Reverse the given list DO_REVERSE(?xs) -> REVERSE(?xs ?ys) where ?ys
-# is reverse of ?xs.
+/* Reverse the given list DO_REVERSE(?xs) -> REVERSE(?xs ?ys) where ?ys
+ * is reverse of ?xs. */
 
-# Wrapper function
+/* Wrapper function */
 
 DO_REVERSE(?bs ?as ?bs) :-
   DO_REVERSE(?bs) &&
   CONS(?as) &&
   ~{exists ?a {REVERSE(?bs ?a)}}.
 
-# Add one more element to the head of the reverse
+/* Add one more element to the head of the reverse */
 
 DO_REVERSE(?obs ?as ?bs) :-
   CONS(?as ?as_hd ?as_tl) &&
@@ -145,7 +162,7 @@ DO_REVERSE(?obs ?as ?bs) :-
   DO_REVERSE(?obs ?as_tl ?nbs) &&
   ~{exists ?a {REVERSE(?obs ?a)}}.
 
-# Present the reverse
+/* Present the reverse */
 
 REVERSE(?obs ?as) :-
   DO_REVERSE(?obs ?as ?bs) &&
@@ -155,17 +172,17 @@ REVERSE(?obs ?as) :-
 ~DO_REVERSE(?obs ?as ?bs) :-
   REVERSE(?obs ?cs).
 
-# Associate the given list ASSOC(?xs ?ys ?x) -> ASSOC(?xs ?ys ?x ?y)
-# where ?y is associated with ?x in (?xs ?ys).
+/* Associate the given list ASSOC(?xs ?ys ?x) -> ASSOC(?xs ?ys ?x ?y)
+ * where ?y is associated with ?x in (?xs ?ys). */
 
-# Wrapper function
+/* Wrapper function */
 
 ASSOC0(?xs ?ys ?xs ?ys ?x) :-
   ASSOC(?xs ?ys ?x) &&
   ~{exists ?y {ASSOC(?xs ?ys ?x ?y)}} &&
   ~NO_ASSOC(?xs ?ys ?x).
 
-# If this is a match and there is no existing association, then add one
+/* If this is a match and there is no existing association, then add one */
 
 ASSOC0(?oxs ?oys ?xs_tl ?ys_tl ?x ?yn) :-
   CONS(?xs ?x ?xs_tl) &&
@@ -174,7 +191,7 @@ ASSOC0(?oxs ?oys ?xs_tl ?ys_tl ?x ?yn) :-
   ~{exists ?y {ASSOC(?oxs ?oys ?x ?y)}} &&
   ~NO_ASSOC(?oxs ?oys ?x).
 
-# If this is a match and there is an existing association, then remove it
+/* If this is a match and there is an existing association, then remove it */
 
 NO_ASSOC(?oxs ?oys ?x) :-
   CONS(?xs ?x ?xs_tl) &&
@@ -183,7 +200,7 @@ NO_ASSOC(?oxs ?oys ?x) :-
   ~{exists ?y {ASSOC(?oxs ?oys ?x ?y)}} &&
   ~NO_ASSOC(?oxs ?oys ?x).
 
-# If there is no match and there is no existing association, then continue
+/* If there is no match and there is no existing association, then continue */
 
 ASSOC0(?oxs ?oys ?xs_tl ?ys_tl ?x) :-
   CONS(?xs ?xn ?xs_tl) &&
@@ -193,7 +210,7 @@ ASSOC0(?oxs ?oys ?xs_tl ?ys_tl ?x) :-
   ~{exists ?y {ASSOC(?oxs ?oys ?x ?y)}} &&
   ~NO_ASSOC(?oxs ?oys ?x).
 
-# If there is no match and there is an existing association, then preserve
+/* If there is no match and there is an existing association, then preserve */
 
 ASSOC0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
   CONS(?xs ?xn ?xs_tl) &&
@@ -203,7 +220,7 @@ ASSOC0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
   ~{exists ?y {ASSOC(?oxs ?oys ?x ?y)}} &&
   ~NO_ASSOC(?oxs ?oys ?x).
 
-# Wrapper function
+/* Wrapper function */
 
 ASSOC(?oxs ?oys ?x ?y) :-
   ASSOC0(?oxs ?oys ?xs ?ys ?x ?y) &&
@@ -224,24 +241,30 @@ ASSOC(?oxs ?oys ?x ?y) :-
   ASSOC(?oxs ?oys ?x ?a) ||
   NO_ASSOC(?oxs ?oys ?x).
 
-# Multiple associate the given list ASSOC_LIST(?xs ?ys ?ts) ->
-# ASSOC_LIST(?xs ?ys ?ts ?us).
+/* Multiple associate the given list ASSOC_LIST(?xs ?ys ?ts) ->
+ * ASSOC_LIST(?xs ?ys ?ts ?us). */
 
-# Move computations into auxilliary relation
+#define ASSOC_LIST_PENDING() {exists ?ts exists ?xs exists ?ys exists ?vs exists ?us { ASSOC_LIST0(?ts ?xs ?ys ?vs ?us) }}
+
+ASSOC_LIST_PENDING2() :- ASSOC_LIST_PENDING().
+
+~ASSOC_LIST_PENDING2() :- ~ASSOC_LIST_PENDING().
+
+/* Move computations into auxilliary relation */
 
 ASSOC_LIST0(?ts ?xs ?ys ?ts ?us) :-
   ASSOC_LIST(?xs ?ys ?ts) &&
   CONS(?us) &&
   ~{exists ?a {ASSOC_LIST(?xs ?ys ?ts ?a)}}.
 
-# Determine what is associated with the first element of ?ts
+/* Determine what is associated with the first element of ?ts */
 
 ASSOC(?xs ?ys ?ts_hd), ASSOC_LIST1(?ots ?xs ?ys ?ts ?us) :-
   ASSOC_LIST0(?ots ?xs ?ys ?ts ?us) &&
   CONS(?ts ?ts_hd ?ts_tl) &&
   ~{exists ?a {ASSOC_LIST(?xs ?ys ?ots ?a)}}.
 
-# Add what is associated with first element of ?ts ?nus
+/* Add what is associated with first element of ?ts ?nus */
 
 ASSOC_LIST0(?ots ?xs ?ys ?ts_tl ?nus) :-
   ASSOC_LIST1(?ots ?xs ?ys ?ts ?us) &&
@@ -250,14 +273,14 @@ ASSOC_LIST0(?ots ?xs ?ys ?ts_tl ?nus) :-
   CONS(?nus ?nus_hd ?us) &&
   ~{exists ?a {ASSOC_LIST(?xs ?ys ?ots ?a)}}.
 
-# Trigger the reversal of ?us
+/* Trigger the reversal of ?us */
 
 DO_REVERSE(?us), ASSOC_LIST2(?ots ?xs ?ys ?ts ?us) :-
   ASSOC_LIST0(?ots ?xs ?ys ?ts ?us) &&
   CONS(?ts) &&
   ~{exists ?a {ASSOC_LIST(?xs ?ys ?ots ?a)}}.
 
-# Move the result into the main relation
+/* Move the result into the main relation */
 
 ASSOC_LIST(?xs ?ys ?ots ?nus) :-
   ASSOC_LIST2(?ots ?xs ?ys ?ts ?us) &&
@@ -268,18 +291,18 @@ ASSOC_LIST(?xs ?ys ?ots ?nus) :-
 ~ASSOC_LIST0(?ots ?xs ?ys ?ts_tl ?nus), ~ASSOC_LIST1(?ots ?xs ?ys ?ts ?us), ~ASSOC_LIST2(?ots ?xs ?ys ?ts ?us) :-
   ASSOC_LIST(?xs ?ys ?ots ?a).
 
-# Check if an association is consistent with a dictionary
-# IS_ASSOC_CONSISTENT(?xs ?ys ?x ?y) -> CONSISTENT(?xs ?ys ?x ?y) OR
-# NOT_CONSISTENT(?xs ?ys ?x ?y).
+/* Check if an association is consistent with a dictionary
+ * IS_ASSOC_CONSISTENT(?xs ?ys ?x ?y) -> CONSISTENT(?xs ?ys ?x ?y) OR
+ * NOT_CONSISTENT(?xs ?ys ?x ?y). */
 
-# Wrapper function
+/* Wrapper function */
 
 IS_CONSISTENT0(?xs ?ys ?xs ?ys ?x ?y) :-
   IS_ASSOC_CONSISTENT(?xs ?ys ?x ?y) &&
   ~CONSISTENT(?xs ?ys ?x ?y) &&
   ~NOT_CONSISTENT(?xs ?ys ?x ?y).
 
-# If the association is first in dictionary, then continue
+/* If the association is first in dictionary, then continue */
 
 IS_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
   CONS(?xs ?x ?xs_tl) &&
@@ -288,7 +311,7 @@ IS_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
   ~CONSISTENT(?oxs ?oys ?x ?y) &&
   ~NOT_CONSISTENT(?oxs ?oys ?x ?y).
 
-# If association's key is not first in dictionary, then move on
+/* If association's key is not first in dictionary, then move on */
 
 IS_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
   ~CONS(?xs ?x ?xs_tl) &&
@@ -298,7 +321,7 @@ IS_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl ?x ?y) :-
   ~CONSISTENT(?oxs ?oys ?x ?y) &&
   ~NOT_CONSISTENT(?oxs ?oys ?x ?y).
 
-# If the inconsistent association is first in dictionary, then break
+/* If the inconsistent association is first in dictionary, then break */
 
 NOT_CONSISTENT(?oxs ?oys ?x ?y) :-
   CONS(?xs ?x ?xs_tl) &&
@@ -308,7 +331,7 @@ NOT_CONSISTENT(?oxs ?oys ?x ?y) :-
   ~CONSISTENT(?oxs ?oys ?x ?y) &&
   ~NOT_CONSISTENT(?oxs ?oys ?x ?y).
 
-# If the lists are empty, then the association is trivially consistent
+/* If the lists are empty, then the association is trivially consistent */
 
 CONSISTENT(?oxs ?oys ?x ?y) :-
   IS_CONSISTENT0(?oxs ?oys ?xs ?ys ?x ?y) &&
@@ -321,17 +344,23 @@ CONSISTENT(?oxs ?oys ?x ?y) :-
   CONSISTENT(?oxs ?oys ?x ?y) ||
   NOT_CONSISTENT(?oxs ?oys ?x ?y).
 
-# Check if dictionary is consistent IS_DICT_CONSISTENT(?xs ?ys) ->
-# DICT_CONSISTENT(?xs ?ys).
+/* Check if dictionary is consistent IS_DICT_CONSISTENT(?xs ?ys) ->
+ * DICT_CONSISTENT(?xs ?ys). */
 
-# Wrapper function
+#define IS_DICT_CONSISTENT_PENDING() {exists ?xs exists ?ys exists ?as exists ?bs { IS_DICT_CONSISTENT0(?xs ?ys ?as ?bs) }}
+
+IS_DICT_CONSISTENT_PENDING2() :- IS_DICT_CONSISTENT_PENDING().
+
+~IS_DICT_CONSISTENT_PENDING2() :- ~IS_DICT_CONSISTENT_PENDING().
+
+/* Wrapper function */
 
 IS_DICT_CONSISTENT0(?xs ?ys ?xs ?ys) :-
   IS_DICT_CONSISTENT(?xs ?ys) &&
   ~DICT_CONSISTENT(?xs ?ys) &&
-  ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
+  ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?xs ?ys ?a ?b)}}.
 
-# Trigger check if first entry of dictionary is consistent with rest
+/* Trigger check if first entry of dictionary is consistent with rest */
 
 IS_ASSOC_CONSISTENT(?xs_tl ?ys_tl ?x ?y), IS_DICT_CONSISTENT1(?oxs ?oys ?xs ?ys) :-
   IS_DICT_CONSISTENT0(?oxs ?oys ?xs ?ys) &&
@@ -340,8 +369,8 @@ IS_ASSOC_CONSISTENT(?xs_tl ?ys_tl ?x ?y), IS_DICT_CONSISTENT1(?oxs ?oys ?xs ?ys)
   ~DICT_CONSISTENT(?oxs ?oys) &&
   ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
 
-# If current entry was consistent, trigger consistency check on
-# remaining dictionary
+/* If current entry was consistent, trigger consistency check on
+ * remaining dictionary */
 
 IS_DICT_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl) :-
   CONSISTENT(?xs_tl ?ys_tl ?x ?y) &&
@@ -351,7 +380,7 @@ IS_DICT_CONSISTENT0(?oxs ?oys ?xs_tl ?ys_tl) :-
   ~DICT_CONSISTENT(?oxs ?oys) &&
   ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
 
-# If current entry is not consistent, then break
+/* If current entry is not consistent, then break */
 
 NOT_DICT_CONSISTENT(?oxs ?oys ?xs_tl ?ys_tl) :-
   NOT_CONSISTENT(?xs_tl ?ys_tl ?x ?y) &&
@@ -361,7 +390,7 @@ NOT_DICT_CONSISTENT(?oxs ?oys ?xs_tl ?ys_tl) :-
   ~DICT_CONSISTENT(?oxs ?oys) &&
   ~{exists ?a exists ?b { NOT_DICT_CONSISTENT(?oxs ?oys ?a ?b)}}.
 
-# If dictionary is empty, then it must be consistent
+/* If dictionary is empty, then it must be consistent */
 
 DICT_CONSISTENT(?oxs ?oys) :-
   IS_DICT_CONSISTENT0(?oxs ?oys ?xs ?ys) &&
@@ -374,105 +403,140 @@ DICT_CONSISTENT(?oxs ?oys) :-
   DICT_CONSISTENT(?oxs ?oys) ||
   NOT_DICT_CONSISTENT(?oxs ?oys ?axs ?ays).
 
-# Select the indicated values DO_SELECTION(?as ?bs) -> SELECTION(?as ?bs ?cs)
-# where ?cs is the subsequence of ?as formed by selecting the entries
-# corresponding to 1s in ?bs.
+/* Select the indicated values DO_SELECTION(?as ?bs) -> SELECTION(?as ?bs ?cs)
+ * where ?cs is the subsequence of ?as formed by selecting the entries
+ * corresponding to 1s in ?bs. */
+
+#define SELECTION_PENDING() {exists ?as exists ?bs exists ?cs exists ?ds exists ?es { DO_SELECTION0(?as ?bs ?cs ?ds ?es) }}
+
+SELECTION_PENDING2() :- SELECTION_PENDING().
+
+~SELECTION_PENDING2() :- ~SELECTION_PENDING().
 
 DO_SELECTION0(?as ?bs ?as ?bs ?cs) :-
   DO_SELECTION(?as ?bs) &&
   CONS(?cs) &&
-  ~{exists ?a {SELECTION(?as ?bs ?a)}}.
+  ~{exists ?a {SELECTION(?as ?bs ?a)}} &&
+  ~BAD_SELECTION(?as ?bs).
 
 DO_SELECTION0(?oas ?obs ?as_tl ?bs_tl ?cs) :-
   DO_SELECTION0(?oas ?obs ?as ?bs ?cs_tl) &&
   CONS(?as ?as_hd ?as_tl) &&
   CONS(?bs 1 ?bs_tl) &&
   CONS(?cs ?as_hd ?cs_tl) &&
-  ~{exists ?a {SELECTION(?oas ?obs ?a)}}.
+  ~{exists ?a {SELECTION(?oas ?obs ?a)}} &&
+  ~BAD_SELECTION(?oas ?obs).
 
 DO_SELECTION0(?oas ?obs ?as_tl ?bs_tl ?cs) :-
   DO_SELECTION0(?oas ?obs ?as ?bs ?cs) &&
   CONS(?as ?as_hd ?as_tl) &&
   CONS(?bs 0 ?bs_tl) &&
-  ~{exists ?a {SELECTION(?oas ?obs ?a)}}.
+  ~{exists ?a {SELECTION(?oas ?obs ?a)}} &&
+  ~BAD_SELECTION(?oas ?obs).
+
+BAD_SELECTION(?oas ?obs) :-
+  DO_SELECTION0(?oas ?obs ?as ?bs ?cs) &&
+  CONS(?as ?as_hd ?as_tl) &&
+  CONS(?bs) &&
+  ~{exists ?a {SELECTION(?oas ?obs ?a)}} &&
+  ~BAD_SELECTION(?oas ?obs).
+
+BAD_SELECTION(?oas ?obs) :-
+  DO_SELECTION0(?oas ?obs ?as ?bs ?cs) &&
+  CONS(?as) &&
+  CONS(?bs ?bs_hd ?bs_tl) &&
+  ~{exists ?a {SELECTION(?oas ?obs ?a)}} &&
+  ~BAD_SELECTION(?oas ?obs).
 
 DO_REVERSE(?cs), DO_SELECTION1(?oas ?obs ?cs) :-
   DO_SELECTION0(?oas ?obs ?as ?bs ?cs) &&
   CONS(?as) &&
   CONS(?bs) &&
-  ~{exists ?a {SELECTION(?oas ?obs ?a)}}.
+  ~{exists ?a {SELECTION(?oas ?obs ?a)}} &&
+  ~BAD_SELECTION(?oas ?obs).
 
 SELECTION(?as ?ds ?bs) :-
   DO_SELECTION1(?as ?ds ?cs) &&
   REVERSE(?cs ?bs).
 
 ~DO_SELECTION0(?oas ?obs ?as ?bs ?cs), ~DO_SELECTION1(?oas ?obs ?cs) :-
-  SELECTION(?oas ?obs ?a).
+  SELECTION(?oas ?obs ?a) ||
+  BAD_SELECTION(?oas ?obs).
 
-# Select the indicated values DO_SELECTION(?as ?bs) -> SELECTION(?as ?bs ?cs)
-# where ?cs is the subsequence of ?as formed by selecting the entries
-# corresponding to 0s in ?bs.
+/* Select the indicated values DO_SELECTION(?as ?bs) -> SELECTION(?as ?bs ?cs)
+ * where ?cs is the subsequence of ?as formed by selecting the entries
+ * corresponding to 0s in ?bs. */
+
+#define DESELECTION_PENDING() {exists ?as exists ?bs exists ?cs exists ?ds exists ?es { DO_DESELECTION0(?as ?bs ?cs ?ds ?es) }}
+
+DESELECTION_PENDING2() :- DESELECTION_PENDING().
+
+~DESELECTION_PENDING2() :- ~DESELECTION_PENDING().
 
 DO_DESELECTION0(?as ?bs ?as ?bs ?cs) :-
   DO_DESELECTION(?as ?bs) &&
   CONS(?cs) &&
-  ~{exists ?a {DESELECTION(?as ?bs ?a)}}.
+  ~{exists ?a {DESELECTION(?as ?bs ?a)}} &&
+  ~BAD_DESELECTION(?as ?bs).
 
 DO_DESELECTION0(?oas ?obs ?as_tl ?bs_tl ?cs) :-
   DO_DESELECTION0(?oas ?obs ?as ?bs ?cs_tl) &&
   CONS(?as ?as_hd ?as_tl) &&
   CONS(?bs 0 ?bs_tl) &&
   CONS(?cs ?as_hd ?cs_tl) &&
-  ~{exists ?a {DESELECTION(?oas ?obs ?a)}}.
+  ~{exists ?a {DESELECTION(?oas ?obs ?a)}} &&
+  ~BAD_DESELECTION(?oas ?obs).
 
 DO_DESELECTION0(?oas ?obs ?as_tl ?bs_tl ?cs) :-
   DO_DESELECTION0(?oas ?obs ?as ?bs ?cs) &&
   CONS(?as ?as_hd ?as_tl) &&
   CONS(?bs 1 ?bs_tl) &&
-  ~{exists ?a {DESELECTION(?oas ?obs ?a)}}.
+  ~{exists ?a {DESELECTION(?oas ?obs ?a)}} &&
+  ~BAD_DESELECTION(?oas ?obs).
+
+BAD_DESELECTION(?oas ?obs) :-
+  DO_DESELECTION0(?oas ?obs ?as ?bs ?cs) &&
+  CONS(?as ?as_hd ?as_tl) &&
+  CONS(?bs) &&
+  ~{exists ?a {DESELECTION(?oas ?obs ?a)}} &&
+  ~BAD_DESELECTION(?oas ?obs).
+
+BAD_DESELECTION(?oas ?obs) :-
+  DO_DESELECTION0(?oas ?obs ?as ?bs ?cs) &&
+  CONS(?as) &&
+  CONS(?bs ?bs_hd ?bs_tl) &&
+  ~{exists ?a {DESELECTION(?oas ?obs ?a)}} &&
+  ~BAD_DESELECTION(?oas ?obs).
 
 DO_REVERSE(?cs), DO_DESELECTION1(?oas ?obs ?cs) :-
   DO_DESELECTION0(?oas ?obs ?as ?bs ?cs) &&
   CONS(?as) &&
   CONS(?bs) &&
-  ~{exists ?a {DESELECTION(?oas ?obs ?a)}}.
+  ~{exists ?a {DESELECTION(?oas ?obs ?a)}} &&
+  ~BAD_DESELECTION(?oas ?obs).
 
 DESELECTION(?as ?ds ?bs) :-
   DO_DESELECTION1(?as ?ds ?cs) &&
-  REVERSE(?cs ?bs).
+  REVERSE(?cs ?bs) &&
+  ~BAD_DESELECTION(?as ?ds).
 
 ~DO_DESELECTION0(?oas ?obs ?as ?bs ?cs), ~DO_DESELECTION1(?oas ?obs ?cs) :-
-  DESELECTION(?oas ?obs ?a).
+  DESELECTION(?oas ?obs ?a) ||
+  BAD_DESELECTION(?oas ?obs).
 
-# Interpret RULE
-
-RULE_DONE(?id) :-
-  QUOTE(RULE ?id ?e0 ?e1) &&
-  QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
-  ~{exists ?as exists ?bs { FORMULA_OUT(?e1 ?as ?bs)}} &&
-  COMMIT() && ~COMMIT2().
+/* Interpret RULE */
 
 ASSOC_LIST(?as ?bs ?cs), IS_DICT_CONSISTENT(?as ?bs), DO_DESELECTION(?cs ?fs) :-
   QUOTE(RULE ?id ?e0 ?e1) &&
   QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
   FORMULA_OUT(?e1 ?as ?bs) &&
-  COMMIT() && ~COMMIT2().
+  COMMIT().
 
 DO_DESELECTION(?ds1 ?fs) :-
   QUOTE(RULE ?id ?e0 ?e1) &&
   QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
   FORMULA_OUT(?e1 ?as ?bs) &&
   ASSOC_LIST(?as ?bs ?cs ?ds1) &&
-  COMMIT().
-
-RULE_DONE(?id) :-
-  QUOTE(RULE ?id ?e0 ?e1) &&
-  QUOTE(TERM ?e0 ?nm ?cs ?fs) &&
-  FORMULA_OUT(?e1 ?as ?bs) &&
-  ASSOC_LIST(?as ?bs ?cs ?ds1) &&
-  DESELECTION(?ds1 ?fs ?ds2) &&
-  DESELECTION(?cs ?fs ?ds3) &&
-  {DICT_CONSISTENT(?as ?bs) || NOT_DICT_CONSISTENT(?as ?bs)} &&
   COMMIT().
 
 RULE_OUT(?nm ?ds) :-
@@ -485,7 +549,33 @@ RULE_OUT(?nm ?ds) :-
   DICT_CONSISTENT(?as ?bs) &&
   COMMIT().
 
-# Interpret negative RULE
+RULE_DONE0(?id) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  COMMIT() &&
+  ~RULE_DONE(?id).
+
+RULE_DONE1(?id) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  RULE_DONE0(?id) &&
+  COMMIT() &&
+  ~RULE_DONE(?id).
+
+RULE_DONE(?id) :-
+  QUOTE(RULE ?id ?e0 ?e1) &&
+  RULE_DONE0(?id) &&
+  RULE_DONE1(?id) &&
+  ~ASSOC_LIST_PENDING() &&
+  ~IS_DICT_CONSISTENT_PENDING() &&
+  ~DESELECTION_PENDING() &&
+  ~ASSOC_LIST_PENDING2() &&
+  ~IS_DICT_CONSISTENT_PENDING2() &&
+  ~DESELECTION_PENDING2() &&
+  COMMIT().
+
+~RULE_DONE0(?id), ~RULE_DONE1(?id) :-
+  RULE_DONE(?id).
+
+/* Interpret negative RULE */
 
 /*~RULE_OUT(?nm ?ds) :-
   QUOTE(RULE ?id ?e0 ?e1) &&
@@ -496,19 +586,9 @@ RULE_OUT(?nm ?ds) :-
   FIX_VARS(?cs ?ds ?cs ?ds) &&
   FIX_VARS(?as ?bs ?cs ?ds).*/
 
-# Interprets a TERM
+/* Interprets a TERM */
 
-DO_DESELECTION(?as ?bs), DO_SELECTION(?as ?bs) :-
-  QUOTE(TERM ?id ?n ?as ?bs) &&
-  EXECUTE() && ~EXECUTE2().
-
-FORMULA_DONE(?id ?as) :-
-  QUOTE(TERM ?id ?n ?as ?bs) &&
-  DESELECTION(?as ?bs ?cs) &&
-  SELECTION(?as ?bs ?ds) &&
-  EXECUTE().
-
-DO_DESELECTION(?cs ?bs), DO_SELECTION(?cs ?bs) :-
+DO_DESELECTION(?as ?bs), DO_SELECTION(?as ?bs), DO_DESELECTION(?cs ?bs), DO_SELECTION(?cs ?bs) :-
   QUOTE(TERM ?id ?n ?as ?bs) &&
   RULE_OUT(?n ?cs) &&
   EXECUTE() && ~EXECUTE2().
@@ -522,63 +602,63 @@ FORMULA_OUT(?id ?es ?fs) :-
   DESELECTION(?as ?bs ?ds) &&
   EXECUTE().
 
-# Interprets EQUALS
+FORMULA_DONE0(?id) :-
+  QUOTE(TERM ?id ?n ?as ?bs) &&
+  EXECUTE() &&
+  ~FORMULA_DONE(?id).
 
-# First and second operands are symbols
+FORMULA_DONE(?id) :-
+  QUOTE(TERM ?id ?n ?as ?bs) &&
+  FORMULA_DONE0(?id) &&
+  ~SELECTION_PENDING() &&
+  ~DESELECTION_PENDING() &&
+  EXECUTE().
+
+~FORMULA_DONE0(?id) :-
+  QUOTE(TERM ?id ?n ?as ?bs) &&
+  FORMULA_DONE(?id).
+
+/* Interprets EQUALS */
+
+FORMULA_DONE(?id) :-
+  QUOTE(EQUALS ?id ?a1 ?a2 ?b1 ?b2) &&
+  EXECUTE().
+
+/* First and second operands are symbols */
 
 FORMULA_OUT(?id ?as ?bs) :-
   QUOTE(EQUALS ?id ?a1 ?a2 0 0) &&
-  LIST(?as) &&
-  LIST(?bs) &&
+  LIST0(?as) &&
+  LIST0(?bs) &&
   {?a1=?a2} &&
   EXECUTE().
 
-FORMULA_DONE(?id ?as) :-
-  QUOTE(EQUALS ?id ?a1 ?a2 0 0) &&
-  LIST(?as) &&
-  EXECUTE().
-
-# First operand is a symbol whilst the second is a variable
+/* First operand is a symbol whilst the second is a variable */
 
 FORMULA_OUT(?id ?as ?bs) :-
   QUOTE(EQUALS ?id ?a1 ?a2 0 1) &&
-  LIST(?as ?a2) &&
-  LIST(?bs ?a1) &&
+  LIST1(?as, ?a2) &&
+  LIST1(?bs, ?a1) &&
   EXECUTE().
 
-FORMULA_DONE(?id ?as) :-
-  QUOTE(EQUALS ?id ?a1 ?a2 0 1) &&
-  LIST(?as ?a2) &&
-  EXECUTE().
-
-# First operand is a variable whilst the second is a symbol
+/* First operand is a variable whilst the second is a symbol */
 
 FORMULA_OUT(?id ?as ?bs) :-
   QUOTE(EQUALS ?id ?a1 ?a2 1 0) &&
-  LIST(?as ?a1) &&
-  LIST(?bs ?a2) &&
+  LIST1(?as, ?a1) &&
+  LIST1(?bs, ?a2) &&
   EXECUTE().
 
-FORMULA_DONE(?id ?as) :-
-  QUOTE(EQUALS ?id ?a1 ?a2 1 0) &&
-  LIST(?as ?a1) &&
-  EXECUTE().
-
-# Both operands are variables
+/* Both operands are variables */
 
 FORMULA_OUT(?id ?as ?bs) :-
   QUOTE(EQUALS ?id ?a1 ?a2 1 1) &&
-  LIST(?as ?a1 ?a2) &&
-  LIST(?bs ?b1 ?b2) &&
+  LIST2(?as, ?a1, ?a2) &&
+  LIST2(?bs, ?b1, ?b2) &&
   {?b1=?b2} &&
   EXECUTE().
 
-FORMULA_DONE(?id ?as) :-
-  QUOTE(EQUALS ?id ?a1 ?a2 1 1) &&
-  LIST(?as ?a1 ?a2) &&
-  EXECUTE().
-
-# Interprets TRUE
+/* Interprets TRUE */
 
 FORMULA_OUT(?id ?as ?bs) :-
   QUOTE(TRUE ?id) &&
@@ -586,74 +666,69 @@ FORMULA_OUT(?id ?as ?bs) :-
   CONS(?bs) &&
   EXECUTE().
 
-FORMULA_DONE(?id ?as) :-
+FORMULA_DONE(?id) :-
   QUOTE(TRUE ?id) &&
-  CONS(?as) &&
   EXECUTE().
 
-# Interpret AND
+/* Interpret AND */
 
 DO_RAPPEND(?as1 ?as2), DO_RAPPEND(?bs1 ?bs2) :-
   QUOTE(AND ?id ?e1 ?e2) &&
   {FORMULA_OUT(?e1 ?as1 ?bs1) &&
   FORMULA_OUT(?e2 ?as2 ?bs2)} &&
+  FORMULA_DONE(?e1) &&
+  FORMULA_DONE(?e2) &&
   EXECUTE().
 
 FORMULA_OUT(?id ?as ?bs) :-
   QUOTE(AND ?id ?e1 ?e2) &&
   {FORMULA_OUT(?e1 ?as1 ?bs1) &&
   FORMULA_OUT(?e2 ?as2 ?bs2)} &&
+  FORMULA_DONE(?e1) &&
+  FORMULA_DONE(?e2) &&
   RAPPEND(?as ?as1 ?as2) &&
   RAPPEND(?bs ?bs1 ?bs2) &&
   EXECUTE().
 
-DO_RAPPEND(?as1 ?as2) :-
+FORMULA_DONE(?id) :-
   QUOTE(AND ?id ?e1 ?e2) &&
-  FORMULA_DONE(?e1 ?as1) &&
-  FORMULA_DONE(?e2 ?as2) &&
+  FORMULA_DONE(?e1) &&
+  FORMULA_DONE(?e2) &&
+  FORMULA_DONE2(?e1) &&
+  FORMULA_DONE2(?e2) &&
+  ~RAPPEND_PENDING() &&
   EXECUTE().
 
-FORMULA_DONE(?id ?as) :-
-  QUOTE(AND ?id ?e1 ?e2) &&
-  FORMULA_DONE(?e1 ?as1) &&
-  FORMULA_DONE(?e2 ?as2) &&
-  RAPPEND(?as ?as1 ?as2) &&
-  EXECUTE().
-
-# Interpret OR
+/* Interpret OR */
 
 DO_RAPPEND(?as1 ?as2), DO_RAPPEND(?bs1 ?bs2) :-
   QUOTE(OR ?id ?e1 ?e2) &&
   {FORMULA_OUT(?e1 ?as1 ?bs1) &&
   FORMULA_OUT(?e2 ?as2 ?bs2)} &&
+  FORMULA_DONE(?e1) &&
+  FORMULA_DONE(?e2) &&
   EXECUTE().
 
 FORMULA_OUT(?id ?as ?bs) :-
   QUOTE(OR ?id ?e1 ?e2) &&
   {FORMULA_OUT(?e1 ?as1 ?bs1) ||
   FORMULA_OUT(?e2 ?as2 ?bs2)} &&
+  FORMULA_DONE(?e1) &&
+  FORMULA_DONE(?e2) &&
   RAPPEND(?as ?as1 ?as2) &&
   RAPPEND(?bs ?bs1 ?bs2) &&
   EXECUTE().
 
-DO_RAPPEND(?as1 ?as2) :-
+FORMULA_DONE(?id) :-
   QUOTE(OR ?id ?e1 ?e2) &&
-  FORMULA_DONE(?e1 ?as1) &&
-  FORMULA_DONE(?e2 ?as2) &&
-  EXECUTE().
-
-FORMULA_DONE(?id ?as) :-
-  QUOTE(OR ?id ?e1 ?e2) &&
-  FORMULA_DONE(?e1 ?as1) &&
-  FORMULA_DONE(?e2 ?as2) &&
-  RAPPEND(?as ?as1 ?as2) &&
+  FORMULA_DONE(?e1) &&
+  FORMULA_DONE(?e2) &&
+  FORMULA_DONE2(?e1) &&
+  FORMULA_DONE2(?e2) &&
+  ~RAPPEND_PENDING() &&
   EXECUTE().
 
 /*
-# Rules for supporting self-referential quotations. Optional
-
-# Interpret self-modification
-
 QUOTE() :-
   QUOTE(RULE ?id ?e0 ?e1) &&
   QUOTE(TERM ?e0 this ?cs) &&
@@ -699,7 +774,6 @@ QUOTE(?d0 ?d1 ?d2 ?d3) :-
   FIX_VARS(?cs ?ds ?cs ?ds) &&
   FIX_VARS(?as ?bs ?cs ?ds).
 
-# Interpret negative self-modification
 
 ~QUOTE() :-
   QUOTE(RULE ?id ?e0 ?e1) &&
@@ -751,7 +825,6 @@ QUOTE(?d0 ?d1 ?d2 ?d3) :-
   FIX_VARS(?cs ?ds ?cs ?ds) &&
   FIX_VARS(?as ?bs ?cs ?ds).
   
-# Interprets a self-referential TERM
 
 FORMULA_OUT(?id ?as ?bs) :-
   QUOTE(TERM ?id this ?as) &&

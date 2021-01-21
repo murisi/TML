@@ -7178,41 +7178,35 @@ void driver::step_transform(raw_prog &rp,
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	
-	std::map<std::tuple<elem, bool>, elem> freeze_map;
-	std::map<elem, std::tuple<elem, bool>> unfreeze_map;
+	std::map<elem, elem> freeze_map;
+	std::map<elem, elem> unfreeze_map;
 	// Separate the internal rules used to execute the parts of the
 	// transformation from the external rules used to expose the results
 	// of computation.
-	std::set<raw_term> fact_prog;
 	std::vector<raw_rule> ext_prog, int_prog;
 	// Create a duplicate of each rule in the given program under a
 	// generated alias.
 	for(raw_rule rr : rp.r) {
-		// If the current rule is a fact, store it separately so that we
-		// avoid creating unnecessary tmprels
-		if(rr.is_b() && rr.b.empty()) {
-			fact_prog.insert(rr.h.begin(), rr.h.end());
-		} else {
-			for(raw_term &rt : rr.h) {
-				raw_term rt2 = rt;
-				auto it = freeze_map.find(std::make_tuple(rt.e[0], rt.neg));
-				if(it != freeze_map.end()) {
-					rt.e[0] = it->second;
-				} else {
-					elem frozen_elem = elem::fresh_temp_sym(d);
-					// Store the mapping so that the derived portion of each
-					// relation is stored in exactly one place
-					unfreeze_map[frozen_elem] = std::make_tuple(rt.e[0], rt.neg);
-					rt.e[0] = freeze_map[std::make_tuple(rt.e[0], rt.neg)] = frozen_elem;
-				}
-				// The internal rule should be positive since the external can be
-				// negative.
-				rt.neg = false;
-				// Update the external interface
-				ext_prog.push_back(raw_rule(rt2, rt));
+		for(raw_term &rt : rr.h) {
+			raw_term rt2 = rt;
+			auto it = freeze_map.find(rt.e[0]);
+			if(it != freeze_map.end()) {
+				rt.e[0] = it->second;
+			} else {
+				elem frozen_elem = elem::fresh_temp_sym(d);
+				// Store the mapping so that the derived portion of each
+				// relation is stored in exactly one place
+				unfreeze_map[frozen_elem] = rt.e[0];
+				rt.e[0] = freeze_map[rt.e[0]] = frozen_elem;
 			}
-			int_prog.push_back(rr);
+			// Update the external interface
+			raw_term rt1 = rt;
+			rt2.neg = rt1.neg = false;
+			ext_prog.push_back(raw_rule(rt2, rt1));
+			rt2.neg = rt1.neg = true;
+			ext_prog.push_back(raw_rule(rt2, rt1));
 		}
+		int_prog.push_back(rr);
 	}
 	// Apply the modifications from the above loop
 	rp.r = int_prog;
@@ -7296,8 +7290,13 @@ void driver::step_transform(raw_prog &rp,
 			
 			for(const relation *w : v) {
 				const raw_term general_head = relation_to_term(rrels[w]);
-				rp.r.push_back(raw_rule(general_head.negate(),
-					{ general_head, raw_term(clock_states[0], std::vector<elem>{}) }));
+				// If the present relation does not correspond to a relation in
+				// the original program, then clear the table so it does not
+				// affect future stages.
+				if(unfreeze_map.find(general_head.e[0]) == unfreeze_map.end()) {
+					rp.r.push_back(raw_rule(general_head.negate(),
+						{ general_head, raw_term(clock_states[0], std::vector<elem>{}) }));
+				}
 				for(raw_rule rr : *w) {
 					// Condition everything in the current stage with the same
 					// clock state
@@ -7329,13 +7328,6 @@ void driver::step_transform(raw_prog &rp,
 			rp.r.push_back(condition_rule(rr,
 				raw_term(clock_states[0], std::vector<elem>{})));
 		}
-		// Add the facts section from the original program so that facts are
-		// asserted during the writeback stage
-		if(fact_prog.size()) {
-			rp.r.push_back(condition_rule(
-				raw_rule(std::vector<raw_term>(fact_prog.begin(), fact_prog.end()), {}),
-				raw_term(clock_states[0], std::vector<elem>{})));
-		}
 	} else {
 		// If there are no interdepencies then we can just restore the
 		// original rule names to the transformed program
@@ -7343,16 +7335,9 @@ void driver::step_transform(raw_prog &rp,
 			for(raw_term &rt : rr.h) {
 				auto jt = unfreeze_map.find(rt.e[0]);
 				if(jt != unfreeze_map.end()) {
-					auto &[name, neg] = jt->second;
-					rt.e[0] = name;
-					rt.neg = neg;
+					rt.e[0] = jt->second;
 				}
 			}
-		}
-		// Add the facts from the original program
-		if(fact_prog.size()) {
-			rp.r.push_back(raw_rule(std::vector<raw_term>(fact_prog.begin(),
-				fact_prog.end()), {}));
 		}
 	}
 }

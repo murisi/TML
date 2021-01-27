@@ -7257,7 +7257,7 @@ void driver::step_transform(raw_prog &rp,
 	// Separate the internal rules used to execute the parts of the
 	// transformation from the external rules used to expose the results
 	// of computation.
-	std::vector<raw_rule> ext_prog, int_prog;
+	std::vector<raw_rule> int_prog;
 	// Create a duplicate of each rule in the given program under a
 	// generated alias.
 	for(raw_rule rr : rp.r) {
@@ -7273,12 +7273,6 @@ void driver::step_transform(raw_prog &rp,
 				unfreeze_map[frozen_elem] = rt.e[0];
 				rt.e[0] = freeze_map[rt.e[0]] = frozen_elem;
 			}
-			// Update the external interface
-			raw_term rt1 = rt;
-			rt2.neg = rt1.neg = false;
-			ext_prog.push_back(raw_rule(rt2, rt1));
-			rt2.neg = rt1.neg = true;
-			ext_prog.push_back(raw_rule(rt2, rt1));
 		}
 		int_prog.push_back(rr);
 	}
@@ -7363,13 +7357,25 @@ void driver::step_transform(raw_prog &rp,
 			clock_states.push_back(clock_state);
 			
 			for(const relation *w : v) {
-				const raw_term general_head = relation_to_term(rrels[w]);
+				raw_term general_head = relation_to_term(rrels[w]);
 				// If the present relation does not correspond to a relation in
 				// the original program, then clear the table so it does not
 				// affect future stages.
 				if(unfreeze_map.find(general_head.e[0]) == unfreeze_map.end()) {
 					rp.r.push_back(raw_rule(general_head.negate(),
 						{ general_head, raw_term(clock_states[0], std::vector<elem>{}) }));
+				} else {
+					// Update the external interface during the writeback stage
+					// by copying the contents of the final temporary relation
+					// back to the external interface.
+					raw_term original_head = general_head;
+					original_head.e[0] = unfreeze_map[general_head.e[0]];
+					original_head.neg = general_head.neg = true;
+					rp.r.push_back(condition_rule(raw_rule(original_head, general_head),
+						raw_term(clock_states[0], std::vector<elem>{})));
+					original_head.neg = general_head.neg = false;
+					rp.r.push_back(condition_rule(raw_rule(original_head, general_head),
+						raw_term(clock_states[0], std::vector<elem>{})));
 				}
 				for(raw_rule rr : *w) {
 					// Condition everything in the current stage with the same
@@ -7395,14 +7401,6 @@ void driver::step_transform(raw_prog &rp,
 			rp.r.push_back(raw_rule({ raw_term(clock_states[0], std::vector<elem>{}),
 				raw_term(clock_states.back(), std::vector<elem>{}).negate() },
 				{ raw_term(clock_states.back(), std::vector<elem>{}) }));
-		}
-		// Add the external program which serves to writeback the outputs of
-		// the internal rules.
-		for(raw_rule &rr : ext_prog) {
-			// Condition everything in the writeback stage with the same
-			// clock state
-			rp.r.push_back(condition_rule(rr,
-				raw_term(clock_states[0], std::vector<elem>{})));
 		}
 	} else {
 		// If there are no interdepencies then we can just restore the
@@ -8123,7 +8121,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		//std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
 		step_transform(rp, [&](raw_prog &rp) {
 			to_pure_tml(rp);
-			//binary_transform(rp);
+			//unary_transform(rp);
 			std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
 			//subsume_queries(rp);
 			std::cout << "Minimized Program:" << std::endl << std::endl << rp << std::endl;

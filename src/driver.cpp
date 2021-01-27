@@ -7153,6 +7153,35 @@ raw_term driver::relation_to_term(const rel_info &ri) {
 	return raw_term(els);
 }
 
+/* Converts a pure TML program into one that uses no conjunctions. Does
+ * this using the formula a & b = ~((~a) | (~b)). More concretely,
+ * for each conjunct, creates a disjunction of a rule predicated on its
+ * negation, and then defines the original rule as the negation of this
+ * disjunction. */
+
+void driver::unary_transform(raw_prog &rp) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	// The vector in which pending dijuncts are temporarily stored
+	std::vector<raw_rule> pending_rules;
+	// Convert each rule with multiple conjuncts into multiple unary rules
+	for(raw_rule &rr : rp.r) {
+		if(rr.b.size() == 1 && rr.b[0].size() > 1) {
+			raw_term neg_head(elem::fresh_temp_sym(d), collect_free_vars(rr));
+			// Make each disjunct of the negation of the current rule
+			for(raw_term &rt : rr.b[0]) {
+				pending_rules.push_back(raw_rule(neg_head, { rt.negate() }));
+			}
+			// Recover the original rule by negating the negation
+			rr.set_b({{ neg_head.negate() }});
+		}
+	}
+	// Finally add pending rules without risk of interfering with iterator
+	for(raw_rule &rr : pending_rules) {
+		rp.r.push_back(rr);
+	}
+}
+
 /* Convenience function to condition the given rule with the given
  * condition term. */
 
@@ -7305,14 +7334,16 @@ void driver::step_transform(raw_prog &rp,
 				}
 			}
 		}
-		// Start the clock ticking by asserting a state if no other state is
-		// asserted
-		raw_rule init_clock(raw_term(clock_states[0], std::vector<elem>{}));
-		init_clock.b.push_back({});
-		for(const elem &e : clock_states) {
-			init_clock.b[0].push_back(raw_term(e, std::vector<elem>{}).negate());
-		}
-		rp.r.push_back(init_clock);
+		// Start the clock ticking by asserting stage0, asserting stage1
+		// if stage0 holds, and asserting the clock if stage0 holds but
+		// stage1 does not.
+		raw_term stage0(elem::fresh_temp_sym(d), std::vector<elem>{});
+		raw_term stage1(elem::fresh_temp_sym(d), std::vector<elem>{});
+		raw_term stage2(clock_states[0], std::vector<elem>{});
+		rp.r.push_back(raw_rule(stage0));
+		rp.r.push_back(raw_rule(stage1, stage0));
+		rp.r.push_back(raw_rule(stage2, {stage0, stage1.negate()}));
+		
 		if(clock_states.size() > 1) {
 			// If the previous state is asserted, then de-assert it and assert
 			// this state
@@ -8014,6 +8045,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		//std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
 		step_transform(rp, [&](raw_prog &rp) {
 			to_pure_tml(rp);
+			unary_transform(rp);
 			std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
 			//subsume_queries(rp);
 			std::cout << "Minimized Program:" << std::endl << std::endl << rp << std::endl;

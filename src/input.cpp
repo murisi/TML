@@ -508,7 +508,7 @@ sprawformtree raw_rule::get_prft() const {
 	if(prft) {
 		return prft;
 	} else if(b.empty()) {
-		return prft = std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
+		return std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
 	} else {
 		sprawformtree disj =
 			std::make_shared<raw_form_tree>(elem::NONE, raw_term::_false());
@@ -528,7 +528,7 @@ sprawformtree raw_rule::get_prft() const {
 			}
 			disj = std::make_shared<raw_form_tree>(elem::ALT, disj, conj);
 		}
-		return prft = raw_form_tree::simplify(disj);
+		return raw_form_tree::simplify(disj);
 	}
 }
 bool raw_rule::is_b() const {

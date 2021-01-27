@@ -129,6 +129,7 @@ class driver {
 	void step_transform(raw_prog &rp,
 		const std::function<void(raw_prog &)> &f);
 	void unary_transform(raw_prog &rp);
+	void binary_transform(raw_prog &rp);
 	void recursive_transform(raw_prog &rp,
 		const std::function<void(raw_prog &)> &f);
 	raw_rule freeze_rule(raw_rule rr, std::map<elem, elem> &freeze_map,
@@ -169,6 +170,7 @@ class driver {
 	std::set<elem> collect_free_vars(const raw_term &t);
 	void collect_free_vars(const sprawformtree &t,
 		std::vector<elem> &bound_vars, std::set<elem> &free_vars);
+	std::set<elem> collect_free_vars(const std::vector<std::vector<raw_term>> &b);
 	std::set<elem> collect_free_vars(const sprawformtree &t);
 	raw_term relation_to_term(const rel_info &ri);
 	void populate_universe(const raw_term &rt, std::set<elem> &universe);

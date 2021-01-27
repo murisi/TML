@@ -7182,6 +7182,51 @@ void driver::unary_transform(raw_prog &rp) {
 	}
 }
 
+/* Converts a pure TML program into one that use at most one conjunct in
+ * each rule. Does this by collapsing groups of conjuncts in rule bodies
+ * into at most two new temporary rules. */
+
+void driver::binary_transform(raw_prog &rp) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	// Loop through the program rules and split those with bodies
+	// containing more than 2 conjuncts into 2. Note that the program size
+	// may increase during this loop as we add ever shorter rules to the
+	// back.
+	for(int_t i = 0; i < rp.r.size(); i++) {
+		// Only tamper with bodies containing more than 2 conjuncts
+		if(rp.r[i].b.size() == 1 && rp.r[i].b[0].size() == 3) {
+			std::vector<raw_term> bodie = rp.r[i].b[0];
+			// Retain only the last term of this rule's body for this rule -
+			// the rest we will shift into a new rule
+			raw_term current_term = bodie.back();
+			bodie.pop_back();
+			raw_term new_head(elem::fresh_temp_sym(d), collect_free_vars({bodie}));
+			// Now this rule becomes the last term and a relation containing
+			// all the other terms that were in this body.
+			rp.r[i].b = {{ current_term, new_head }};
+			// Add our new temporary rule to the back, so that this loop can
+			// reprocess it if its body also contains more than 2 conjuncts.
+			rp.r.push_back(raw_rule(new_head, bodie));
+		} else if(rp.r[i].b.size() == 1 && rp.r[i].b[0].size() > 2) {
+			int_t midway = rp.r[i].b[0].size() / 2;
+			// Get the first half of the body
+			std::vector<raw_term> bodie1(rp.r[i].b[0].begin(), rp.r[i].b[0].begin() + midway);
+			// Get the second half of the body
+			std::vector<raw_term> bodie2(rp.r[i].b[0].begin() + midway, rp.r[i].b[0].end());
+			raw_term new_head1(elem::fresh_temp_sym(d), collect_free_vars({bodie1}));
+			raw_term new_head2(elem::fresh_temp_sym(d), collect_free_vars({bodie2}));
+			// Now this rule becomes the two relations that when combined
+			// contain all the terms that were in this body.
+			rp.r[i].b = {{ new_head1, new_head2 }};
+			// Add our new temporary rules to the back, so that this loop can
+			// reprocess it if its body also contains more than 2 conjuncts.
+			rp.r.push_back(raw_rule(new_head1, bodie1));
+			rp.r.push_back(raw_rule(new_head2, bodie2));
+		}
+	}
+}
+
 /* Convenience function to condition the given rule with the given
  * condition term. */
 
@@ -7531,6 +7576,14 @@ void driver::collect_free_vars(const std::vector<std::vector<raw_term>> &b,
 			collect_free_vars(rt, bound_vars, free_vars);
 		}
 	}
+}
+
+std::set<elem> driver::collect_free_vars
+		(const std::vector<std::vector<raw_term>> &b) {
+	std::vector<elem> bound_vars;
+	std::set<elem> free_vars;
+	collect_free_vars(b, bound_vars, free_vars);
+	return free_vars;
 }
 
 /* Collect all the variables that are free in the given rule. */
@@ -8045,7 +8098,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		//std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
 		step_transform(rp, [&](raw_prog &rp) {
 			to_pure_tml(rp);
-			unary_transform(rp);
+			binary_transform(rp);
 			std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
 			//subsume_queries(rp);
 			std::cout << "Minimized Program:" << std::endl << std::endl << rp << std::endl;

@@ -7499,11 +7499,23 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 		} case elem::EXISTS: {
 			// Make the proposition that is being quantified
 			std::set<elem> nfv = fv;
-			const elem qvar = *(t->l->el);
-			nfv.insert(qvar);
-			raw_term nrt = to_pure_tml(t->r, rp, nfv);
+			sprawformtree current_formula;
+			std::set<elem> qvars;
+			// Get all the quantified variables used in a sequence of
+			// existential quantifiers
+			for(current_formula = t;
+					current_formula->type == elem::EXISTS;
+					current_formula = current_formula->r) {
+				qvars.insert(*(current_formula->l->el));
+			}
+			nfv.insert(qvars.begin(), qvars.end());
+			// Convert the body occuring within the nested quantifiers into
+			// pure TML
+			raw_term nrt = to_pure_tml(current_formula, rp, nfv);
 			// Make the rule corresponding to this existential formula
-			nfv.erase(qvar);
+			for(const elem &e : qvars) {
+				nfv.erase(e);
+			}
 			raw_rule nr(raw_term(part_id, nfv), nrt);
 			rp.push_back(nr);
 			return raw_term(part_id, nfv);
@@ -7521,13 +7533,26 @@ raw_term driver::to_pure_tml(const sprawformtree &t,
 		} case elem::NONE: {
 			return *t->rt;
 		} case elem::FORALL: {
+			sprawformtree current_formula;
+			std::set<elem> qvars;
+			// Get all the quantified variables used in a sequence of
+			// existential quantifiers
+			for(current_formula = t;
+					current_formula->type == elem::FORALL;
+					current_formula = current_formula->r) {
+				qvars.insert(*(current_formula->l->el));
+			}
 			// The universal quantifier is logically equivalent to the
-			// following
-			elem qvar = *(t->l->el);
-			return to_pure_tml(std::make_shared<raw_form_tree>(elem::NOT,
-				std::make_shared<raw_form_tree>(elem::EXISTS,
+			// following (forall ?x forall ?y = ~ exists ?x exists ?y ~)
+			sprawformtree equiv_formula =
+				std::make_shared<raw_form_tree>(elem::NOT, current_formula);
+			for(const elem &qvar : qvars) {
+				equiv_formula = std::make_shared<raw_form_tree>(elem::EXISTS,
 					std::make_shared<raw_form_tree>(elem::VAR, qvar),
-					std::make_shared<raw_form_tree>(elem::NOT, t->r))), rp, fv);
+					equiv_formula);
+			}
+			return to_pure_tml(std::make_shared<raw_form_tree>(elem::NOT,
+				equiv_formula), rp, fv);
 		} default:
 			assert(false); //should never reach here
 	}
@@ -8098,7 +8123,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		//std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
 		step_transform(rp, [&](raw_prog &rp) {
 			to_pure_tml(rp);
-			binary_transform(rp);
+			//binary_transform(rp);
 			std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
 			//subsume_queries(rp);
 			std::cout << "Minimized Program:" << std::endl << std::endl << rp << std::endl;

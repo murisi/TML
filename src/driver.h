@@ -173,43 +173,16 @@ class driver {
 	std::set<elem> collect_free_vars(const std::vector<std::vector<raw_term>> &b);
 	std::set<elem> collect_free_vars(const sprawformtree &t);
 	raw_term relation_to_term(const rel_info &ri);
-	void populate_universe(const raw_term &rt, std::set<elem> &universe);
-	void populate_universe(const raw_prog &rp,
-		std::set<elem> &universe);
-	void interpret_rule(size_t hd_idx, std::set<elem> &free_vars,
-		const raw_rule &rul, const std::map<elem, std::set<elem>> &universes,
-		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database,
-		idatabase &next_database);
-	bool evaluate_term(const raw_term &rt,
-		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database);
 	sprawformtree fix_variables(const elem &fv_rel, const elem &qva,
 		const elem &rva, const elem &qvb, const elem &rvb);
 	sprawformtree fix_symbols(const elem &fs_rel, const elem &qva,
 		const elem &rva);
 	void subsume_queries(raw_prog &rp);
-	void print_database(const idatabase &database);
 	string_t generate_cpp(const elem &e, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
 	string_t generate_cpp(const raw_term &rt, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
 	string_t generate_cpp(const sprawformtree &prft, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
 	string_t generate_cpp(const raw_rule &rr, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
 	string_t generate_cpp(const raw_prog &rp, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
-	bool evaluate_conjunction(const std::vector<raw_term> &conj,
-		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database);
-	bool evaluate_disjunction(const std::vector<std::vector<raw_term>> &disj,
-		std::unordered_map<elem, elem, elem_hash> &bindings, idatabase &database);
-	void reduce_universe(const elem &var, const std::vector<raw_term> &conj,
-		std::set<elem> &universe, idatabase &database);
-	void reduce_universe(const elem &var,
-		const std::vector<std::vector<raw_term>> &disj,
-		std::set<elem> &universe, idatabase &database);
-	void reduce_universe(const elem &var, const raw_term &rt,
-		std::set<elem> &universe, idatabase &database);
-	void reduce_universe(const elem &var, const raw_rule &rul,
-		std::set<elem> &universe, idatabase &database);
-	void populate_universes(const raw_rule &rul, std::set<elem> &universe,
-		std::map<elem, std::set<elem>> &universes, idatabase &database);
-	void naive_pfp(const raw_prog &rp, std::set<elem> &universe,
-		idatabase &database);
 	raw_prog reify(const raw_prog& p);
 	raw_term from_grammar_elem(const elem& v, int_t v1, int_t v2);
 	raw_term from_grammar_elem_nt(const lexeme& r, const elem& c,

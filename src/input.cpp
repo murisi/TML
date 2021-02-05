@@ -509,13 +509,13 @@ sprawformtree raw_rule::get_prft() const {
 	if(prft) {
 		return prft;
 	} else if(b.empty()) {
-		return std::make_shared<raw_form_tree>(elem::TRUE);
+		return std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
 	} else {
 		sprawformtree disj =
-			std::make_shared<raw_form_tree>(elem::FALSE);
+			std::make_shared<raw_form_tree>(elem::NONE, raw_term::_false());
 		for(size_t i = 0; i < b.size(); i++) {
 			sprawformtree conj =
-				std::make_shared<raw_form_tree>(elem::TRUE);
+				std::make_shared<raw_form_tree>(elem::NONE, raw_term::_true());
 			for(size_t j = 0; j < b[i].size(); j++) {
 				raw_term entr = b[i][j];
 				bool negated = entr.neg;
@@ -534,7 +534,7 @@ sprawformtree raw_rule::get_prft() const {
 }
 bool raw_rule::is_b() const {
 	return !b.empty() || prft == nullptr ||
-		(prft && prft->type == elem::NONE && prft->type == elem::TRUE);
+		(prft && prft->type == elem::NONE && prft->rt->is_true());
 }
 bool raw_rule::parse(input* in, const raw_prog& prog) {
 	const lexemes& l = in->l;
@@ -765,18 +765,18 @@ sprawformtree raw_form_tree::simplify(sprawformtree &t) {
 		case elem::AND:
 			simplify(t->l);
 			simplify(t->r);
-			if(t->l->type == elem::TRUE) {
+			if(t->l->type == elem::NONE && t->l->rt->is_true()) {
 				t = t->r;
-			} else if(t->r->type == elem::TRUE) {
+			} else if(t->r->type == elem::NONE && t->r->rt->is_true()) {
 				t = t->l;
 			}
 			break;
 		case elem::ALT:
 			simplify(t->l);
 			simplify(t->r);
-			if(t->l->type == elem::FALSE) {
+			if(t->l->type == elem::NONE && t->l->rt->is_false()) {
 				t = t->r;
-			} else if(t->r->type == elem::FALSE) {
+			} else if(t->r->type == elem::NONE && t->r->rt->is_false()) {
 				t = t->l;
 			}
 			break;

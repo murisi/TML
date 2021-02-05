@@ -7860,6 +7860,19 @@ bool driver::transform_grammar(raw_prog &rp) {
 	}
 }
 
+/* Defines false as a nullary relation containing no facts. This is done
+ * using the rule ~false() :- ~false(). This way the false relation has
+ * a constant value throughout execution. */
+
+void driver::transform_booleans(raw_prog &rp) {
+	dict_t &d = tbl->get_dict();
+	rp.r.push_back(raw_rule(
+		raw_term(elem(elem::SYM, d.get_lexeme("false")),
+			std::vector<elem>{}).negate(),
+		raw_term(elem(elem::SYM, d.get_lexeme("false")),
+			std::vector<elem>{}).negate()));
+}
+
 bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	lexeme trel = { 0, 0 };
 	directives_load(rp, trel);
@@ -7904,7 +7917,10 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		std::map<elem, string_t> elem_cache;
 		generate_cpp(rp, rp_generator, cid, to_string_t("d"), elem_cache);
 		std::cout << "Program Generator:" << std::endl << std::endl << to_string(rp_generator) << std::endl;
+		transform_booleans(rp);
+		std::cout << "Booleaned Program:" << std::endl << std::endl << rp << std::endl;
 		transform_domains(rp);
+		std::cout << "Domained Program:" << std::endl << std::endl << rp << std::endl;
 		transform_quotes(rp);
 		std::cout << "Quoted Program:" << std::endl << std::endl << rp << std::endl;
 		transform_evals(rp);

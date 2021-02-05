@@ -125,7 +125,7 @@ class driver {
 		const sprawformtree &tree, std::vector<sprawformtree> &tms);
 	bool is_cq(const raw_rule &rr);
 	bool is_cqn(const raw_rule &rr);
-	bool try_minimize(raw_rule &rr);
+	template<typename F> bool try_minimize(raw_rule &rr, const F &f);
 	int_t count_related_rules(const raw_rule &rr1, const raw_prog &rp);
 	void step_transform(raw_prog &rp,
 		const std::function<void(raw_prog &)> &f);
@@ -180,7 +180,7 @@ class driver {
 	sprawformtree fix_symbols(const elem &fs_rel, const elem &qva,
 		const elem &rva);
 	void transform_booleans(raw_prog &rp);
-	void subsume_queries(raw_prog &rp);
+	template<typename F> void subsume_queries(raw_prog &rp, const F &f);
 	string_t generate_cpp(const elem &e, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
 	string_t generate_cpp(const raw_term &rt, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
 	string_t generate_cpp(const sprawformtree &prft, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);

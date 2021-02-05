@@ -793,11 +793,11 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 }
 
 /* If the given query is conjunctive, go through its terms and see if
- * removing one of them can produce an equivalent query. If this is
- * the case, modify the input query and indicate that this has happened
- * through the return flag. */
+ * removing one of them can produce a query that f determines to be
+ * equivalent. If this is the case, modify the input query and indicate
+ * that this has happened through the return flag. */
 
-bool driver::try_minimize(raw_rule &rr) {
+template<typename F> bool driver::try_minimize(raw_rule &rr, const F &f) {
 	if(is_cqn(rr)) {
 		std::vector<raw_term> heads1 = rr.h, bodie1 = rr.b[0],
 			heads2 = rr.h, bodie2 = rr.b[0];
@@ -809,7 +809,7 @@ bool driver::try_minimize(raw_rule &rr) {
 			// bodie2 missing element i, meaning that rule 2 contains rule 1
 			// Construct our candidate replacement rule
 			raw_rule rr2(heads2, bodie2);
-			if(cqnc(rr2, rr)) {
+			if(f(rr2, rr)) {
 				// successful if condition implies rule 1 contains rule 2, hence
 				// rule 1 = rule 2
 				rr = rr2;
@@ -822,25 +822,26 @@ bool driver::try_minimize(raw_rule &rr) {
 	return false;
 }
 
-/* Go through the program and removed those queries that are subsumed by
- * others. While we're at it, minimize (i.e. subsume a query with its
- * part) the shortlisted queries to reduce time cost of future
- * subsumptions. This function does not respect order, so it should only
- * be used on an unordered stratum. */
+/* Go through the program and removed those queries that the function f
+ * determines to be subsumed by others. While we're at it, minimize
+ * (i.e. subsume a query with its part) the shortlisted queries to
+ * reduce time cost of future subsumptions. This function does not
+ * respect order, so it should only be used on an unordered stratum. */
 
-void driver::subsume_queries(raw_prog &rp) {
+template<typename F>
+		void driver::subsume_queries(raw_prog &rp, const F &f) {
 	std::vector<raw_rule> reduced_rules;
 	for(raw_rule &rr : rp.r) {
 		bool subsumed = false;
 		
 		for(std::vector<raw_rule>::iterator nrr = reduced_rules.begin();
 				nrr != reduced_rules.end();) {
-			if(cqnc(rr, *nrr)) {
+			if(f(rr, *nrr)) {
 				// If the current rule is contained by a rule in reduced rules,
 				// then move onto the next rule in the outer loop
 				subsumed = true;
 				break;
-			} else if(cqnc(*nrr, rr)) {
+			} else if(f(*nrr, rr)) {
 				// If current rule contains that in reduced rules, then remove
 				// the subsumed rule from reduced rules
 				nrr = reduced_rules.erase(nrr);
@@ -853,7 +854,7 @@ void driver::subsume_queries(raw_prog &rp) {
 			// Do the maximal amount of query minimization on the query we are
 			// about to admit. This should reduce the time cost of future
 			// subsumptions.
-			while(try_minimize(rr));
+			while(try_minimize(rr, f));
 			// If the current rule has not been subsumed, then it needs to be
 			// represented in the reduced rules.
 			reduced_rules.push_back(rr);
@@ -7928,7 +7929,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		step_transform(rp, [&](raw_prog &rp) {
 			to_pure_tml(rp);
 			std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
-			subsume_queries(rp);
+			subsume_queries(rp, [this](const raw_rule &rr1, const raw_rule &rr2) {return cqnc(rr1, rr2);});
 			std::cout << "Minimized Program:" << std::endl << std::endl << rp << std::endl;
 			factor_rules(rp);
 			std::cout << "Factorized Program:" << std::endl << std::endl << rp << std::endl;

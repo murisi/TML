@@ -7836,6 +7836,30 @@ string_t driver::generate_cpp(const raw_prog &rp, string_t &prog_constr, uint_t 
 	return prog_name;
 }
 
+/* Transform all the productions in the given program into pure TML
+ * rules. Removes the original productions from the program and leaves
+ * their pure TML equivalents behind. This function is only for
+ * debugging purposes as the resulting raw_prog will not execute. */
+
+bool driver::transform_grammar(raw_prog &rp) {
+	form *tmp_form = nullptr;
+	flat_prog p;
+	
+	if(tbl->transform_grammar(rp.g, p, tmp_form)) {
+		for(const std::vector<term> &rul : p) {
+			std::vector<raw_term> bodie;
+			for(int_t i = 1; i < rul.size(); i++) {
+				bodie.push_back(tbl->to_raw_term(rul[i]));
+			}
+			rp.r.push_back(raw_rule(tbl->to_raw_term(rul[0]), bodie));
+		}
+		rp.g.clear();
+		return true;
+	} else {
+		return false;
+	}
+}
+
 bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	lexeme trel = { 0, 0 };
 	directives_load(rp, trel);

@@ -173,6 +173,7 @@ class driver {
 	std::set<elem> collect_free_vars(const std::vector<std::vector<raw_term>> &b);
 	std::set<elem> collect_free_vars(const sprawformtree &t);
 	raw_term relation_to_term(const rel_info &ri);
+	bool transform_grammar(raw_prog &rp);
 	sprawformtree fix_variables(const elem &fv_rel, const elem &qva,
 		const elem &rva, const elem &qvb, const elem &rvb);
 	sprawformtree fix_symbols(const elem &fs_rel, const elem &qva,

@@ -319,7 +319,6 @@ private:
 	void print_env(const env& e, const rule& r) const;
 	void print_env(const env& e) const;
 	struct elem get_elem(int_t arg) const;
-	raw_term to_raw_term(const term& t) const;
 	template <typename T>
 	void out(std::basic_ostream<T>&, spbdd_handle, ntable) const;
 	void out(spbdd_handle, ntable, const rt_printer&) const;
@@ -359,7 +358,6 @@ private:
 	
 	bool get_substr_equality(const raw_term &rt, size_t &n, std::map<size_t, term> &ref, 
 					std::vector<term> &v, std::set<term> &done);
-	bool transform_grammar(std::vector<struct production> g, flat_prog& p, form *&root);
 	bool transform_ebnf(std::vector<struct production> &g, dict_t &d, bool &changed);
 	bool transform_grammar_constraints(const struct production &x, std::vector<term> &v, flat_prog &p, 
 												std::map<size_t, term> &refs);
@@ -448,6 +446,8 @@ public:
 		bool bin_transform = false, bool print_transformed = false, 
 		bool apply_regxmatch = false, bool keep_guards = false);
 	~tables();
+	raw_term to_raw_term(const term& t) const;
+	bool transform_grammar(std::vector<struct production> g, flat_prog& p, form *&root);
 	size_t step() { return nstep; }
 	bool add_prog(const raw_prog& p, const strs_t& strs);
 	static bool run_prog(const raw_prog &rp, dict_t &dict,

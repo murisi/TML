@@ -7948,13 +7948,30 @@ bool driver::prog_run(raw_prog& p, size_t steps, size_t break_on_step) {
 //	strtrees.clear(), get_dict_stats(rp.p[n]), add_rules(rp.p[n]);
 	clock_t start, end;
 	size_t step = nsteps();
+	raw_prog::last_id = 0; // reset rp id counter;
 	measure_time_start();
 	if (opts.enabled("guards")) {
 		tbl->transform_guards(p);
 		if (opts.enabled("transformed")) o::to("transformed")
-			<< "after transform_guards:\n" << p << endl<<endl;
+			<< "# after transform_guards:\n" << p << endl << endl;
+	} else if (raw_prog::require_guards)
+		return error = true,
+			throw_runtime_error("Conditional statements require "
+				"-g (-guards) option enabled.");
+	bool fp;
+	if(opts.enabled("bitprog")) {
+		typechecker tc(p);
+		if(tc.tcheck(p)) {
+
+			bit_prog b(p);
+	//		b.to_print();
+			raw_prog brp;
+			b.to_raw_prog(brp);
+			fp = tbl->run_prog(brp, pd.strs, steps, break_on_step);
+		}
+		else fp = false;
 	}
-	bool fp = tbl->run_prog(p, pd.strs, steps, break_on_step);
+	else fp = tbl->run_prog(p, pd.strs, steps, break_on_step);
 	o::ms() << "# elapsed: ";
 	measure_time_end();
 	if (tbl->error) error = true;
@@ -8064,7 +8081,7 @@ driver::driver(string s, const options &o) : rp(), opts(o) {
 	// we don't need the dict any more, tables owns it from now on...
 	tbl = new tables(move(dict), opts.enabled("proof"), 
 		opts.enabled("optimize"), opts.enabled("bin"),
-		opts.enabled("t"), opts.enabled("regex"), opts.enabled("kg"));
+		opts.enabled("t"), opts.enabled("regex"), opts.enabled("fp"));
 	set_print_step(opts.enabled("ps"));
 	set_print_updates(opts.enabled("pu"));
 	set_populate_tml_update(opts.enabled("tml_update"));

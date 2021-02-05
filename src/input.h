@@ -20,6 +20,7 @@
 #include <iostream>
 #include <memory>
 #include <sys/stat.h>
+#include <algorithm>
 
 #include "defs.h"
 #include "dict.h"
@@ -28,7 +29,7 @@
 class archive;
 #define lexeme2str(l) string_t((l)[0], (l)[1]-(l)[0])
 
-typedef std::pair<int_t, bool> guard;
+enum state_value { INIT, START, ADDS, DELS, RULE, COND, FP, CURR };
 
 /**
  * input class contains input data. input can be one of three types: STDIN,
@@ -142,6 +143,8 @@ struct input {
 	}
 	bool parse_error(ccs offset, const char* err, ccs close_to);
 	bool parse_error(ccs offset, const char* err, lexeme close_to);
+	bool type_error( const char* err, lexeme l);
+	bool type_error(ccs offset, const char* err, ccs close_to);
 
 	static std::string file_read(std::string fname);
 	static std::string file_read_text(::FILE *f);
@@ -247,7 +250,7 @@ struct elem {
 		NONE, SYM, NUM, CHR, VAR, OPENP, CLOSEP, ALT, STR,
 		EQ, NEQ, LEQ, GT, LT, GEQ, BLTIN, NOT, AND, OR,
 		FORALL, EXISTS, UNIQUE, IMPLIES, COIMPLIES, ARITH,
-		OPENB, CLOSEB, OPENSB, CLOSESB,
+		OPENB, CLOSEB, OPENSB, CLOSESB, UTYPE,
 	} type;
 	t_arith_op arith_op = NOP;
 	int_t num = 0;
@@ -281,6 +284,10 @@ struct elem {
 			case CLOSESB: e = STR_TO_LEXEME("]"); break;
 			default: assert(false); //should never reach here
 		}
+	}
+	elem(bool b) {
+		num = b;
+		type = NUM;
 	}
 	elem(etype type, lexeme e) : type(type), e(e) {
 		DBG(assert(type!=NUM&&type!=CHR&&(type!=SYM||(e[0]&&e[1])));)
@@ -320,6 +327,153 @@ struct elem {
 		return to_string(lexeme2str(e));			
 	}
 };
+
+struct utype{
+
+};
+
+struct primtype : utype {
+	elem el;
+	int_t bsz = -1;
+	enum _ptype {
+		NOP, UINT, UCHAR, SYMB
+	} ty = NOP;
+	bool parse(input *in, const raw_prog& prog);
+	bool operator==(const primtype& r) const {
+		return ty == r.ty && bsz == r.bsz;		
+	}
+	bool operator!=(const primtype& r) const {
+		return !(*this == r);		
+	}
+	std::string to_print(){
+		std::string s;
+		switch(ty){
+			case UINT: s.append("int"); break;
+			case UCHAR: s.append("char"); break;
+			case SYMB: s.append("symb"); break;
+			default: return s.append("error_type");break;
+		}
+		if(bsz>0) {
+			std::stringstream ss;
+			ss<<bsz;
+			s.append(":");
+			s.append(ss.str());
+		}
+		return s;
+	}
+	size_t get_bitsz(){
+		switch(ty){
+			case UINT: return bsz > 0 ? bsz: 4;
+			case UCHAR: return 4;
+			case SYMB: return 4;
+			default: return 0;
+		}
+	}
+};
+
+struct structype : utype {
+	elem structname;
+	std::vector<struct typedecl> membdecl;	
+	bool parse(input *in, const raw_prog& prog);
+	size_t get_bitsz(const std::vector<struct typestmt> &);
+};
+
+struct typedecl {
+	primtype pty;  
+	elem structname; // struct type
+	std::vector<elem> vars;
+	bool is_primitive(){
+		DBG(assert(structname.e[0] == NULL || pty.ty == primtype::NOP));
+		return pty.ty != primtype::NOP;
+	}
+	bool is_usertype(){
+		DBG(assert(structname.e[0] == NULL || pty.ty == primtype::NOP));
+		return structname.e[0] != NULL;
+	}
+	size_t get_param_count() {
+		return vars.size();
+	}
+
+	bool parse(input *in , const raw_prog& prog, bool multivar = true);
+};
+struct typestmt {
+	structype rty;
+	elem reln;
+	std::vector<typedecl> typeargs;
+	bool is_predicate(){
+		DBG(assert( reln.e[0] != NULL || rty.structname.e[0] != NULL ));
+		return reln.e[0] != NULL; 
+	}
+	bool is_typedef(){
+		DBG(assert( reln.e[0] != NULL || rty.structname.e[0] != NULL ));
+		return rty.structname.e[0] != NULL; 
+	}
+	bool parse(input *in, const raw_prog& prog);
+
+};
+
+class bit_dict;
+struct bit_term;
+struct bit_prog;
+struct bit_rule;
+struct raw_term;
+struct raw_prog;
+struct raw_rule;
+
+class bit_dict {
+	std::map<lexeme, size_t, lexcmp > syms;
+	std::map<lexeme, int_t, lexcmp > vars;
+	public:
+	size_t get_bit_sym(const elem &e) {
+		assert(e.type == elem::SYM);
+		if(syms.find(e.e) == syms.end())
+			syms.insert({e.e, syms.size()+1});
+		return syms[e.e];
+	}
+};
+
+struct bit_elem {
+	bools p;
+	size_t bsz;
+	const elem &e;
+	bit_term &pbt;
+	bit_elem(const elem &_e, size_t _bsz, bit_term &_pbt);
+	size_t pos(size_t bit_from_right /*, size_t arg, size_t args */) const;
+	bool to_elem( std::vector<elem> &) const;
+	void to_print() const;
+};
+struct bit_prog {
+	 
+	std::vector<bit_rule> vbr;
+	std::vector<bit_prog> nbp;
+	const raw_prog &rp;
+	bit_dict bdict;
+	bit_prog( const raw_prog& _rp);
+	bool to_raw_prog(raw_prog &) const;
+	void to_print() const;
+};
+
+struct bit_rule {
+	std::vector<bit_term> bh;
+	std::vector<std::vector<bit_term>> bb;
+	const raw_rule &rr;
+	bit_prog &pbp;
+	bit_rule(const raw_rule &_rr, bit_prog &_pbp);
+	bool to_raw_rule(raw_rule&) const;
+	void to_print() const;
+};
+
+struct bit_term {
+	int_t rel;
+	std::vector<bit_elem> vbelem;
+	const raw_term &rt;
+	bit_rule &pbr;
+	bit_term(const raw_term &_rt, bit_rule &_pbr); 
+	size_t get_typeinfo(size_t arg, const raw_term &rt);
+	bool to_raw_term(raw_term&) const;
+	void to_print() const;
+};
+
 
 /* A raw term is produced from the parsing stage. In TML source code, it
  * takes the following form: <rel>(<arg1> <arg2> ... <argN>). A raw term can
@@ -471,6 +625,11 @@ struct raw_rule {
 	std::optional<std::vector<std::vector<raw_term>>> get_b() {
 		return is_b() ? std::optional<std::vector<std::vector<raw_term>>>(b) : std::nullopt;
 	}
+	void update_states(std::array<bool, 8>& has) {
+		if (is_form() || is_rule()) has[RULE] = true;
+		else for (auto hi : h) has[hi.neg ? DELS : ADDS] = true;
+	}
+	inline bool is_rule() { return type == NONE && b.size() > 0; }
 	inline bool is_form() { return prft.get(); }
 	static raw_rule getdel(const raw_term& t) {
 		raw_rule r(t, t);
@@ -497,6 +656,7 @@ struct raw_form_tree {
 	sprawformtree l = nullptr;
 	sprawformtree r = nullptr;
 	bool neg = false;
+	lexeme guard_lx = {0,0};
 
 	raw_form_tree (elem::etype _type, const raw_term &_rt) : type(_type), rt(new raw_term(_rt)) {}
 	raw_form_tree (elem::etype _type, const elem &_el) : type(_type), el(new elem(_el)) {}
@@ -534,9 +694,11 @@ struct guard_statement {
 	bool parse_if(input* in, dict_t &dict, raw_prog& rp);
 	bool parse_while(input* in, dict_t &dict, raw_prog& rp);
 	bool parse(input* in, dict_t &dict, raw_prog& rp);
-	sprawformtree prft;
-	int_t id = 0;
-	static int_t last_id;
+	sprawformtree prft;       // condition
+	int_t rp_id = 0;          // prog id in which to run the condition
+	int_t true_rp_id  = 0;    // id of a true  prog
+	int_t false_rp_id = 0;    // id of a false prog
+	raw_prog* p_break_rp = 0; // ptr to a prog to break if while cond. true
 };
 
 struct raw_prog {
@@ -548,19 +710,21 @@ struct raw_prog {
 	std::vector<production> g;
 	std::vector<raw_rule> r;
 	std::vector<guard_statement> gs;
+	std::vector<struct typestmt> vts;
 	std::vector<raw_prog> nps;
-	guard grd;
 
 	std::set<lexeme, lexcmp> builtins;
 //	int_t delrel = -1;
 
 	int_t id = 0;
+	int_t guarded_by = -1;
+	int_t true_rp_id = -1;
+	std::array<bool, 8> has = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	static int_t last_id;
-
-	raw_prog() { id = ++last_id; }
+	static bool require_guards;
 
 	bool parse(input* in, dict_t &dict);
-	bool parse_statement(input* in, dict_t &dict, guard grd = {-1,false});
+	bool parse_statement(input* in, dict_t &dict);
 	bool parse_nested(input* in, dict_t &dict);
 	bool parse_xfp(input* in, dict_t &dict);
 	bool macro_expand(input *in , macro mm, const size_t i, const size_t j, 
@@ -612,6 +776,8 @@ bool parse_error(ccs o, const char* e, std::string s);
 bool parse_error(ccs o, const char* e);
 bool parse_error(const char* e, lexeme l);
 bool parse_error(const char* e);
+bool type_error(const char* e, lexeme l);
+
 
 template <typename T>
 std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const directive& d);

@@ -7911,34 +7911,66 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	static std::set<raw_prog *> transformed_progs;
 	if(transformed_progs.find(&rp) == transformed_progs.end()) {
 		transformed_progs.insert(&rp);
-		simplify_formulas(rp);
-		std::cout << "Simplified Program:" << std::endl << std::endl << rp << std::endl;
-		uint_t cid = 0;
-		string_t rp_generator;
-		std::map<elem, string_t> elem_cache;
-		generate_cpp(rp, rp_generator, cid, to_string_t("d"), elem_cache);
-		std::cout << "Program Generator:" << std::endl << std::endl << to_string(rp_generator) << std::endl;
+		//simplify_formulas(rp);
+		//std::cout << "Simplified Program:" << std::endl << std::endl << rp << std::endl;
+		if(opts.enabled("program-gen")) {
+			uint_t cid = 0;
+			string_t rp_generator;
+			std::map<elem, string_t> elem_cache;
+			o::dbg() << "Generating Program Generator ..." << std::endl << std::endl;
+			generate_cpp(rp, rp_generator, cid, to_string_t("d"), elem_cache);
+			o::dbg() << "Program Generator:" << std::endl << std::endl << to_string(rp_generator) << std::endl;
+		}
+		o::dbg() << "Generating the False Rule ..." << std::endl << std::endl;
 		transform_booleans(rp);
-		std::cout << "Booleaned Program:" << std::endl << std::endl << rp << std::endl;
+		o::dbg() << "Booleaned Program:" << std::endl << std::endl << rp << std::endl;
+		o::dbg() << "Generating Domains ..." << std::endl << std::endl;
 		transform_domains(rp);
-		std::cout << "Domained Program:" << std::endl << std::endl << rp << std::endl;
+		o::dbg() << "Domained Program:" << std::endl << std::endl << rp << std::endl;
+		o::dbg() << "Generating Quotes ..." << std::endl << std::endl;
 		transform_quotes(rp);
-		std::cout << "Quoted Program:" << std::endl << std::endl << rp << std::endl;
+		o::dbg() << "Quoted Program:" << std::endl << std::endl << rp << std::endl;
+		o::dbg() << "Generating Evals ..." << std::endl << std::endl;
 		transform_evals(rp);
-		std::cout << "Evaled Program:" << std::endl << std::endl << rp << std::endl;
-		step_transform(rp, [&](raw_prog &rp) {
-			to_pure_tml(rp);
-			std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
-			subsume_queries(rp, [this](const raw_rule &rr1, const raw_rule &rr2) {return cqnc(rr1, rr2);});
-			std::cout << "Minimized Program:" << std::endl << std::endl << rp << std::endl;
-			factor_rules(rp);
-			std::cout << "Factorized Program:" << std::endl << std::endl << rp << std::endl;
-			unary_transform(rp);
-			std::cout << "Unary Program:" << std::endl << std::endl << rp << std::endl;
-		});
-		std::cout << "Step Transformed Program:" << std::endl << std::endl << rp << std::endl;
+		o::dbg() << "Evaled Program:" << std::endl << std::endl << rp << std::endl;
+		if(opts.enabled("cqnc-subsume") || opts.enabled("cqc-subsume") ||
+				opts.enabled("cqc-factor") || opts.enabled("complete-bin") ||
+				opts.enabled("complete-bin")) {
+			step_transform(rp, [&](raw_prog &rp) {
+				// This transformation is a prerequisite to the CQC and binary
+				// transformations, hence its more general activation condition.
+				o::dbg() << "Converting to Pure TML ..." << std::endl << std::endl;
+				to_pure_tml(rp);
+				o::dbg() << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
+				
+				if(opts.enabled("cqnc-subsume")) {
+					o::dbg() << "Subsuming using CQNC test ..." << std::endl << std::endl;
+					subsume_queries(rp, [this](const raw_rule &rr1, const raw_rule &rr2)
+						{return cqnc(rr1, rr2);});
+					o::dbg() << "CQNC Subsumed Program:" << std::endl << std::endl << rp << std::endl;
+				}
+				if(opts.enabled("cqc-subsume")) {
+					o::dbg() << "Subsuming using CQC test ..." << std::endl << std::endl;
+					subsume_queries(rp, [this](const raw_rule &rr1, const raw_rule &rr2)
+						{return cqc(rr1, rr2);});
+					o::dbg() << "CQC Subsumed Program:" << std::endl << std::endl << rp << std::endl;
+				}
+				if(opts.enabled("cqc-factor")) {
+					o::dbg() << "Factoring queries using CQC test ..." << std::endl << std::endl;
+					factor_rules(rp);
+					o::dbg() << "Factorized Program:" << std::endl << std::endl << rp << std::endl;
+				}
+				if(opts.enabled("complete-bin")) {
+					// Though this is a unary transformation, rules will become
+					// binary after timing guards are added
+					o::dbg() << "Converting rules to unary form ..." << std::endl << std::endl;
+					unary_transform(rp);
+					o::dbg() << "Unary Program:" << std::endl << std::endl << rp << std::endl;
+				}
+			});
+			o::dbg() << "Step Transformed Program:" << std::endl << std::endl << rp << std::endl;
+		}
 	}
-	std::cout << std::endl << std::endl;
 #ifdef TRANSFORM_BIN_DRIVER
 	if (opts.enabled("bin"))
 		for (raw_prog& p : rp.p)

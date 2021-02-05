@@ -7899,27 +7899,25 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		transformed_progs.insert(&rp);
 		simplify_formulas(rp);
 		std::cout << "Simplified Program:" << std::endl << std::endl << rp << std::endl;
-		std::cout << "Program Generator:" << std::endl << std::endl;
 		uint_t cid = 0;
 		string_t rp_generator;
 		std::map<elem, string_t> elem_cache;
 		generate_cpp(rp, rp_generator, cid, to_string_t("d"), elem_cache);
-		std::cout << to_string(rp_generator) << std::endl << std::endl;
+		std::cout << "Program Generator:" << std::endl << std::endl << to_string(rp_generator) << std::endl;
 		transform_domains(rp);
 		transform_quotes(rp);
 		std::cout << "Quoted Program:" << std::endl << std::endl << rp << std::endl;
 		transform_evals(rp);
 		std::cout << "Evaled Program:" << std::endl << std::endl << rp << std::endl;
-		//quote_prog(rp, elem(elem::SYM, get_lexeme("this")), rp);
-		//std::cout << "TML Program With this:" << std::endl << std::endl << rp << std::endl;
 		step_transform(rp, [&](raw_prog &rp) {
 			to_pure_tml(rp);
-			//binary_transform(rp);
 			std::cout << "Pure TML Program:" << std::endl << std::endl << rp << std::endl;
-			//subsume_queries(rp);
+			subsume_queries(rp);
 			std::cout << "Minimized Program:" << std::endl << std::endl << rp << std::endl;
-			//factor_rules(rp);
+			factor_rules(rp);
 			std::cout << "Factorized Program:" << std::endl << std::endl << rp << std::endl;
+			unary_transform(rp);
+			std::cout << "Unary Program:" << std::endl << std::endl << rp << std::endl;
 		});
 		std::cout << "Step Transformed Program:" << std::endl << std::endl << rp << std::endl;
 	}

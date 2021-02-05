@@ -250,7 +250,7 @@ struct elem {
 		NONE, SYM, NUM, CHR, VAR, OPENP, CLOSEP, ALT, STR,
 		EQ, NEQ, LEQ, GT, LT, GEQ, BLTIN, NOT, AND, OR,
 		FORALL, EXISTS, UNIQUE, IMPLIES, COIMPLIES, ARITH,
-		OPENB, CLOSEB, OPENSB, CLOSESB, UTYPE,
+		OPENB, CLOSEB, OPENSB, CLOSESB, UTYPE, TRUE, FALSE,
 	} type;
 	t_arith_op arith_op = NOP;
 	int_t num = 0;
@@ -483,7 +483,6 @@ struct bit_term {
  * size finite which in turn guarantees that TML programs terminate. */
 
 struct raw_term {
-
 	bool neg = false;
 	enum rtextype { REL, EQ, LEQ, BLTIN, ARITH, CONSTRAINT } extype = raw_term::REL;
 
@@ -531,22 +530,6 @@ struct raw_term {
 			//iseq == t.iseq && isleq == t.isleq && islt == t.islt;
 		//return neg == t.neg && e == t.e && arity == t.arity;
 	}
-	static raw_term _true() {
-		return raw_term(raw_term::EQ, {elem(0), elem(elem::EQ), elem(0)});
-	}
-	static raw_term _false() {
-		return raw_term(raw_term::EQ, {elem(0), elem(elem::EQ), elem(1)});
-	}
-	bool is_true() {
-		return extype == raw_term::EQ && e.size() == 3 &&
-			e[1].type == elem::EQ && e[0].type != elem::VAR &&
-			e[2].type != elem::VAR && (e[0] == e[2]) != neg;
-	}
-	bool is_false() {
-		return extype == raw_term::EQ && e.size() == 3 &&
-			e[1].type == elem::EQ && e[0].type != elem::VAR &&
-			e[2].type != elem::VAR && (e[0] != e[2]) != neg;
-	}
 };
 
 struct macro {
@@ -587,7 +570,7 @@ struct raw_rule {
 	// prft != nullptr, otherwise it signifies that this rule is a fact.
 	std::vector<std::vector<raw_term>> b;
 	// Contains a tree representing the logical formula.
-	mutable sprawformtree prft = nullptr;
+	sprawformtree prft = nullptr;
 
 	enum etype { NONE, GOAL, TREE };
 	etype type = NONE;
@@ -658,10 +641,11 @@ struct raw_form_tree {
 	bool neg = false;
 	lexeme guard_lx = {0,0};
 
+	raw_form_tree (elem::etype _type) : type(_type) {}
 	raw_form_tree (elem::etype _type, const raw_term &_rt) : type(_type), rt(new raw_term(_rt)) {}
 	raw_form_tree (elem::etype _type, const elem &_el) : type(_type), el(new elem(_el)) {}
-	raw_form_tree (elem::etype _type, sprawformtree _l = nullptr, sprawformtree _r = nullptr) : type(_type), l(_l), r(_r) {}
-	raw_form_tree (elem::etype _type, const raw_term* _rt = NULL, const elem *_el =NULL,
+	raw_form_tree (elem::etype _type, sprawformtree _l, sprawformtree _r = nullptr) : type(_type), l(_l), r(_r) {}
+	raw_form_tree (elem::etype _type, const raw_term* _rt, const elem *_el =NULL,
 		sprawformtree _l = NULL, sprawformtree _r = NULL)
 	{
 		type = _type;

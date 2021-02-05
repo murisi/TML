@@ -959,7 +959,7 @@ flat_prog tables::to_terms(const raw_prog& p) {
 			bool is_sol = false;
 			form* froot = 0;
 			sprawformtree root = r.prft->neg // neg transform
-				? std::make_shared<raw_form_tree>(elem::NOT, NULL, NULL,
+				? std::make_shared<raw_form_tree>(elem::NOT, nullptr, nullptr,
 					r.prft)
 				: r.prft;
 			if (r.prft->guard_lx != lexeme{ 0, 0 }) { // guard transform
@@ -967,7 +967,7 @@ flat_prog tables::to_terms(const raw_prog& p) {
 				gt.arity = { 0 };
 				gt.e.emplace_back(elem::SYM, r.prft->guard_lx);
 				root = std::make_shared<raw_form_tree>(elem::AND,
-					NULL, NULL, root,
+					nullptr, nullptr, root,
 					std::make_shared<raw_form_tree>(elem::NONE,
 						&gt));
 			}

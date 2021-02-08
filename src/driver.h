@@ -145,11 +145,13 @@ class driver {
 		dict_t &d);
 	elem numeric_quote_elem(const elem &e, std::map<elem, elem> &variables);
 	elem quote_term(const raw_term &head, const elem &rel_name,
-		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables);
+		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables,
+		int_t &part_count);
 	elem quote_formula(const sprawformtree &t, const elem &rel_name,
-		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables);
+		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables,
+		int_t &part_count);
 	std::vector<elem> quote_rule(const raw_rule &rr, const elem &rel_name,
-		const elem &domain_name, raw_prog &rp);
+		const elem &domain_name, raw_prog &rp, int_t &part_count);
 	void quote_prog(const raw_prog nrp, const elem &rel_name,
 		const elem &domain_name, raw_prog &rp);
 	raw_term to_pure_tml(const sprawformtree &t, std::vector<raw_rule> &rp,
@@ -181,6 +183,7 @@ class driver {
 		const elem &rva);
 	void transform_booleans(raw_prog &rp);
 	template<typename F> void subsume_queries(raw_prog &rp, const F &f);
+	elem concat(const elem &rel, std::string suffix);
 	string_t generate_cpp(const elem &e, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
 	string_t generate_cpp(const raw_term &rt, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
 	string_t generate_cpp(const sprawformtree &prft, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);

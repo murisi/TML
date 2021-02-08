@@ -998,34 +998,46 @@ raw_rule driver::freeze_rule(raw_rule rr,
  * added to the variables map. */
 
 elem driver::quote_term(const raw_term &head, const elem &rel_name,
-		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables) {
+		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables,
+		int_t &part_count) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
-	elem term_id = elem::fresh_sym(d);
-	if(head.extype == raw_term::REL) {
+	elem term_id = elem(part_count++);
+	if(head.extype == raw_term::REL && head.is_true()) {
+		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"), elem_openp,
+			term_id, elem(QTRUE), elem_closep })));
+	} else if(head.extype == raw_term::REL) {
 		elem elems_id = elem::fresh_var(d), tags_id = elem::fresh_var(d),
 			elems_hid = elems_id, tags_hid = tags_id;
-		std::vector<raw_term> quote_body;
+		std::vector<raw_term> params_body, param_types_body;
 		for(int_t param_idx = 2; param_idx < ssize(head.e) - 1; param_idx ++) {
 			elem next_elems_id = elem::fresh_var(d),
 				next_tags_id = elem::fresh_var(d);
-			quote_body.push_back(raw_term({domain_name, elem_openp, elems_id,
-				numeric_quote_elem(head.e[param_idx], variables), next_elems_id,
+			params_body.push_back(raw_term({concat(domain_name, "_fst"), elem_openp,
+				elems_id, numeric_quote_elem(head.e[param_idx], variables),
 				elem_closep}));
-			quote_body.push_back(raw_term({domain_name, elem_openp, tags_id,
-				elem(int_t(head.e[param_idx].type == elem::VAR)), next_tags_id,
-				elem_closep}));
+			params_body.push_back(raw_term({concat(domain_name, "_rst"), elem_openp,
+				elems_id, next_elems_id, elem_closep}));
+			param_types_body.push_back(raw_term({concat(domain_name, "_fst"), elem_openp,
+				tags_id, elem(int_t(head.e[param_idx].type == elem::VAR)), elem_closep}));
+			param_types_body.push_back(raw_term({concat(domain_name, "_rst"), elem_openp,
+				tags_id, next_tags_id, elem_closep}));
 			elems_id = next_elems_id;
 			tags_id = next_tags_id;
 		}
-		quote_body.push_back(raw_term({domain_name, elem_openp, elems_id,
-			elem_closep}));
-		quote_body.push_back(raw_term({domain_name, elem_openp, tags_id,
-			elem_closep}));
+		params_body.push_back(raw_term({concat(domain_name, "_nil"), elem_openp,
+			elems_id, elem_closep}));
+		param_types_body.push_back(raw_term({concat(domain_name, "_nil"), elem_openp,
+			tags_id, elem_closep}));
 		// Add metadata to quoted term: term signature, term id, term name
-		raw_rule quote(raw_term({rel_name, elem_openp, elem(QTERM),
-			term_id, head.e[0], elems_hid, tags_hid, elem_closep }), quote_body);
-		rp.r.push_back(quote);
+		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"), elem_openp,
+			term_id, elem(QTERM), elem_closep })));
+		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_term_relation"),
+			elem_openp, term_id, head.e[0], elem_closep })));
+		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_term_params"),
+			elem_openp, term_id, elems_hid, elem_closep }), params_body));
+		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_term_param_types"),
+			elem_openp, term_id, tags_hid, elem_closep }), param_types_body));
 	} else if(head.extype == raw_term::EQ) {
 		// Add metadata to quoted term: term signature, term id, term name
 		std::vector<elem> quoted_term_e = {rel_name, elem_openp, elem(QEQUALS),
@@ -1035,11 +1047,13 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
 			elem_closep };
 		rp.r.push_back(raw_rule(raw_term(quoted_term_e)));
 	}
-	if(head.neg) {
+	if(head.neg && !head.is_true()) {
 		// If this term is actually negated, then we'll make a parent for
 		// this node and return its id
 		elem neg_id = elem::fresh_sym(d);
-		rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QNOT),
+		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"), elem_openp,
+			neg_id, elem(QNOT), elem_closep})));
+		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_not_body"), elem_openp,
 			neg_id, term_id, elem_closep})));
 		return neg_id;
 	} else {
@@ -1050,71 +1064,130 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
 /* Recursively quotes the given formula. Say that the output relation
  * name is q, quote_formula will populate it according to the following
  * schema:
- * q(VARS <var name>)
- * q(RULE <id> <head id> <body id>).
- * q(TERM <id> <name>).
- * q(TERM <id> <name> <param1 name>).
- * q(TERM <id> <name> <param1 name> <param2 name>).
- * q(TERM <id> <name> <param1 name> <param2 name> <param3 name>).
- * q(TERM <id> <name> <param1 name> <param2 name> <param3 name> <param4 name>).
- * q(EQUALS <id> <param1 name> <param2 name>).
- * q(FORALL <id> <var name> <body id>).
- * q(EXISTS <id> <var name> <body id>).
- * q(NOT <id> <body id>).
- * q(AND <id> <body1 id> <body2 id>).
- * q(OR <id> <body1 id> <body2 id>). */
+ * <quote>_type(<node ID> <node type>).
+ * 
+ * For <node type> = RULE
+ * 	<quote>_rule_head(<node ID> <head ID>).
+ * 	<quote>_rule_body(<node ID> <body ID>).
+ * For <node type> = TERM
+ * 	<quote>_term_relation(<node ID> <term relation>).
+ * 	<quote>_term_params(<node ID> <term parameter list>).
+ * 	<quote>_term_param_types(<node ID> <term param type list>).
+ * For <node type> = AND
+ * 	<quote>_and_left(<node ID> <left node ID>).
+ * 	<quote>_and_right(<node ID> <right node ID>).
+ * For <node type> = ALT
+ * 	<quote>_alt_left(<node ID> <left node ID>).
+ * 	<quote>_alt_right(<node ID> <right node ID>).
+ * For <node type> = NOT
+ * 	<quote>_not_body(<node ID> <body node ID>).
+ * For <node type> = FORALL
+ * 	<quote>_forall_var(<node ID> <variable ID>).
+ * 	<quote>_forall_body(<node ID> <body node ID>).
+ * For <node type> = EXISTS
+ * 	<quote>_exists_var(<node ID> <variable ID>).
+ * 	<quote>_exists_body(<node ID> <body node ID>).
+ * For <node type> = TRUE
+ */
 
 elem driver::quote_formula(const sprawformtree &t, const elem &rel_name,
-		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables) {
+		const elem &domain_name, raw_prog &rp, std::map<elem, elem> &variables,
+		int_t &part_count) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
-	const elem part_id = elem::fresh_sym(d);
+	const elem part_id = elem(part_count++);
 	switch(t->type) {
 		case elem::IMPLIES:
-			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QIMPLIES),
-				part_id, quote_formula(t->l, rel_name, domain_name, rp, variables),
-				quote_formula(t->r, rel_name, domain_name, rp, variables), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"),
+				elem_openp, part_id, elem(QIMPLIES), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_implies_left"),
+				elem_openp, part_id,
+				quote_formula(t->l, rel_name, domain_name, rp, variables, part_count),
+				elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_implies_right"),
+				elem_openp, part_id,
+				quote_formula(t->r, rel_name, domain_name, rp, variables, part_count),
+				elem_closep })));
 			break;
 		case elem::COIMPLIES:
-			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QCOIMPLIES),
-				part_id, quote_formula(t->l, rel_name, domain_name, rp, variables),
-				quote_formula(t->r, rel_name, domain_name, rp, variables), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"),
+				elem_openp, part_id, elem(QCOIMPLIES), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_coimplies_left"),
+				elem_openp, part_id,
+				quote_formula(t->l, rel_name, domain_name, rp, variables, part_count),
+				elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_coimplies_right"),
+				elem_openp, part_id,
+				quote_formula(t->r, rel_name, domain_name, rp, variables, part_count),
+				elem_closep })));
 			break;
 		case elem::AND:
-			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QAND),
-				part_id, quote_formula(t->l, rel_name, domain_name, rp, variables),
-				quote_formula(t->r, rel_name, domain_name, rp, variables), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"),
+				elem_openp, part_id, elem(QAND), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_and_left"),
+				elem_openp, part_id,
+				quote_formula(t->l, rel_name, domain_name, rp, variables, part_count),
+				elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_and_right"),
+				elem_openp, part_id,
+				quote_formula(t->r, rel_name, domain_name, rp, variables, part_count),
+				elem_closep })));
 			break;
 		case elem::ALT:
-			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QALT),
-				part_id, quote_formula(t->l, rel_name, domain_name, rp, variables),
-				quote_formula(t->r, rel_name, domain_name, rp, variables), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"),
+				elem_openp, part_id, elem(QALT), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_alt_left"),
+				elem_openp, part_id,
+				quote_formula(t->l, rel_name, domain_name, rp, variables, part_count),
+				elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_alt_right"),
+				elem_openp, part_id,
+				quote_formula(t->r, rel_name, domain_name, rp, variables, part_count),
+				elem_closep })));
 			break;
 		case elem::NOT:
-			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QNOT),
-				part_id, quote_formula(t->l, rel_name, domain_name, rp, variables),
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"),
+				elem_openp, part_id, elem(QNOT), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_not_body"),
+				elem_openp, part_id,
+				quote_formula(t->l, rel_name, domain_name, rp, variables, part_count),
 				elem_closep })));
 			break;
 		case elem::EXISTS: {
 			elem qvar = quote_elem(*(t->l->el), variables, d);
-			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp,
-				elem(QEXISTS), part_id, qvar,
-				quote_formula(t->r, rel_name, domain_name, rp, variables), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"),
+				elem_openp, part_id, elem(QEXISTS), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_exists_var"),
+				elem_openp, part_id, qvar, elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_exists_body"),
+				elem_openp, part_id,
+				quote_formula(t->r, rel_name, domain_name, rp, variables, part_count),
+				elem_closep })));
 			break;
 		} case elem::UNIQUE: {
 			elem qvar = quote_elem(*(t->l->el), variables, d);
-			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp,
-				elem(QUNIQUE), part_id, qvar,
-				quote_formula(t->r, rel_name, domain_name, rp, variables), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"),
+				elem_openp, part_id, elem(QUNIQUE), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_unique_var"),
+				elem_openp, part_id, qvar, elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_unique_body"),
+				elem_openp, part_id,
+				quote_formula(t->r, rel_name, domain_name, rp, variables, part_count),
+				elem_closep })));
 			break;
 		} case elem::NONE: {
-			return quote_term(*t->rt, rel_name, domain_name, rp, variables);
+			return quote_term(*t->rt, rel_name, domain_name, rp, variables, part_count);
 			break;
 		} case elem::FORALL: {
 			elem qvar = quote_elem(*(t->l->el), variables, d);
-			rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp,
-				elem(QFORALL), part_id, qvar,
-				quote_formula(t->r, rel_name, domain_name, rp, variables), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"),
+				elem_openp, part_id, elem(QFORALL), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_forall_var"),
+				elem_openp, part_id, qvar, elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_forall_body"),
+				elem_openp, part_id,
+				quote_formula(t->r, rel_name, domain_name, rp, variables, part_count),
+				elem_closep })));
 			break;
 		} default:
 			assert(false); //should never reach here
@@ -1122,22 +1195,40 @@ elem driver::quote_formula(const sprawformtree &t, const elem &rel_name,
 	return part_id;
 }
 
+/* Returns a symbol formed by concatenating the given string to the
+ * given symbol. Used for refering to sub relations. */
+
+elem driver::concat(const elem &rel, std::string suffix) {
+	// Get dictionary for generating fresh symbols
+	dict_t &d = tbl->get_dict();
+	// Make lexeme from concatenating rel's lexeme with the given suffix
+	lexeme subrel_lex = d.get_lexeme(lexeme2str(rel.e) + to_string_t(suffix));
+	return elem(elem::SYM, subrel_lex);
+}
+
 /* Quote the given rule and put its quotation into the given raw_prog
  * under a relation given by rel_name. */
 
 std::vector<elem> driver::quote_rule(const raw_rule &rr,
-		const elem &rel_name, const elem &domain_name, raw_prog &rp) {
+		const elem &rel_name, const elem &domain_name, raw_prog &rp,
+		int_t &part_count) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	// Maintain a list of the variable substitutions:
 	std::map<elem, elem> variables;
 	std::vector<elem> rule_ids;
-	const elem body_id = quote_formula(rr.get_prft(), rel_name, domain_name, rp, variables);
+	const elem body_id = quote_formula(rr.get_prft(), rel_name, domain_name,
+		rp, variables, part_count);
 	for(int_t gidx = 0; gidx < ssize(rr.h); gidx++) {
-		const elem head_id = quote_term(rr.h[gidx], rel_name, domain_name, rp, variables);
-		const elem rule_id = elem::fresh_sym(d);
-		rp.r.push_back(raw_rule(raw_term({rel_name, elem_openp, elem(QRULE),
-			rule_id, head_id, body_id, elem_closep })));
+		const elem head_id = quote_term(rr.h[gidx], rel_name, domain_name, rp,
+			variables, part_count);
+		const elem rule_id = elem(part_count++);
+		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"), elem_openp,
+			rule_id, elem(QRULE), elem_closep })));
+		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_rule_head"), elem_openp,
+			rule_id, head_id, elem_closep })));
+		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_rule_body"), elem_openp,
+			rule_id, body_id, elem_closep })));
 		rule_ids.push_back(rule_id);
 	}
 	return rule_ids;
@@ -1148,8 +1239,9 @@ std::vector<elem> driver::quote_rule(const raw_rule &rr,
 
 void driver::quote_prog(const raw_prog nrp, const elem &rel_name,
 		const elem &domain_name, raw_prog &rp) {
+	int_t part_count = 0;
 	for(int_t ridx = 0; ridx < ssize(nrp.r); ridx++) {
-		quote_rule(nrp.r[ridx], rel_name, domain_name, rp);
+		quote_rule(nrp.r[ridx], rel_name, domain_name, rp, part_count);
 	}
 }
 
@@ -7911,6 +8003,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 	static std::set<raw_prog *> transformed_progs;
 	if(transformed_progs.find(&rp) == transformed_progs.end()) {
 		transformed_progs.insert(&rp);
+		o::dbg() << "Pre-Transformation Program:" << std::endl << std::endl << rp << std::endl;
 		//simplify_formulas(rp);
 		//std::cout << "Simplified Program:" << std::endl << std::endl << rp << std::endl;
 		if(opts.enabled("program-gen")) {
@@ -7925,13 +8018,13 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		transform_booleans(rp);
 		o::dbg() << "Booleaned Program:" << std::endl << std::endl << rp << std::endl;
 		o::dbg() << "Generating Domains ..." << std::endl << std::endl;
-		transform_domains(rp);
+		//transform_domains(rp);
 		o::dbg() << "Domained Program:" << std::endl << std::endl << rp << std::endl;
 		o::dbg() << "Generating Quotes ..." << std::endl << std::endl;
 		transform_quotes(rp);
 		o::dbg() << "Quoted Program:" << std::endl << std::endl << rp << std::endl;
 		o::dbg() << "Generating Evals ..." << std::endl << std::endl;
-		transform_evals(rp);
+		//transform_evals(rp);
 		o::dbg() << "Evaled Program:" << std::endl << std::endl << rp << std::endl;
 		if(opts.enabled("cqnc-subsume") || opts.enabled("cqc-subsume") ||
 				opts.enabled("cqc-factor") || opts.enabled("complete-bin") ||

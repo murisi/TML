@@ -538,12 +538,12 @@ struct raw_term {
 		return raw_term(raw_term::REL,
 			{elem(elem::SYM, STR_TO_LEXEME("false")), elem(elem::OPENP), elem(elem::CLOSEP)});
 	}
-	bool is_true() {
+	bool is_true() const {
 		return extype == raw_term::REL && e.size() == 3 &&
 			e[0].type == elem::SYM && neg &&
 			lexeme2str(e[0].e) == to_string_t("false");
 	}
-	bool is_false() {
+	bool is_false() const {
 		return extype == raw_term::REL && e.size() == 3 &&
 			e[0].type == elem::SYM && !neg &&
 			lexeme2str(e[0].e) == to_string_t("false");
@@ -561,7 +561,8 @@ struct directive {
 	lexeme arg;
 	raw_term t;
 	int_t n;
-	enum etype { STR, FNAME, CMDLINE, STDIN, STDOUT, TREE, TRACE, BWD }type;
+	enum etype { STR, FNAME, CMDLINE, STDIN, STDOUT, TREE, TRACE, BWD,
+		EVAL, QUOTE, DOMAIN }type;
 	bool parse(input* in, const raw_prog& prog);
 };
 

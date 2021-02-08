@@ -114,13 +114,6 @@ class driver {
 	void transform_domains(raw_prog &rp);
 	void make_domain(raw_prog &rp, const elem &out_rel, std::set<elem> elts,
 		int_t max_size, int_t rest_id, int_t &curr_id);
-	sprawformtree inline_rule(const raw_term &rt1, const raw_term &rt2,
-		const raw_rule &rr);
-	elem hygienic_copy(const elem &e, std::map<elem, elem> &vars);
-	raw_term hygienic_copy(raw_term rt, std::map<elem, elem> &vars);
-	sprawformtree hygienic_copy(sprawformtree &rft, std::map<elem, elem> &vars);
-	sprawformtree inline_rule(const raw_term &rt,
-		const std::vector<raw_rule> &inlines);
 	void flatten_associative(const elem::etype &tp,
 		const sprawformtree &tree, std::vector<sprawformtree> &tms);
 	bool is_cq(const raw_rule &rr);

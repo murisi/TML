@@ -13,6 +13,7 @@
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
 #include <map>
+#include <cmath>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/bind.h>

@@ -292,6 +292,10 @@ struct elem {
 	elem(etype type, lexeme e) : type(type), e(e) {
 		DBG(assert(type!=NUM&&type!=CHR&&(type!=SYM||(e[0]&&e[1])));)
 	}
+	elem(etype type, t_arith_op arith_op, lexeme e) : type(type),
+			arith_op(arith_op), e(e) {
+		DBG(assert(type!=NUM&&type!=CHR&&(type!=SYM||(e[0]&&e[1])));)
+	}
 	etype peek(input* in);
 	bool is_paren() const { return type == OPENP || type == CLOSEP; }
 	bool parse(input* in);
@@ -515,6 +519,7 @@ struct raw_term {
 	}
 	raw_term(const std::vector<elem> &f) : e(f) { calc_arity(nullptr); }
 	raw_term(rtextype et, const std::vector<elem> &f) : extype(et), e(f) { calc_arity(nullptr); }
+	raw_term(rtextype et, t_arith_op arith_op, const std::vector<elem> &f) : extype(et), arith_op(arith_op), e(f) { calc_arity(nullptr); }
 	raw_term negate() const {
 		raw_term nrt = *this;
 		nrt.neg = !nrt.neg;

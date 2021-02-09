@@ -779,6 +779,8 @@ void driver::make_domain(raw_prog &rp, const elem &out_rel,
  * it's second argument is the program to quote. */
 
 void driver::transform_domains(raw_prog &rp) {
+	dict_t &d = tbl->get_dict();
+	
 	for(size_t oridx = 0; oridx < rp.r.size(); oridx++) {
 		// Iterate through the bodies of the current rule looking for uses
 		// of the "eval" relation.
@@ -791,36 +793,115 @@ void driver::transform_domains(raw_prog &rp) {
 			// The relation to contain the evaled relation is the first symbol
 			// between the parentheses
 			elem out_rel = curr_term.e[2];
+			// This transformation will automatically generate non-negative
+			// numbers up to this limit for inclusion in domain
+			int_t gen_limit = curr_term.e[3].num;
 			// The maximum arity of the desired domain is the first symbol
 			// between the inner parentheses
 			int_t max_arity = curr_term.e[4].num;
-			// The number of times the linked lists should be nested is the
-			// second symbol between the inner parentheses
-			int_t nesting = curr_term.e[5].num;
-			// This transformation will automatically generate non-negative
-			// numbers up to this limit for inclusion in domain
-			int_t gen_limit = curr_term.e[6].num;
-			// After the above triple comes the list of symbols to be included
-			// in the desired domain
-			std::set<elem> elts;
-			for(int_t idx = 8; idx < curr_term.e.size() - 1; idx++) {
-				elts.insert(curr_term.e[idx]);
-			}
-			for(int_t nat = 0; nat < gen_limit; nat++) {
-				elts.insert(elem(nat));
-			}
-			int_t curr_id = 1;
-			rp.r.push_back(raw_term({ out_rel, elem_openp, elem(0), elem_closep }));
-			make_domain(rp, out_rel, elts, max_arity, 0, curr_id);
+			// The number of distinct lists of elements less than gen_limit and
+			// with length less than max_limit
+			int_t max_id = (std::pow(gen_limit, max_arity + 1) - 1) / (gen_limit - 1);
 			
-			/*elem quote_str = curr_term.e[4];
+			// Initialize the symbols, variables, and operators used in the
+			// domain creation rule
+			elem lt_elem(elem::LT, d.get_lexeme("<")),
+				leq_elem(elem::LEQ, d.get_lexeme("<=")),
+				plus_elem(elem::ARITH, t_arith_op::ADD, d.get_lexeme("+")),
+				equals_elem(elem::EQ, d.get_lexeme("=")),
+				list_id = elem::fresh_var(d), list_fst = elem::fresh_var(d),
+				list_rst = elem::fresh_var(d), pred_id = elem::fresh_var(d),
+				divisor_x_quotient = gen_limit == 1 ? list_rst : elem::fresh_var(d);
 			
-			if(quote_str.type == elem::STR && quote_str.e[1] > quote_str.e[0] &&
-					*quote_str.e[0] == '`') {
-				raw_prog nrp = read_prog(quote_str, rp);
-				// Create the quotation relation
-				quote_prog(nrp, out_rel, domain_sym, rp);
-			}*/
+			// Make two relations for manipulating domains, the fst relation
+			// relates a list ID to its head, and the rst relation relates a
+			// list ID to its tail.
+			raw_term fst_head({concat(out_rel, "_fst"), elem_openp, list_id,
+				list_fst, elem_closep});
+			raw_term rst_head({concat(out_rel, "_rst"), elem_openp, list_id,
+				list_rst, elem_closep});
+			
+			// The body of the fst and rst rules. Since lists are encoded by
+			// multiplying each element by the exponent of some base.
+			// Euclidean division is required to extract list elements from a
+			// given ID.
+			std::vector<raw_term> bodie = {
+				// 0 < list_id
+				raw_term(raw_term::LEQ, {list_id, leq_elem, elem(0)}).negate(),
+				// list_id < max_id
+				raw_term(raw_term::LEQ, {elem(max_id), leq_elem, list_id}).negate(),
+				// 0 <= list_fst
+				raw_term(raw_term::LEQ, {elem(0), leq_elem, list_fst}),
+				// list_fst < gen_limit
+				raw_term(raw_term::LEQ, {elem(gen_limit), leq_elem, list_fst}).negate(),
+				// 0 <= list_rst
+				raw_term(raw_term::LEQ, {elem(0), leq_elem, list_rst}),
+				// list_rst < list_id
+				raw_term(raw_term::LEQ, {list_id, leq_elem, list_rst}).negate(),
+				// pred_id + 1 = list_id
+				raw_term(raw_term::ARITH, t_arith_op::ADD, {pred_id, plus_elem,
+					elem(1), equals_elem, list_id}),
+				// divisor_x_quotient + list_fst = pred_id
+				raw_term(raw_term::ARITH, t_arith_op::ADD, {divisor_x_quotient,
+					plus_elem, list_fst, equals_elem, pred_id})
+				};
+			// Multiplication seems to cause the solver to hang. Since the
+			// divisor is the value of gen_limit, we can express divisor *
+			// quotient by repeated addition, or for smaller BDDs, by repeated
+			// doubling.
+			elem quotient_elem = divisor_x_quotient;
+			for(int_t quotient = gen_limit; quotient > 1;) {
+				// If current quotient is odd, then it will need to be expressed
+				// by doubling something and adding the divisor to it
+				if(quotient % 2 == 1) {
+					elem new_quotient_elem = elem::fresh_var(d);
+					// new_quotient_elem + list_rst = quotient_elem
+					bodie.push_back(raw_term(raw_term::ARITH, t_arith_op::ADD,
+						{new_quotient_elem, plus_elem, list_rst, equals_elem, quotient_elem}));
+					quotient_elem = new_quotient_elem;
+					quotient --;
+				}
+				// If current quotient is more than or equal to 2, then it can
+				// be expressed by doubling something
+				if(quotient / 2 > 0) {
+					elem new_quotient_elem =
+						quotient / 2 == 1 ? list_rst : elem::fresh_var(d);
+					// new_quotient_elem + new_quotient_elem = quotient_elem
+					bodie.push_back(raw_term(raw_term::ARITH, t_arith_op::ADD,
+						{new_quotient_elem, plus_elem, new_quotient_elem, equals_elem,
+							quotient_elem}));
+					quotient_elem = new_quotient_elem;
+					quotient /= 2;
+				}
+			}
+			// Finally create the domain rules
+			rp.r.push_back(raw_rule({fst_head, rst_head}, bodie));
+			// Also make the nil list
+			rp.r.push_back(raw_rule(raw_term(
+				{ concat(out_rel, "_nil"), elem_openp, elem(0), elem_closep })));
+			
+			// Lists are sometimes used to encode interpreter memory. In this
+			// scenario, it is useful to treat the longest lists as possible
+			// memory states
+			elem current_list = elem::fresh_var(d), next_list = elem::fresh_var(d);
+			// The relation that will contain all the longest lists
+			raw_term max_head({ concat(out_rel, "_max"),
+				elem_openp, current_list, elem_closep });
+			// The body essentially ensures that the given list has the given
+			// number of nodes. Note that node values are ignored here.
+			std::vector<raw_term> max_body;
+			for(int_t i = 0; i < max_arity; i++) {
+				max_body.push_back(raw_term({ concat(out_rel, "_rst"),
+					elem_openp, current_list, next_list, elem_closep }));
+				current_list = next_list;
+				next_list = elem::fresh_var(d);
+			}
+			// Not strictly necessary. Makes sure that the list end occurs
+			// after the arity_max nodes.
+			max_body.push_back(raw_term({ concat(out_rel, "_nil"),
+				elem_openp, current_list, elem_closep }));
+			// Create the longest list rule.
+			rp.r.push_back(raw_rule(max_head, max_body));
 		}
 	}
 }
@@ -7908,7 +7989,7 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		transform_booleans(rp);
 		o::dbg() << "Booleaned Program:" << std::endl << std::endl << rp << std::endl;
 		o::dbg() << "Generating Domains ..." << std::endl << std::endl;
-		//transform_domains(rp);
+		transform_domains(rp);
 		o::dbg() << "Domained Program:" << std::endl << std::endl << rp << std::endl;
 		o::dbg() << "Generating Quotes ..." << std::endl << std::endl;
 		transform_quotes(rp);

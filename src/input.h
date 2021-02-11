@@ -614,6 +614,7 @@ struct raw_rule {
 		if (!_b.empty()) b = {_b};
 	}
 	raw_rule(const raw_term& h, const sprawformtree &prft) : h({h}), prft(prft) {}
+	raw_rule(const std::vector<raw_term> &h, const sprawformtree &prft) : h(h), prft(prft) {}
 	// Clear b and set prft
 	void set_prft(const sprawformtree &_prft) {
 		prft = _prft;

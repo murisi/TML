@@ -30,11 +30,9 @@
 #define mknum(x) ((((int_t)x)<<2)|2)
 
 typedef enum prolog_dialect { XSB, SWIPL } prolog_dialect;
-typedef std::unordered_set<raw_term, raw_term_hash> raw_terms;
 typedef std::map<elem, elem> var_subs;
 typedef std::pair<std::set<raw_term>, var_subs> terms_hom;
 typedef std::tuple<elem, int_t> rel_info;
-typedef std::map<rel_info, raw_terms> idatabase;
 
 #define QTRUE 0
 #define QRULE 1
@@ -180,11 +178,16 @@ class driver {
 	template<typename F> void subsume_queries(raw_prog &rp, const F &f);
 	elem concat(const elem &rel, std::string suffix);
 	lexeme concat(const lexeme &rel, std::string suffix);
-	string_t generate_cpp(const elem &e, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
-	string_t generate_cpp(const raw_term &rt, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
-	string_t generate_cpp(const sprawformtree &prft, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
-	string_t generate_cpp(const raw_rule &rr, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
-	string_t generate_cpp(const raw_prog &rp, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
+	string_t generate_cpp(const elem &e, string_t &prog_constr, uint_t &cid,
+		const string_t &dict_name, std::map<elem, string_t> &elem_cache);
+	string_t generate_cpp(const raw_term &rt, string_t &prog_constr, uint_t &cid,
+		const string_t &dict_name, std::map<elem, string_t> &elem_cache);
+	string_t generate_cpp(const sprawformtree &prft, string_t &prog_constr,
+		uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache);
+	string_t generate_cpp(const raw_rule &rr, string_t &prog_constr, uint_t &cid,
+		const string_t &dict_name, std::map<elem, string_t> &elem_cache);
+	string_t generate_cpp(const raw_prog &rp, string_t &prog_constr, uint_t &cid,
+		const string_t &dict_name, std::map<elem, string_t> &elem_cache);
 	raw_prog reify(const raw_prog& p);
 	raw_term from_grammar_elem(const elem& v, int_t v1, int_t v2);
 	raw_term from_grammar_elem_nt(const lexeme& r, const elem& c,

@@ -2884,16 +2884,30 @@ void driver::collect_free_vars(const sprawformtree &t,
 	}
 }
 
-string_t driver::generate_cpp(const elem &e, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache) {
+/* It is sometimes desirable to embed a large amount of TML code into
+ * this C++ codebase. Unfortunately, manually writing C++ code to
+ * generate a certain TML fragment can be tedious. This pseudo-
+ * transformation takes TML code and automatically produces the C++ code
+ * necessary to generate the TML code. This transformation is used to
+ * embed TML interpreter written in TML into this codebase. */
+
+// Generate C++ code to generate the given elem
+
+string_t driver::generate_cpp(const elem &e, string_t &prog_constr,
+		uint_t &cid, const string_t &dict_name,
+		std::map<elem, string_t> &elem_cache) {
 	if(elem_cache.find(e) != elem_cache.end()) {
 		return elem_cache[e];
 	}
 	string_t e_name = to_string_t("e") + to_string_t(std::to_string(cid++).c_str());
 	elem_cache[e] = e_name;
 	if(e.type == elem::CHR) {
-		prog_constr += to_string_t("elem ") + e_name + to_string_t("(char32_t(") + to_string_t(std::to_string(e.ch).c_str()) + to_string_t("));\n");
+		prog_constr += to_string_t("elem ") + e_name +
+			to_string_t("(char32_t(") + to_string_t(std::to_string(e.ch).c_str()) +
+			to_string_t("));\n");
 	} else if(e.type == elem::NUM) {
-		prog_constr += to_string_t("elem ") + e_name + to_string_t("(int_t(") + to_string_t(std::to_string(e.num).c_str()) + to_string_t("));\n");
+		prog_constr += to_string_t("elem ") + e_name + to_string_t("(int_t(") +
+			to_string_t(std::to_string(e.num).c_str()) + to_string_t("));\n");
 	} else {
 		prog_constr += to_string_t("elem ") + e_name + to_string_t("(") +
 			to_string_t(
@@ -2936,13 +2950,18 @@ string_t driver::generate_cpp(const elem &e, string_t &prog_constr, uint_t &cid,
 				e.arith_op == t_arith_op::BITWXOR ? "t_arith_op::BITWXOR" :
 				e.arith_op == t_arith_op::BITWNOT ? "t_arith_op::BITWNOT" :
 				e.arith_op == t_arith_op::SHR ? "t_arith_op::SHR" :
-				e.arith_op == t_arith_op::SHL ? "t_arith_op::SHL" : "") + to_string_t(", ") +
-			dict_name + to_string_t(".get_lexeme(\"") + lexeme2str(e.e) + to_string_t("\"));\n");
+				e.arith_op == t_arith_op::SHL ? "t_arith_op::SHL" : "") +
+			to_string_t(", ") + dict_name + to_string_t(".get_lexeme(\"") +
+			lexeme2str(e.e) + to_string_t("\"));\n");
 	}
 	return e_name;
 }
 
-string_t driver::generate_cpp(const raw_term &rt, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache) {
+// Generate the C++ code to generate the given raw_term
+
+string_t driver::generate_cpp(const raw_term &rt, string_t &prog_constr,
+		uint_t &cid, const string_t &dict_name,
+		std::map<elem, string_t> &elem_cache) {
 	std::vector<string_t> elem_names;
 	for(const elem &e : rt.e) {
 		elem_names.push_back(generate_cpp(e, prog_constr, cid, dict_name, elem_cache));
@@ -2955,8 +2974,8 @@ string_t driver::generate_cpp(const raw_term &rt, string_t &prog_constr, uint_t 
 			rt.extype == raw_term::LEQ ? "raw_term::LEQ" :
 			rt.extype == raw_term::BLTIN ? "raw_term::BLTIN" :
 			rt.extype == raw_term::ARITH ? "raw_term::ARITH" :
-			rt.extype == raw_term::CONSTRAINT ? "raw_term::CONSTRAINT" : "") + to_string_t(", ") +
-		to_string_t(
+			rt.extype == raw_term::CONSTRAINT ? "raw_term::CONSTRAINT" : "") +
+		to_string_t(", ") + to_string_t(
 			rt.arith_op == t_arith_op::NOP ? "t_arith_op::NOP" :
 			rt.arith_op == t_arith_op::ADD ? "t_arith_op::ADD" :
 			rt.arith_op == t_arith_op::SUB ? "t_arith_op::SUB" :
@@ -2966,16 +2985,21 @@ string_t driver::generate_cpp(const raw_term &rt, string_t &prog_constr, uint_t 
 			rt.arith_op == t_arith_op::BITWXOR ? "t_arith_op::BITWXOR" :
 			rt.arith_op == t_arith_op::BITWNOT ? "t_arith_op::BITWNOT" :
 			rt.arith_op == t_arith_op::SHR ? "t_arith_op::SHR" :
-			rt.arith_op == t_arith_op::SHL ? "t_arith_op::SHL" : "") + to_string_t(", {");
+			rt.arith_op == t_arith_op::SHL ? "t_arith_op::SHL" : "") +
+		to_string_t(", {");
 	for(const string_t &en : elem_names) {
 		prog_constr += en + to_string_t(", ");
 	}
 	prog_constr += to_string_t("});\n");
-	prog_constr += rt_name + to_string_t(".neg = ") + to_string_t(rt.neg ? "true" : "false") + to_string_t(";\n");
+	prog_constr += rt_name + to_string_t(".neg = ") +
+		to_string_t(rt.neg ? "true" : "false") + to_string_t(";\n");
 	return rt_name;
 }
 
-string_t driver::generate_cpp(const sprawformtree &t, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache) {
+// Generate the C++ code to generate the raw_form_tree
+
+string_t driver::generate_cpp(const sprawformtree &t, string_t &prog_constr,
+		uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache) {
 	string_t ft_name = to_string_t("ft") + to_string_t(std::to_string(cid++).c_str());
 	switch(t->type) {
 		case elem::IMPLIES: case elem::COIMPLIES: case elem::AND:
@@ -3024,7 +3048,11 @@ string_t driver::generate_cpp(const sprawformtree &t, string_t &prog_constr, uin
 	return ft_name;
 }
 
-string_t driver::generate_cpp(const raw_rule &rr, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache) {
+// Generate the C++ code to generate the given TML rule
+
+string_t driver::generate_cpp(const raw_rule &rr, string_t &prog_constr,
+		uint_t &cid, const string_t &dict_name,
+		std::map<elem, string_t> &elem_cache) {
 	std::vector<string_t> term_names;
 	for(const raw_term &rt : rr.h) {
 		term_names.push_back(
@@ -3047,7 +3075,11 @@ string_t driver::generate_cpp(const raw_rule &rr, string_t &prog_constr, uint_t 
 	return rule_name;
 }
 
-string_t driver::generate_cpp(const raw_prog &rp, string_t &prog_constr, uint_t &cid, const string_t &dict_name, std::map<elem, string_t> &elem_cache) {
+// Generate the C++ code to generate the given TML program
+
+string_t driver::generate_cpp(const raw_prog &rp, string_t &prog_constr,
+		uint_t &cid, const string_t &dict_name,
+		std::map<elem, string_t> &elem_cache) {
 	std::vector<string_t> rule_names;
 	for(const raw_rule &rr : rp.r) {
 		rule_names.push_back(
@@ -3055,7 +3087,8 @@ string_t driver::generate_cpp(const raw_prog &rp, string_t &prog_constr, uint_t 
 	}
 	string_t prog_name = to_string_t("rp") + to_string_t(std::to_string(cid++).c_str());
 	prog_constr += to_string_t("raw_prog ") + prog_name + to_string_t(";\n");
-	prog_constr += prog_name + to_string_t(".r.insert(") + prog_name + to_string_t(".r.end(), { ");
+	prog_constr += prog_name + to_string_t(".r.insert(") + prog_name +
+		to_string_t(".r.end(), { ");
 	for(const string_t &rn : rule_names) {
 		prog_constr += rn + to_string_t(", ");
 	}

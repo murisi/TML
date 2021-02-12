@@ -775,21 +775,22 @@ void driver::make_domain(raw_prog &rp, const elem &out_rel,
 
 /* Loop through the rules of the given program checking if they use a
  * function called "domain" in their bodies. Domain's first argument is
- * the relation into which it should put the domain it creates, and
- * it's second argument is the program to quote. */
+ * the relation into which it should put the domain it creates, its
+ * second argument is the domain size of of its tuple elements, and its
+ * third argument is the maximum tuple length. */
 
 void driver::transform_domains(raw_prog &rp) {
 	dict_t &d = tbl->get_dict();
 	
 	for(size_t oridx = 0; oridx < rp.r.size(); oridx++) {
 		// Iterate through the bodies of the current rule looking for uses
-		// of the "eval" relation.
+		// of the "domain" relation.
 		for(const raw_term &curr_term : rp.r[oridx].h) {
 			if(!(!curr_term.e.empty() && curr_term.e[0].type == elem::SYM &&
 				to_string_t("domain") == lexeme2str(curr_term.e[0].e))) continue;
-			// The first parenthesis marks the beginning of eval's three arguments.
-			//if(!(ssize(curr_term.e) == 6 && curr_term.e[1].type == elem::OPENP &&
-			//	curr_term.e[5].type == elem::CLOSEP)) continue;
+			// The first parenthesis marks the beginning of domain's three arguments.
+			if(!(ssize(curr_term.e) == 6 && curr_term.e[1].type == elem::OPENP &&
+				curr_term.e[5].type == elem::CLOSEP)) continue;
 			// The relation to contain the evaled relation is the first symbol
 			// between the parentheses
 			elem out_rel = curr_term.e[2];
@@ -1256,7 +1257,7 @@ void driver::transform_quotes(raw_prog &rp) {
 		for(const raw_term &curr_term : rp.r[oridx].h) {
 			if(!(!curr_term.e.empty() && curr_term.e[0].type == elem::SYM &&
 				to_string_t("quote") == lexeme2str(curr_term.e[0].e))) continue;
-			// The first parenthesis marks the beginning of eval's three arguments.
+			// The first parenthesis marks the beginning of quote's three arguments.
 			if(!(ssize(curr_term.e) == 6 && curr_term.e[1].type == elem::OPENP &&
 				curr_term.e[5].type == elem::CLOSEP)) continue;
 			// The relation to contain the evaled relation is the first symbol
@@ -1317,9 +1318,14 @@ void driver::transform_codecs(raw_prog &rp) {
 			// Get dictionary for generating fresh variables
 			dict_t &d = tbl->get_dict();
 			
+			// Create the symbols and variables that will feature heavily in
+			// the terms to be created below
 			elem decode_tmp_rel = elem::fresh_temp_sym(d),
 				name_var = elem::fresh_var(d), timestep_var = elem::fresh_var(d),
 				params_var = elem::fresh_var(d);
+			
+			// Create the terms that will feature heavily in the rules to be
+			// created below
 			raw_term tick({ concat(out_sym, "_tick"), elem_openp, elem_closep }),
 				tock({ concat(out_sym, "_tock"), elem_openp, elem_closep }),
 				fixpoint({ concat(out_sym, "_fixpoint"), elem_openp, timestep_var,
@@ -1328,12 +1334,16 @@ void driver::transform_codecs(raw_prog &rp) {
 					timestep_var, name_var, params_var, elem_closep }),
 				enc_databases({ concat(out_sym, "_databases"), elem_openp,
 					elem(0), name_var, params_var, elem_closep });
+			
+			// Make variables for each head and tail in a linked list
 			std::vector<elem> params_vars, param_vars;
 			for(int_t i = 0; i < max_arity; i++) {
 				params_vars.push_back(elem::fresh_var(d));
 				param_vars.push_back(elem::fresh_var(d));
 			}
 			
+			// Create rules to decode the contents of the interpreter's
+			// database into a temporary relation on each tick
 			for(int_t i = 0; i <= max_arity; i++) {
 				std::vector<elem> decode_tmp_elems = { decode_tmp_rel,
 					elem_openp, name_var };
@@ -1344,6 +1354,8 @@ void driver::transform_codecs(raw_prog &rp) {
 				raw_term decode_tmp_head(decode_tmp_elems);
 				raw_rule decode_tmp_rule(decode_tmp_head, { fixpoint,
 					dec_databases, tick });
+				// Here we decode the number representing a list into its
+				// various heads and tails
 				elem current_params_var = params_var;
 				for(int_t j = 0; j < i; j++) {
 					decode_tmp_rule.b[0].push_back(raw_term(
@@ -1357,14 +1369,21 @@ void driver::transform_codecs(raw_prog &rp) {
 				decode_tmp_rule.b[0].push_back(raw_term(
 					{concat(domain_sym, "_nil"), elem_openp, current_params_var,
 						elem_closep}));
+				// Add the temporary decoding rule
 				rp.r.push_back(decode_tmp_rule);
 			}
 			
+			// Prepare the rules that will clear the decoder and temporary
+			// decoder relations
 			raw_rule tick_clear, tock_clear;
 			tick_clear.b = {{tick}};
 			tock_clear.b = {{tock}};
 			
+			// Make a rule to copy the temporary decoder relation into the
+			// decoder relation on each tock
 			for(int_t i = 0; i <= max_arity; i++) {
+				// Make the terms to capture a temporary decoder relation entry
+				// and to insert a decoder relation entry
 				std::vector<elem>
 					decode_elems = { concat(codec_rel, "_decode"), elem_openp, name_var },
 					decode_tmp_elems = { decode_tmp_rel, elem_openp, name_var };
@@ -1376,17 +1395,25 @@ void driver::transform_codecs(raw_prog &rp) {
 				decode_tmp_elems.push_back(elem_closep);
 				raw_term decode_head(decode_elems),
 					decode_tmp_head(decode_tmp_elems);
+				// Make the rule to do the copying and add it to the program
 				raw_rule decode_rule(decode_head, { decode_tmp_head, tock });
 				rp.r.push_back(decode_rule);
 				
+				// Build up the rules that will clear the decoder and temporary
+				// decoder relations
 				tick_clear.h.push_back(decode_head.negate());
 				tock_clear.h.push_back(decode_tmp_head.negate());
 			}
 			
+			// Now add the clearing rules to the final program
 			rp.r.push_back(tick_clear);
 			rp.r.push_back(tock_clear);
 			
+			// Make rules that take decoded terms and add them to the step 0
+			// database of the given interpreter on each tock
 			for(int_t i = 0; i <= max_arity; i++) {
+				// The decoded terms will be coming from a <codec>_encode
+				// relation
 				std::vector<elem> encode_elems = { concat(codec_rel, "_encode"),
 					elem_openp, name_var };
 				for(int_t j = 0; j < i; j++) {
@@ -1394,8 +1421,11 @@ void driver::transform_codecs(raw_prog &rp) {
 				}
 				encode_elems.push_back(elem_closep);
 				raw_term encode_head(encode_elems);
-				raw_rule encode_rule(enc_databases,
-					{ encode_head, tock });
+				// Make and add the rule that will add a decoded term of the
+				// given arity into the step 0 database of the interpreter.
+				raw_rule encode_rule(enc_databases, { encode_head, tock });
+				// Make the group of terms that will compute the encoding of
+				// the decoded tuple
 				elem current_params_var = params_var;
 				for(int_t j = 0; j < i; j++) {
 					encode_rule.b[0].push_back(raw_term(

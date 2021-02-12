@@ -1279,14 +1279,151 @@ void driver::transform_quotes(raw_prog &rp) {
 	}
 }
 
+/* An Imhof-style interpreter can be inconvenient to debug because
+ * its output tuples are encoded into numbers using modular arithmetic.
+ * This transformation creates codecs for interpreters so that it's
+ * easier to inspect and manipulate them.
+ * 
+ * This transformation loops through the rules of the given program
+ * checking if they use a relation called "codec". If codec is used,
+ * take its four arguments: the name of the relation that will contain the
+ * encodings/decodings of interpreter outputs, the formal name of a
+ * relation containing the domain of the interpreter, and the formal
+ * name of the relation containing the interpreter, and the maximum
+ * arity of the domain. */
+
+void driver::transform_codecs(raw_prog &rp) {
+	for(size_t oridx = 0; oridx < rp.r.size(); oridx++) {
+		// Iterate through the bodies of the current rule looking for uses
+		// of the "eval" relation.
+		for(const raw_term &curr_term : rp.r[oridx].h) {
+			if(!(!curr_term.e.empty() && curr_term.e[0].type == elem::SYM &&
+				to_string_t("codec") == lexeme2str(curr_term.e[0].e))) continue;
+			// The first parenthesis marks the beginning of eval's four arguments.
+			if(!(ssize(curr_term.e) == 7 && curr_term.e[1].type == elem::OPENP &&
+				curr_term.e[6].type == elem::CLOSEP)) continue;
+			// The relation to contain the evaled relation is the first symbol
+			// between the parentheses
+			elem codec_rel = curr_term.e[2];
+			// The relation containing the quotation arity is the second symbol
+			// between the parentheses
+			elem domain_sym = curr_term.e[3];
+			// The formal symbol representing the output relation is the
+			// third symbol between the parentheses
+			elem out_sym = curr_term.e[4];
+			// The number representing the maximum arity of relations in the
+			// quotation is the fourth symbol between the parentheses
+			int_t max_arity = curr_term.e[5].num;
+			// Get dictionary for generating fresh variables
+			dict_t &d = tbl->get_dict();
+			
+			elem decode_tmp_rel = elem::fresh_temp_sym(d),
+				name_var = elem::fresh_var(d), timestep_var = elem::fresh_var(d),
+				params_var = elem::fresh_var(d);
+			raw_term tick({ concat(out_sym, "_tick"), elem_openp, elem_closep }),
+				tock({ concat(out_sym, "_tock"), elem_openp, elem_closep }),
+				fixpoint({ concat(out_sym, "_fixpoint"), elem_openp, timestep_var,
+					elem_closep }),
+				dec_databases({ concat(out_sym, "_databases"), elem_openp,
+					timestep_var, name_var, params_var, elem_closep }),
+				enc_databases({ concat(out_sym, "_databases"), elem_openp,
+					elem(0), name_var, params_var, elem_closep });
+			std::vector<elem> params_vars, param_vars;
+			for(int_t i = 0; i < max_arity; i++) {
+				params_vars.push_back(elem::fresh_var(d));
+				param_vars.push_back(elem::fresh_var(d));
+			}
+			
+			for(int_t i = 0; i <= max_arity; i++) {
+				std::vector<elem> decode_tmp_elems = { decode_tmp_rel,
+					elem_openp, name_var };
+				for(int_t j = 0; j < i; j++) {
+					decode_tmp_elems.push_back(param_vars[j]);
+				}
+				decode_tmp_elems.push_back(elem_closep);
+				raw_term decode_tmp_head(decode_tmp_elems);
+				raw_rule decode_tmp_rule(decode_tmp_head, { fixpoint,
+					dec_databases, tick });
+				elem current_params_var = params_var;
+				for(int_t j = 0; j < i; j++) {
+					decode_tmp_rule.b[0].push_back(raw_term(
+						{concat(domain_sym, "_fst"), elem_openp, current_params_var,
+							param_vars[j], elem_closep}));
+					decode_tmp_rule.b[0].push_back(raw_term(
+						{concat(domain_sym, "_rst"), elem_openp, current_params_var,
+							params_vars[j], elem_closep}));
+					current_params_var = params_vars[j];
+				}
+				decode_tmp_rule.b[0].push_back(raw_term(
+					{concat(domain_sym, "_nil"), elem_openp, current_params_var,
+						elem_closep}));
+				rp.r.push_back(decode_tmp_rule);
+			}
+			
+			raw_rule tick_clear, tock_clear;
+			tick_clear.b = {{tick}};
+			tock_clear.b = {{tock}};
+			
+			for(int_t i = 0; i <= max_arity; i++) {
+				std::vector<elem>
+					decode_elems = { concat(codec_rel, "_decode"), elem_openp, name_var },
+					decode_tmp_elems = { decode_tmp_rel, elem_openp, name_var };
+				for(int_t j = 0; j < i; j++) {
+					decode_elems.push_back(param_vars[j]);
+					decode_tmp_elems.push_back(param_vars[j]);
+				}
+				decode_elems.push_back(elem_closep);
+				decode_tmp_elems.push_back(elem_closep);
+				raw_term decode_head(decode_elems),
+					decode_tmp_head(decode_tmp_elems);
+				raw_rule decode_rule(decode_head, { decode_tmp_head, tock });
+				rp.r.push_back(decode_rule);
+				
+				tick_clear.h.push_back(decode_head.negate());
+				tock_clear.h.push_back(decode_tmp_head.negate());
+			}
+			
+			rp.r.push_back(tick_clear);
+			rp.r.push_back(tock_clear);
+			
+			for(int_t i = 0; i <= max_arity; i++) {
+				std::vector<elem> encode_elems = { concat(codec_rel, "_encode"),
+					elem_openp, name_var };
+				for(int_t j = 0; j < i; j++) {
+					encode_elems.push_back(param_vars[j]);
+				}
+				encode_elems.push_back(elem_closep);
+				raw_term encode_head(encode_elems);
+				raw_rule encode_rule(enc_databases,
+					{ encode_head, tock });
+				elem current_params_var = params_var;
+				for(int_t j = 0; j < i; j++) {
+					encode_rule.b[0].push_back(raw_term(
+						{concat(domain_sym, "_fst"), elem_openp, current_params_var,
+							param_vars[j], elem_closep}));
+					encode_rule.b[0].push_back(raw_term(
+						{concat(domain_sym, "_rst"), elem_openp, current_params_var,
+							params_vars[j], elem_closep}));
+					current_params_var = params_vars[j];
+				}
+				encode_rule.b[0].push_back(raw_term(
+					{concat(domain_sym, "_nil"), elem_openp, current_params_var,
+						elem_closep}));
+				rp.r.push_back(encode_rule);
+			}
+		}
+	}
+}
+
 /* Loop through the rules of the given program checking if they use a
  * relation called "eval" in their bodies. If eval is used, take its
- * three arguments: the name of the relation that will contain the
- * equivalent of the original TML program, the name of a relation
- * containing the program arity of the relation to be evaluated, and the
- * formal name of a relation containing a representation of a TML program.
- * Note that the evaled relation will only depend on the relation's
- * program arity and its name - not its entries. */
+ * four arguments: the name of the relation that will contain the
+ * equivalent of the original TML program, the formal name of the
+ * relation containing the quoted program's domain, the formal name of
+ * the relation containing a representation of a TML program, and the
+ * number of steps of the quoted program that should be simulated. Note
+ * that the evaled relation will only depend on the relation's program
+ * arity and its name - not its entries. */
 
 void driver::transform_evals(raw_prog &rp) {
 	for(size_t oridx = 0; oridx < rp.r.size(); oridx++) {
@@ -1295,7 +1432,7 @@ void driver::transform_evals(raw_prog &rp) {
 		for(const raw_term &curr_term : rp.r[oridx].h) {
 			if(!(!curr_term.e.empty() && curr_term.e[0].type == elem::SYM &&
 				to_string_t("eval") == lexeme2str(curr_term.e[0].e))) continue;
-			// The first parenthesis marks the beginning of eval's three arguments.
+			// The first parenthesis marks the beginning of eval's four arguments.
 			if(!(ssize(curr_term.e) == 7 && curr_term.e[1].type == elem::OPENP &&
 				curr_term.e[6].type == elem::CLOSEP)) continue;
 			// The relation to contain the evaled relation is the first symbol
@@ -3018,6 +3155,9 @@ bool driver::transform(raw_prog& rp, const strs_t& /*strtrees*/) {
 		o::dbg() << "Generating Evals ..." << std::endl << std::endl;
 		transform_evals(rp);
 		o::dbg() << "Evaled Program:" << std::endl << std::endl << rp << std::endl;
+		o::dbg() << "Generating Codecs ..." << std::endl << std::endl;
+		transform_codecs(rp);
+		o::dbg() << "Codeced Program:" << std::endl << std::endl << rp << std::endl;
 		o::dbg() << "Simplifying Program ..." << std::endl << std::endl;
 		simplify_formulas(rp);
 		o::dbg() << "Simplified Program:" << std::endl << std::endl << rp << std::endl;

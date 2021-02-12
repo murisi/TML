@@ -113,6 +113,7 @@ class driver {
 	void transform_evals(raw_prog &rp);
 	void transform_quotes(raw_prog &rp);
 	void transform_domains(raw_prog &rp);
+	void transform_codecs(raw_prog &rp);
 	void make_domain(raw_prog &rp, const elem &out_rel, std::set<elem> elts,
 		int_t max_size, int_t rest_id, int_t &curr_id);
 	void flatten_associative(const elem::etype &tp,

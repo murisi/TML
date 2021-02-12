@@ -872,6 +872,67 @@ Full transformation of the above program:
 	        :- { __2__curr__ && ~ ~ { b(1) }   }.
 ```
 
+# Conjunctive Query Containment (CQC)
+This section lists the optimizations based on CQC tests that have been
+implemented in the interpreter, what exactly they do to TML source code,
+the command line flags required to enable them, and their potential
+drawbacks. Note that the results of a program obtained by applying these
+optimizations to another should be indistinguishable from those of the
+original.
+
+## Subsumption without Negation
+This pair of optimizations is based on the CQC test as described on
+section 1.1 of "Information Integration Using Logical Views" by Ullman.
+
+The first of the optimization pair tries to identify redundant conjunctive
+rules in a TML codebase. It does this by iterating through all unordered
+pairs of conjunctive rules corresponding to the same relation and formally
+checking whether the facts derived by one rule are necessarily derived by
+the other rule. If this is the case, then it follows that the former rule
+is redundant.
+
+The second of the optimization pair tries to identify redundant terms in
+conjunctive rule bodies by checking whether a rule is contained by one
+obtained by removing a body term. If this is so then the body term can be
+removed to obtain an equivalent rule since this rule's derivation set would
+both be a subset and superset of the original's.
+
+This optimization can be enabled using the flag `--cqc-subsume`.
+## Subsumption with Negation
+This pair of optimizations is based on the Conjunctive Query Containment
+(CQNC) test as described in section 1.2 of "Information Integration Using
+Logical Views" by Ullman.
+
+The details of this optimization pair are the same as those of the
+negation-less case as described above, except this pair additionally works
+on conjunctive rules containing terms with negation. This optimization pair
+is strictly more general than those for the negation-less case, however
+this comes at a cost: this optimization pair is much slower than the one
+for the negation-less case. This can be seen from the Ullman paper where
+the containment checker must iterate through partitions of a given set and
+amongst other operations, iterate through the powerset of the set of terms
+formed by taking the cartesian power of some set of atoms.
+
+This optimization can be enabled using the flag `--cqnc-subsume`.
+## Factorization
+This algorithm shares a similar spirit to the CQC test in that it
+searches for homomorphisms between different rules. The difference here
+though is that rule heads are not included in the homomorphism checks.
+This exclusion allows us to check whether certain body parts of a rule
+are contained by the body parts of another. And when containment is
+verified, we simply create another rule corresponding to the intersection
+of the original rules and make the original rules point to this newly
+created rules.
+
+This optimization can cause the TML program to slowdown so when it
+is desired to increase the speed of a TML program, one should try running
+it both with and without this optimization and proceed accordingly. The
+potential slowdown can be attributed to the fact that additional terms
+and rules are required to correctly sequence the temporary rules in the
+case that the original program used negation.
+
+This optimization can be enabled using the flag `--cqc-factor`.
+
 # Misc
 
 Comments are either C-style /* \*/ multiline comments, or # to comment till

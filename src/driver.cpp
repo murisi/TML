@@ -777,11 +777,10 @@ void driver::make_domain(raw_prog &rp, const elem &out_rel,
 	}
 }
 
-/* Loop through the rules of the given program checking if they use a
- * function called "domain" in their bodies. Domain's first argument is
- * the relation into which it should put the domain it creates, its
- * second argument is the domain size of of its tuple elements, and its
- * third argument is the maximum tuple length. */
+/* Make relations mapping list ID's to their heads and tails. Domain's
+ * first argument is the relation into which it should put the domain it
+ * creates, its second argument is the domain size of of its tuple
+ * elements, and its third argument is the maximum tuple length. */
 
 bool driver::transform_domains(raw_prog &rp, const directive& drt) {
 	o::dbg() << "Generating domain for: " << drt << std::endl;
@@ -1243,10 +1242,9 @@ raw_prog driver::read_prog(elem prog, const raw_prog &rp) {
 	return nrp;
 }
 
-/* Loop through the rules of the given program checking if they use a
- * function called "quote" in their bodies. Quote's first argument is
- * the relation into which it should put the quotation it creates, and
- * it's second argument is the program to quote. */
+/* Make a relation representing the code given in the quotation. Quote's
+ * first argument is the relation into which it should put the quotation
+ * it creates, and it's second argument is the program to quote. */
 
 bool driver::transform_quotes(raw_prog &rp, const directive &drt) {
 	if(drt.type != directive::QUOTE) return false;
@@ -1277,13 +1275,11 @@ bool driver::transform_quotes(raw_prog &rp, const directive &drt) {
  * This transformation creates codecs for interpreters so that it's
  * easier to inspect and manipulate them.
  * 
- * This transformation loops through the rules of the given program
- * checking if they use a relation called "codec". If codec is used,
- * take its four arguments: the name of the relation that will contain the
- * encodings/decodings of interpreter outputs, the formal name of a
- * relation containing the domain of the interpreter, and the formal
- * name of the relation containing the interpreter, and the maximum
- * arity of the domain. */
+ * Codec takes four arguments: the name of the relation that will
+ * contain the encodings/decodings of interpreter outputs, the formal
+ * name of a relation containing the domain of the interpreter, the
+ * formal name of the relation containing the interpreter, and the
+ * maximum arity of the domain. */
 
 bool driver::transform_codecs(raw_prog &rp, const directive &drt) {
 	if(drt.type != directive::CODEC) return false;
@@ -1431,15 +1427,13 @@ bool driver::transform_codecs(raw_prog &rp, const directive &drt) {
 	return true;
 }
 
-/* Loop through the rules of the given program checking if they use a
- * relation called "eval" in their bodies. If eval is used, take its
- * four arguments: the name of the relation that will contain the
- * equivalent of the original TML program, the formal name of the
- * relation containing the quoted program's domain, the formal name of
- * the relation containing a representation of a TML program, and the
- * number of steps of the quoted program that should be simulated. Note
- * that the evaled relation will only depend on the relation's program
- * arity and its name - not its entries. */
+/* If eval is used, take its four arguments: the name of the relation
+ * that will contain the outputs of the original TML program, the formal
+ * name of the relation containing the quoted program's domain, the
+ * formal name of the relation containing a representation of a TML
+ * program, and the number of steps of the quoted program that should be
+ * simulated. Note that the evaled relation will only depend on the
+ * relation's program arity and its name - not its entries. */
 
 bool driver::transform_evals(raw_prog &rp, const directive &drt) {
 	if(drt.type != directive::EVAL) return false;

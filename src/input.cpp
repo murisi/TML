@@ -184,6 +184,63 @@ bool directive::parse(input* in, const raw_prog& prog) {
 			in->parse_error(l[pos][0], dot_expected, l[pos]);
 		return ++pos, true;
 	}
+	// Parse @domain <domain_sym> <limit_num> <arity_num>.
+	if (l[pos] == "domain") {
+		type = DOMAIN; ++pos;
+		if (!domain_sym.parse(in) || domain_sym.type != elem::SYM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (!limit_num.parse(in) || limit_num.type != elem::NUM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (!arity_num.parse(in) || arity_num.type != elem::NUM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (*l[pos++][0] != '.') return
+			in->parse_error(l[pos-1][0], dot_expected, l[pos-1]);
+		return true;
+	}
+	// Parse @eval <eval_sym> <domain_sym> <quote_sym> <timeout_num>.
+	if (l[pos] == "eval") {
+		type = EVAL; ++pos;
+		if (!eval_sym.parse(in) || eval_sym.type != elem::SYM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (!domain_sym.parse(in) || domain_sym.type != elem::SYM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (!quote_sym.parse(in) || quote_sym.type != elem::SYM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (!timeout_num.parse(in) || timeout_num.type != elem::NUM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (*l[pos++][0] != '.') return
+			in->parse_error(l[pos-1][0], dot_expected, l[pos-1]);
+		return true;
+	}
+	// Parse @quote <quote_sym> <domain_sym> <quote_str>.
+	if (l[pos] == "quote") {
+		type = QUOTE; ++pos;
+		if (!quote_sym.parse(in) || quote_sym.type != elem::SYM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (!domain_sym.parse(in) || domain_sym.type != elem::SYM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (!quote_str.parse(in) || quote_str.type != elem::STR ||
+				quote_str.e[1] <= quote_str.e[0] || *quote_str.e[0] != '`')
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (*l[pos++][0] != '.') return
+			in->parse_error(l[pos-1][0], dot_expected, l[pos-1]);
+		return true;
+	}
+	// Parse @codec <codec_sym> <domain_sym> <eval_str> <arity_num>.
+	if (l[pos] == "codec") {
+		type = CODEC; ++pos;
+		if (!codec_sym.parse(in) || codec_sym.type != elem::SYM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (!domain_sym.parse(in) || domain_sym.type != elem::SYM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (!eval_sym.parse(in) || eval_sym.type != elem::SYM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (!arity_num.parse(in) || arity_num.type != elem::NUM)
+			return in->parse_error(l[pos-1][0], err_trace_rel, l[pos-1]);
+		if (*l[pos++][0] != '.') return
+			in->parse_error(l[pos-1][0], dot_expected, l[pos-1]);
+		return true;
+	}
 	if (l[pos] == "stdout") {
 		type = STDOUT; ++pos;
 		if (!t.parse(in, prog)) return

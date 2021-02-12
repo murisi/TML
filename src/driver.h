@@ -110,10 +110,10 @@ class driver {
 	void transform_proofs(raw_prog& r, const lexeme& rel);
 //	void transform_string(const sysstring_t&, raw_prog&, int_t);
 	void transform_grammar(raw_prog& r, lexeme rel, size_t len);
-	void transform_evals(raw_prog &rp);
-	void transform_quotes(raw_prog &rp);
-	void transform_domains(raw_prog &rp);
-	void transform_codecs(raw_prog &rp);
+	bool transform_evals(raw_prog &rp, const directive &drt);
+	bool transform_quotes(raw_prog &rp, const directive &drt);
+	bool transform_domains(raw_prog &rp, const directive& drt);
+	bool transform_codecs(raw_prog &rp, const directive &drt);
 	void make_domain(raw_prog &rp, const elem &out_rel, std::set<elem> elts,
 		int_t max_size, int_t rest_id, int_t &curr_id);
 	void flatten_associative(const elem::etype &tp,

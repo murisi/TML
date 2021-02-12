@@ -306,6 +306,18 @@ basic_ostream<T>& operator<<(basic_ostream<T>& os, const directive& d) {
 	os << '@';
 	if (d.type == directive::BWD) return os << "bwd.";
 	if (d.type == directive::TRACE) return os << "trace." << endl;
+	if (d.type == directive::DOMAIN)
+		return os << "domain " << d.domain_sym << ' ' << d.limit_num << ' '
+			<< d.arity_num << '.';
+	if (d.type == directive::EVAL)
+		return os << "eval " << d.eval_sym << ' ' << d.domain_sym << ' '
+			<< d.quote_sym << ' ' << d.timeout_num << '.';
+	if (d.type == directive::QUOTE)
+		return os << "quote " << d.quote_sym << ' ' << d.domain_sym << ' '
+			<< d.quote_str << '.';
+	if (d.type == directive::CODEC)
+		return os << "codec " << d.codec_sym << ' ' << d.domain_sym << ' '
+			<< d.quote_sym << ' ' << d.arity_num << '.';
 	if (d.type == directive::STDOUT) os << "stdout ";
 	else os << "string ";
 	if (d.type == directive::TREE) return os << d.t << '.';

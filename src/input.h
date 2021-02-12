@@ -566,8 +566,18 @@ struct directive {
 	lexeme arg;
 	raw_term t;
 	int_t n;
+	
+	elem domain_sym; // Formal name of a relation containing a domain
+	elem eval_sym; // Formal name of a relation containing an interpreter
+	elem codec_sym; // Formal name of a relation containing a codec
+	elem quote_sym; // Formal name of a relation containing a quotation
+	elem limit_num; // The maximum of domain tuple elements
+	elem arity_num; // The maximum length of domain tuples
+	elem timeout_num; // The number of database steps to be simulated
+	elem quote_str; // The literal string to be quoted.
+	
 	enum etype { STR, FNAME, CMDLINE, STDIN, STDOUT, TREE, TRACE, BWD,
-		EVAL, QUOTE, DOMAIN }type;
+		EVAL, QUOTE, DOMAIN, CODEC }type;
 	bool parse(input* in, const raw_prog& prog);
 };
 

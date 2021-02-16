@@ -1349,7 +1349,7 @@ bool driver::transform_codecs(raw_prog &rp, const directive &drt) {
 	
 	// Create the symbols and variables that will feature heavily in
 	// the terms to be created below
-	elem decode_tmp_rel = elem::fresh_temp_sym(d),
+	elem decode_tmp_rel = concat(codec_rel, "__decode"),
 		name_var = elem::fresh_var(d), timestep_var = elem::fresh_var(d),
 		params_var = elem::fresh_var(d);
 	

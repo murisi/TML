@@ -149,7 +149,7 @@ class driver {
 		const elem &domain_name, raw_prog &rp);
 	raw_term to_pure_tml(const sprawformtree &t, std::vector<raw_rule> &rp,
 		const std::set<elem> &fv);
-	void collect_positive_vars(const raw_rule &rr, std::set<elem> &vars);
+	void collect_vars(const raw_rule &rr, std::set<elem> &vars);
 	void collect_vars(const raw_term &rt, std::set<elem> &vars);
 	template <class InputIterator>
 		void collect_vars(InputIterator first, InputIterator last,

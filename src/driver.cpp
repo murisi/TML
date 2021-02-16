@@ -481,25 +481,25 @@ void driver::factor_rules(raw_prog &rp) {
  * stops. */
 
 template<typename T, typename F> bool partition_iter(std::set<T> &vars,
-		std::vector<std::set<T>> &partitions, const F &f) {
+		std::vector<std::set<T>> &partition, const F &f) {
 	if(vars.empty()) {
-		return f(partitions);
+		return f(partition);
 	} else {
 		const T nvar = *vars.begin();
 		vars.erase(nvar);
-		for(size_t i = 0; i < partitions.size(); i++) {
-			partitions[i].insert(nvar);
-			if(!partition_iter(vars, partitions, f)) {
+		for(size_t i = 0; i < partition.size(); i++) {
+			partition[i].insert(nvar);
+			if(!partition_iter(vars, partition, f)) {
 				return false;
 			}
-			partitions[i].erase(nvar);
+			partition[i].erase(nvar);
 		}
 		std::set<T> npart = { nvar };
-		partitions.push_back(npart);
-		if(!partition_iter(vars, partitions, f)) {
+		partition.push_back(npart);
+		if(!partition_iter(vars, partition, f)) {
 			return false;
 		}
-		partitions.pop_back();
+		partition.pop_back();
 		vars.insert(nvar);
 		return true;
 	}
@@ -576,13 +576,10 @@ template <class InputIterator>
 /* Collect the variables used in the head and the positive terms of the
  * given rule and return. */
 
-void driver::collect_positive_vars(const raw_rule &rr,
-		std::set<elem> &vars) {
+void driver::collect_vars(const raw_rule &rr, std::set<elem> &vars) {
 	collect_vars(rr.h[0], vars);
 	for(const raw_term &tm : rr.b[0]) {
-		if(!tm.neg) {
-			collect_vars(tm, vars);
-		}
+		collect_vars(tm, vars);
 	}
 }
 
@@ -590,28 +587,42 @@ void driver::collect_positive_vars(const raw_rule &rr,
  * rr1 is contained by rr2. Do this using the Levy-Sagiv test. */
 
 bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
-	// The CQNC test is very heavy, so try to use the lighter CQC test if
-	// possible.
-	if(is_cq(rr1) && is_cq(rr2)) return cqc(rr1, rr2);
 	// Check that rules have correct format
 	if(!(is_cqn(rr1) && is_cqn(rr2) &&
 		get_relation_info(rr1.h[0]) == get_relation_info(rr2.h[0]))) return false;
+	
+	o::dbg() << "Testing if " << rr1 << " <= " << rr2 << std::endl;
 	
 	// Get dictionary for generating fresh symbols
 	dict_t &old_dict = tbl->get_dict();
 	
 	std::set<elem> vars;
-	collect_positive_vars(rr1, vars);
-	std::vector<std::set<elem>> partitions;
+	collect_vars(rr1, vars);
+	std::vector<std::set<elem>> partition;
+	
 	// Do the Levy-Sagiv test
-	return partition_iter(vars, partitions,
-		[&](const std::vector<std::set<elem>> &partitions) -> bool {
+	bool contained = partition_iter(vars, partition,
+		[&](const std::vector<std::set<elem>> &partition) -> bool {
+			// Print the current partition
+			o::dbg() << "Testing partition: ";
+			for(const std::set<elem> &s : partition) {
+				o::dbg() << "{";
+				for(const elem &e : s) {
+					o::dbg() << e << ", ";
+				}
+				o::dbg() << "}, ";
+			}
+			o::dbg() << std::endl;
+			
+			// Create new dictionary so that symbols created for these tests
+			// do not affect final program
 			dict_t d;
 			d.op = old_dict.op;
 			d.cl = old_dict.cl;
-			// Map each variable to a fresh symbol according to the partitions
+			
+			// Map each variable to a fresh symbol according to the partition
 			std::map<elem, elem> subs;
-			for(const std::set<elem> &part : partitions) {
+			for(const std::set<elem> &part : partition) {
 				elem pvar = elem::fresh_sym(d);
 				for(const elem &e : part) {
 					subs[e] = pvar;
@@ -640,13 +651,21 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 					symbol_set.insert(rt.e[i]);
 				}
 			}
-			// Does canonical make all the subgoals of subbed true?
+			// Print the canonical database
+			o::dbg() << "Current canonical Database: ";
+			for(const raw_term &rt : canonical) {
+				o::dbg() << rt << ", ";
+			}
+			o::dbg() << std::endl;
+			// Does canonical database make all the subgoals of subbed true?
 			for(raw_term &rt : subbed.b[0]) {
 				if(rt.neg) {
 					// If the term in the rule is negated, we need to make sure
 					// that it is not in the canonical database.
 					rt.neg = false;
 					if(canonical.find(rt) != canonical.end()) {
+						o::dbg() << "Current canonical database causes its source query to be inconsistent."
+							<< std::endl;
 						return true;
 					}
 					rt.neg = true;
@@ -684,6 +703,14 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 					return res.find(subbed.h[0]) != res.end();
 				});
 		});
+	
+	if(contained) {
+		o::dbg() << "True: " << rr1 << " <= " << rr2 << std::endl;
+		return true;
+	} else {
+		o::dbg() << "False: " << rr1 << " <= " << rr2 << std::endl;
+		return false;
+	}
 }
 
 /* If the given query is conjunctive, go through its terms and see if
@@ -798,7 +825,8 @@ bool driver::transform_domains(raw_prog &rp, const directive& drt) {
 	int_t max_arity = drt.arity_num.num;
 	// The number of distinct lists of elements less than gen_limit and
 	// with length less than max_limit
-	int_t max_id = (std::pow(gen_limit, max_arity + 1) - 1) / (gen_limit - 1);
+	int_t max_id = gen_limit == 1 ? max_arity + 1 :
+		(std::pow(gen_limit, max_arity + 1) - 1) / (gen_limit - 1);
 	
 	// Initialize the symbols, variables, and operators used in the
 	// domain creation rule

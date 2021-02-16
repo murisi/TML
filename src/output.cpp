@@ -494,6 +494,37 @@ template
 basic_ostream<wchar_t>& operator<<(basic_ostream<wchar_t>&, const raw_rule&);
 
 template <typename T>
+basic_ostream<T>& operator<<(basic_ostream<T>& os, const std::set<raw_term>& rts) {
+	os << '{';
+	for(std::set<raw_term>::iterator it = rts.begin(); it != rts.end();
+			it++) {
+		if(it != rts.begin()) {
+			os << ", ";
+		}
+		os << *it;
+	}
+	return os << '}';
+}
+template basic_ostream<char>& operator<<(basic_ostream<char>&, const std::set<raw_term>&);
+template
+basic_ostream<wchar_t>& operator<<(basic_ostream<wchar_t>&, const std::set<raw_term>&);
+
+template <typename T>
+basic_ostream<T>& operator<<(basic_ostream<T>& os, const std::vector<raw_term>& rts) {
+	os << '[';
+	for(int_t i = 0; i < rts.size(); i++) {
+		if(i != 0) {
+			os << ", ";
+		}
+		os << rts[i];
+	}
+	return os << ']';
+}
+template basic_ostream<char>& operator<<(basic_ostream<char>&, const std::vector<raw_term>&);
+template
+basic_ostream<wchar_t>& operator<<(basic_ostream<wchar_t>&, const std::vector<raw_term>&);
+
+template <typename T>
 basic_ostream<T>& print_raw_rule(basic_ostream<T>& os, const raw_rule& r,
 	size_t level)
 {

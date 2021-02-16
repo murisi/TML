@@ -159,6 +159,8 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 	
 	if(is_cq(rr1) && is_cq(rr2) &&
 			get_relation_info(rr1.h[0]) == get_relation_info(rr2.h[0])) {
+		o::dbg() << "CQC Testing if " << rr1 << " <= " << rr2 << std::endl;
+		
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
 		std::map<elem, elem> freeze_map;
@@ -166,6 +168,7 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 		
 		// Build up the queries necessary to check homomorphism.
 		std::set<raw_term> edb(frozen_rr1.b[0].begin(), frozen_rr1.b[0].end());
+		o::dbg() << "Canonical Database: " << edb << std::endl;
 		raw_prog nrp;
 		nrp.r.push_back(rr2);
 		
@@ -177,10 +180,12 @@ bool driver::cqc(const raw_rule &rr1, const raw_rule &rr2) {
 			if(res == frozen_rr1.h[0]) {
 				// If the frozen head is found, then there is a homomorphism
 				// between the two rules.
+				o::dbg() << "True: " << rr1 << " <= " << rr2 << std::endl;
 				return true;
 			}
 		}
 		// If no frozen head found, then there is no homomorphism.
+		o::dbg() << "False: " << rr1 << " <= " << rr2 << std::endl;
 		return false;
 	} else {
 		return false;
@@ -202,6 +207,8 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 	d.cl = old_dict.cl;
 	
 	if(is_cq(rr1) && is_cq(rr2)) {
+		o::dbg() << "Searching for homomorphisms from " << rr2.b[0]
+			<< " to " << rr1.b[0] << std::endl;
 		// Freeze the variables and symbols of the rule we are checking the
 		// containment of
 		// Map from variables occuring in rr1 to frozen symbols
@@ -230,6 +237,9 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 			rt.calc_arity(nullptr);
 			edb.insert(rt);
 		}
+		
+		o::dbg() << "Canonical Database: " << edb << std::endl;
+		
 		// Build up the query that proves the existence of a homomorphism
 		// Make a new head for rr2 that exports all the variables used in
 		// its body + ids of the frozen terms it binds to
@@ -279,6 +289,13 @@ bool driver::cbc(const raw_rule &rr1, raw_rule rr2,
 					}
 				}
 				homs.insert(std::make_pair(target_terms, var_map));
+				// Print the homomorphism found
+				o::dbg() << "Found homomorphism from " << rr2.b[0] << " to "
+					<< target_terms << " under mapping {";
+				for(auto &[k, v] : var_map) {
+					o::dbg() << k << " -> " << v << ", ";
+				}
+				o::dbg() << "}" << std::endl;
 			}
 		}
 		// If no results produced, then there is no homomorphism.
@@ -368,6 +385,8 @@ bool rule_smaller(const raw_rule &rr2, const raw_rule &rr1) {
 void driver::factor_rules(raw_prog &rp) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
+	
+	o::dbg() << "Factorizing rules ..." << std::endl;
 	
 	// Sort the rules so the biggest come first. Idea is that we want to
 	// reduce total substitutions by doing the biggest factorizations
@@ -472,6 +491,7 @@ void driver::factor_rules(raw_prog &rp) {
 	// during potential vector resizing.
 	for(const raw_rule &rr : pending_rules) {
 		rp.r.push_back(rr);
+		o::dbg() << "New Factor Created: " << rr << std::endl;
 	}
 }
 
@@ -591,7 +611,7 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 	if(!(is_cqn(rr1) && is_cqn(rr2) &&
 		get_relation_info(rr1.h[0]) == get_relation_info(rr2.h[0]))) return false;
 	
-	o::dbg() << "Testing if " << rr1 << " <= " << rr2 << std::endl;
+	o::dbg() << "CQNC Testing if " << rr1 << " <= " << rr2 << std::endl;
 	
 	// Get dictionary for generating fresh symbols
 	dict_t &old_dict = tbl->get_dict();

@@ -819,6 +819,10 @@ template <typename T>
 std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const production& p);
 std::basic_ostream<char>& operator<<(std::basic_ostream<char>& os, const lexeme& l);
 std::basic_ostream<wchar_t>& operator<<(std::basic_ostream<wchar_t>& os, const lexeme& l);
+template <typename T>
+std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const std::set<raw_term>& rts);
+template <typename T>
+std::basic_ostream<T>& operator<<(std::basic_ostream<T>& os, const std::vector<raw_term>& rts);
 
 template <typename T>
 std::basic_ostream<T>& print_raw_prog_tree(std::basic_ostream<T>& os,

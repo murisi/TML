@@ -234,82 +234,96 @@ See actual usage of `driver` in `src/main.cpp` and `src/repl.cpp`
 
 ## Quote
 
-The quote transformation takes a string representing a TML program and stores its syntax tree in a relation of the given name. The encoding of the tree into a relation is done as follows: each node in the tree is represented by a tuple in the quotation in the relation. The amount of information stored in each tuple varies depending on the node type, but the following information is always included: a node ID which is a symbol that uniquely identifies the encoded node, and a node type which is a symbol that must come from the set of supported node types. If a given tuple does not represent a leaf node in the syntax tree, then it may contain one or more IDs pointing to the tuples representing the child nodes.
+The quote transformation takes a string representing a TML program and the relation name of the domain over which it is defined and stores its syntax tree in relations under the given name. The encoding of the tree into a relation is done as follows: each node in the tree is represented by tuples in several quotation relations. The amount of information stored in each tuple varies depending on the node type, but the following information is always included: a node ID which is a symbol that uniquely identifies the encoded node, and a node type which is a symbol that must come from the set of supported node types. If a given tuple does not represent a leaf node in the syntax tree, then it may contain one or more IDs pointing to the tuples representing the child nodes.
 
 Suppose that a string representing a program written in a simplified subset of TML were quoted into a relation `q`. The following specification shows how `q` might be structured:
 ```
-q(VARS <id>)
-q(RULE <id> <head id> <body id>).
-q(TERM <id> <name>).
-q(TERM <id> <name> <param1 id>).
-q(TERM <id> <name> <param1 id> <param2 id>).
-q(TERM <id> <name> <param1 id> <param2 id> <param3 id>).
-q(TERM <id> <name> <param1 id> <param2 id> <param3 id> <param4 id>).
-q(EQUALS <id> <param1 name> <param2 name>).
-q(FORALL <id> <var name> <body id>).
-q(EXISTS <id> <var name> <body id>).
-q(NOT <id> <body id>).
-q(AND <id> <body1 id> <body2 id>).
-q(OR <id> <body1 id> <body2 id>).
-```
-As can be seen the node type is encoded in first position, the node ID in second position, and the remaining slots are filled with information specific to the type of node. It might not make sense to put certain node types in certain positions (i.e. a universal quantifier inside a term), so TML's grammer must be referred to in order to produce quotation relations that can be understood by other TML constructs like `eval`. Here we could have had a specific node type for symbols, but here it suffices to check whether a node is not a variable.
+q_type(<node ID> <node type>).
 
-Now we give a concrete usage of quote and show how the quote transformation transforms it. The following input:
+# <node type> = RULE
+q_rule_head(<node ID> <head ID>).
+q_rule_body(<node ID> <body ID>).
+
+# <node type> = TERM
+q_term_relation(<node ID> <term relation>).
+q_term_params(<node ID> <term parameter list>).
+q_term_param_types(<node ID> <term param type list>).
+
+# <node type> = AND
+q_and_left(<node ID> <left node ID>).
+q_and_right(<node ID> <right node ID>).
+
+# <node type> = ALT
+q_alt_left(<node ID> <left node ID>).
+q_alt_right(<node ID> <right node ID>).
+
+# <node type> = NOT
+q_not_body(<node ID> <body node ID>).
+
+# <node type> = FORALL
+q_forall_var(<node ID> <variable ID>).
+q_forall_body(<node ID> <body node ID>).
+
+# <node type> = EXISTS
+q_exists_var(<node ID> <variable ID>).
+q_exists_body(<node ID> <body node ID>).
+
+# <node type> = TRUE
 ```
-eval(a 2 q`
-  r(1 2).
-  r(2 3).
-  r(3 4).
-  t(?x ?y) :- r(?x ?y).`).
-```
-Gets transformed into:
-```
-eval(a 2 q).
-q(EQUALS 0f20 0 0).
-q(TERM 0f30 r 1 2).
-q(RULE 0f40 0f30 0f20).
-q(EQUALS 0f60 0 0).
-q(TERM 0f70 r 2 3).
-q(RULE 0f80 0f70 0f60).
-q(EQUALS 0f100 0 0).
-q(TERM 0f110 r 3 4).
-q(RULE 0f120 0f110 0f100).
-q(TERM 0f140 r 0f150 0f160).
-q(TERM 0f170 t 0f150 0f160).
-q(RULE 0f180 0f170 0f140).
-q(VARS 0f150).
-q(VARS 0f160).
-```
+As can be seen the node type is encoded by the `q_type` relation and the other relations are filled with information specific to the type of node. Note that despite being of fixed arity, quotations can support terms of arbitrary arity by using IDs pointing to lists of parameters and lists of parameter types. The mapping of IDs to specific lists is handled by the domain relation that the quotation is parameterized by. Also note that it might not make sense to put certain node types in certain positions (i.e. a universal quantifier inside a rule head), so TML's grammer must be referred to in order to produce quotation relations that can be understood by other TML constructs like `eval`.
 
 ## Eval
 
-The `eval` transformation takes a symbol referring to a (defined or undefined) relation containing a quotation and an interpreter size, and creates an interpreter in the relation of the given name. The interpreter derives the same tuples as would have been derived by the quoted rules it evaluates except that each tuple is prepended with a label specifying the name of the deriving quoted rule. That is, if the interpreter is housed in a relation `q` and it is interpreting a quoted rule `r` that would have derived `r(1 2 3)`, then the interpreter derives `q(r 1 2 3)`. The interpreter comprises two parts: one to execute parts of the syntax tree and another to writeback the results into the interpreter relation.
+The `eval` transformation takes a symbol referring to (defined or undefined) relations containing a quotation, a symbol referring to (defined or undefined) relations containing a domain, and a timeout specifying how many quoted program steps to simulate; and creates an interpreter in the relation of the given name. The interpreter derives the same tuples as would have been derived by the quoted rules it evaluates except that each tuple is now encoded and prepended with a label specifying the name of the deriving quoted rule. That is, if the interpreter is housed in a relation `q` and it is interpreting a quoted rule `r` that would have derived `r(1 2 3)`, then the interpreter derives `q(r <a numerical encoding representing (1 2 3)>)`. The interpreter comprises two parts: one to execute parts of the syntax tree and another to writeback the results into the interpreter relation.
 
-There is an executor for each type of node that can occur in the body of a rule. Its job is to derive a term containing the node ID of the current node if executing it yields `true`. Every executor has contains a term to capture the parts of the node type it matches; this might be a term name or conjunct IDs. Every executor also exports all the symbols/variables used by the current node and its descendents; this is necessary since any element could potentially be a variable that is referred to somewhere else in the syntax tree. If the node type is simply a term of a given arity, then the executor simply ensures that the interpreter relation has derived a term of the same name and arity. (Note the recursion as the executor is also being referred to by the interpreter rules.) If the node type is a compound like a conjunction, then the executor would instead use the executor relation to execute the child nodes and then use the corresponding host language operator (i.e. `&&`) to combine the results.
+There is an executor for each type of node that can occur in the body of a rule. Its job is to derive a term containing the node ID of the current node if executing it yields `true`. Every executor contains a term to capture the parts of the node type it matches; this might be a term name or conjunct IDs. Every executor also exports all the variables used by the current node and its descendents; this is necessary since any element could potentially be a variable that is referred to somewhere else in the syntax tree. If the node type is simply a term of a given arity, then the executor simply ensures that the interpreter relation has derived a term of the same name and arity. (Note the recursion as the executor is also being referred to by the interpreter rules.) If the node type is a compound like a conjunction, then the executor would instead use the executor relation to execute the child nodes and then use the corresponding host language operator (i.e. `&&`) to combine the results.
 
 Here is an executor for nodes of type `OR`:
 ```
-aux(?id ?a1 ?b1 ?a2 ?b2 ?a3 ?b3 ?a4 ?b4) :-
-  q(OR ?id ?e1 ?e2) &&
-  {aux(?e1 ?a2 ?b2 ?a3 ?b3 ?a4 ?b4 -1 -1) ||
-  aux(?e2 ?a1 ?b1 -1 -1 -1 -1 -1 -1)} &&
-  {fv(?a2 ?b2 ?a1 ?b1) && fv(?a3 ?b3 ?a1 ?b1) && fv(?a4 ?b4 ?a1 ?b1)}.
-```
-The second line is the capturing term described earlier. Note the `?id` term, it represents the ID of the node being interpreted. Note the `OR` in the capture term, it ensures that this rule only executes `OR` nodes. Since the result of an `OR` expression is determined by its child nodes, the executor calls itself on the IDs of its child nodes. The variables coming after the IDs in the subcalls are the exported elements that were described earlier; we need these exports in case, for example, the child nodes constrain a common variable. Note that the exports are done in pairs; this is because we need to export both the variable names (so that we know what values we need to constrain to be the same) and their values (so that we can actually simulate the computations that would happen were the node not quoted.) Note the `||` sign, this is because we are using the host interpreter's facilities to implement the guest interpreter's facilities. The `fv`'s and `fs`'s implement variable value constraints through modus ponens.
+scratch0(?ts ?id ?out) :-
+  quote_type(?id 8), # OR
+  quote_or_left(?id ?ql),
+  quote_or_right(?id ?qr),
+  scratch(?ts ?ql ?out),
+  tick().
 
-There is also a writeback for each rule arity and sign (i.e. insertion or deletion). Its job is to to call the executor on the rule's body node, select the elements required for the head and label them as described earlier. Every writeback rule contains a term to capture a rule and head nodes, from which it obtains the head name and the body term ID. All writeback rules also contain a term to call the executor on the body and capture the variables computed in the body's execution. And lastly, all writeback rules contain a group of terms to correctly fix the head variables to the variables exported from the execution of the body. To interpret a deletion rule, one could negate the head of the writeback rule and make the body only capture head nodes of type `NOT` instead of `NOT`.
-
-Here is an example of a writeback rule for nodes representing arity 1 rules:
+scratch0(?ts ?id ?out) :-
+  quote_type(?id 8), # OR
+  quote_or_left(?id ?ql),
+  quote_or_right(?id ?qr),
+  scratch(?ts ?qr ?out),
+  tick().
 ```
-r(?nm ?d1) :-
-  q(RULE ?id ?e0 ?e1) &&
-  q(TERM ?e0 ?nm ?c1) &&
-  aux(?e1 ?a1 ?b1 ?a2 ?b2 ?a3 ?b3 ?a4 ?b4) &&
-  fs(?c1 ?d1) &&
-  fv(?a1 ?b1 ?c1 ?d1) && ... && fv(?a4 ?b4 ?c1 ?d1).
+The second and ninth lines are the capturing term described earlier. Note the `?id` term, it represents the ID of the node being interpreted. Note the `8` in the capture term, it ensures that this rule only executes `OR` nodes. Since the result of an `OR` expression is determined by its child nodes, the executor calls itself on the IDs of its child nodes. The variables coming after the IDs in the subcalls are the exported elements that were described earlier; we need these exports in case, for example, the child nodes constrain a common variable. Note that we use two rules to interpret `OR`, this is because we are using the host interpreter's facilities to implement the guest interpreter's facilities.
+
+There is also a writeback for positive and negative rules. Its job is to to call the executor on the rule's body node, select the elements required for the head and label them as described earlier. Every writeback rule contains a term to capture a rule and head nodes, from which it obtains the head name and the body term ID. All writeback rules also contain a term to call the executor on the body and capture the variables computed in the body's execution. And lastly, writeback rules contain terms to correctly fix the head variables to the variables exported from the execution of the body. To interpret a deletion rule, one could negate the head of the writeback rule and make the body only capture head nodes of type `NOT` instead of `TERM`.
+
+Here is an example of a writeback rule for nodes representing arbitrary arity rules:
+```
+to_add(?ts ?name ?out) :-
+  quote_type(?id 1), # RULE
+  quote_rule_head(?id ?qh),
+  quote_rule_body(?id ?qb),
+  quote_type(?qh 2 /*TERM*/),
+  quote_term_relation(?qh ?name),
+  quote_term_params(?qh ?vars),
+  quote_term_param_types(?qh ?chks),
+  scratch(?ts ?qb ?vals),
+  select(?vars ?chks ?vars_s),
+  select(?out ?chks ?out_s),
+  gfix(?vals ?vars_s ?out_s),
+  deselect(?vars ?chks ?syms),
+  deselect(?out ?chks ?syms),
+  tick().
+
+databases(?nts ?name ?out) :-
+  ?ts + 1 = ?nts,
+  in_time(?ts),
+  to_add(?ts ?name ?out),
+  tock().
 ```
 
-An interpreter size of `N` ensures that the interpreter produced supports up to `N` distinct variables in quoted rule heads and up to `N` distinct variables in quoted rule bodies. This support is achieved by varying the number of variables exported by each executor rule. Without this variable propagation, the interpreter would be smaller but would not be able to correctly handle the same variable being used in different quoted terms of the same quoted rules. Applying an interpreter to rules exceeding the interpreter size will in general lead to correct results because the executors and the writeback rules will fail to capture and hence execute the quoted syntax nodes.
+An interpreter's term arities are limited only by the configuration of the domain that it is parameterized by. Applying an interpreter to a quotation defined on a different domain will in general lead to incorrect results because the executors and the writeback rules will extract incorrect heads and tails from the list IDs.
 
 ## Sequencing
 

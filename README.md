@@ -933,6 +933,95 @@ case that the original program used negation.
 
 This optimization can be enabled using the flag `--cqc-factor`.
 
+# Self Interpretation
+This section lists the directives provided to support
+self-interpretation, how to invoke them, and what they do at runtime.
+Note that anything that can be achieved using these directives can also
+be achieved without them in pure TML.
+
+## Domain
+The domain directive creates a domain over which a quoted program can
+be defined and executed. Conceptually it is necessary to allow quoted
+programs to manipulate terms of arbitrary arities without requiring
+changes/extensions to the quotation schema nor the quotation operator
+nor the evaluation operator. Concretely it is required to instantiate
+quotations, evaluators, and codecs.
+
+This directive has the following syntax:
+`@domain <domain_sym> <limit_num> <arity_num>.`. Here `<domain_sym>` is
+the prefix that all relations generated for the domain should have.
+`<limit_num>` is the tuple element domain size. And `<arity_num>` is the
+maximum length of the tuples generated for this domain.
+
+An example of usage:
+```
+@domain dom 7 3.
+```
+
+## Quote
+The quote directive takes a literal TML program and creates a relation
+that when correctly interpreted produces the same facts that would have
+been produced by the literal program. Conceptually it is required to
+enable TML programs to manipulate and inspect other TML programs.
+Concretely it is required to instantiate evaluators.
+
+This directive has the following syntax:
+`@quote <quote_sym> <domain_sym> <quote_str>.` Here `<quote_sym>` is the
+prefix that all relations generated for the quotation should have.
+`<domain_sym>` is the domain over which arbitrary length fragments (like
+terms) in the quotation are defined. (This setup allows us to encode
+arbitrary arity terms without modifications to the schema.)
+`<quote_str>` is a literal TML program surrounded in backquotes to quote.
+
+An example of usage:
+```
+@quote quote dom `
+  u(0).
+  d(0).
+  c() :- forall ?x {u(?x) -> d(?x)}.`.
+```
+## Eval
+The evaluate directive takes a relation containing a quotation and a
+relation containing a domain and creates a relation containing the facts
+that would have been derived by the original program that was quoted.
+Conceptually it is required to see what the program represented by a
+(potentially statically unknown) relation would produce at runtime.
+Concretely it is required to instantiate codecs.
+
+This directive has the following syntax:
+`@eval <eval_sym> <domain_sym> <quote_sym> <timeout_num>.` Here
+`<eval_sym>` is the prefix that all relations generated for the
+interpreter should have. `<domain_sym>` is the relation name of the
+domain representing the universe over which the quoted program should be
+interpreted. `<quote_sym>` is the relation containing the quoted program
+to run. `<timeout_num>` is the number of steps of the quoted program
+that should be simulated.
+
+An example of usage:
+```
+@eval out dom quote 50.
+```
+## Codec
+The codec directive takes a relation containing a domain, a relation
+containing an interpreter, and a maximum term arity; and produces a
+relation containing a decoding of the facts produced by the interpreter.
+Conceptually it is necessary because the evaluator's lack of dependence
+on specific arity maximums forces it to produce outputs that are encoded
+and hence are hard to debug/use.
+
+This directive has the following syntax:
+`@codec <codec_sym> <domain_sym> <eval_sym> <arity_num>.` Here
+`<codec_sym>` is the prefix that all relations generated or the codec
+should have. `<domain_sym>` is the relation name of the domain that will
+be used to decode the encoded outputs of an evaluator. `<eval_sym>` is
+the relation name of the evaluator whose outputs are being decoded.
+`<arity_num>` is the maximum arity of the terms being decoded.
+
+An example of usage:
+```
+@codec cdc dom out 3.
+```
+
 # Misc
 
 Comments are either C-style /* \*/ multiline comments, or # to comment till

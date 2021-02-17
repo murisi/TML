@@ -123,7 +123,7 @@ deselect(?in ?chks ?out) :-
 
 # Interpreter Tick
 
-~scratch(?ts ?id ?out), ~databases(?nts ?name ?out), ~fixpoint(?ts) :-
+~scratch(?ts ?id ?out), ~databases(?nts ?name ?out), ~fixpoint(?ts ?nts) :-
   tick().
 
 scratch0(?ts ?id ?out) :-
@@ -212,31 +212,35 @@ to_carry(?nts ?name ?out) :-
   databases(?nts ?name ?out),
   tick().
 
-# A given time-step cannot be a fixed point if between its corresponding
-# database and the next's corresponding databse, there is an entry that
-# is in one but not the other.
+# A given time-step pair cannot be a fixed point if between their
+# corresponding databases, there is an entry that is in one but not the
+# other.
 
-not_fixpoint(?ts) :-
-  ?ts + 1 = ?nts,
+not_fixpoint(?ts ?nts) :-
+  ?ts < ?nts,
+  in_time(?ts),
+  in_time(?nts),
   databases(?ts ?name ?out),
   ~databases(?nts ?name ?out),
   tick().
 
-not_fixpoint(?ts) :-
-  ?ts + 1 = ?nts,
+not_fixpoint(?ts ?nts) :-
+  ?ts < ?nts,
+  in_time(?ts),
+  in_time(?nts),
   ~databases(?ts ?name ?out),
   databases(?nts ?name ?out),
   tick().
 
 # Interpreter Tock
 
-~scratch0(?ts ?id ?out), ~to_add(?ts ?name ?out), ~to_del(?ts ?name ?out), ~to_carry(?nts ?name ?out), ~not_fixpoint(?ts) :-
+~scratch0(?ts ?id ?out), ~to_add(?ts ?name ?out), ~to_del(?ts ?name ?out), ~to_carry(?nts ?name ?out), ~not_fixpoint(?ts ?nts) :-
   tock().
 
 # Prevents more than the given number of database steps from being
-# derived.
+# derived. The addition of 1 to ?ts forces ?ts to be a number.
 
-in_time(?ts) :- 0 <= ?ts, ?ts < 100.
+in_time(?ts) :- 0 <= ?ts, ?ts < 43210, ?ts + 1 = ?tm.
 
 # Add all the derived insertions into the next database
 
@@ -269,11 +273,11 @@ scratch(?ts ?id ?out) :-
   scratch0(?ts ?id ?out),
   tock().
 
-# A timestep is a fixpoint if it is not not a fixpoint and its previous
-# step is.
+# A timestep is a fixpoint if it is not not a fixpoint.
 
-fixpoint(?ts) :-
-  ?pts + 1 = ?ts,
-  not_fixpoint(?pts),
-  ~not_fixpoint(?ts),
+fixpoint(?ts ?nts) :-
+  ?ts < ?nts,
+  in_time(?ts),
+  in_time(?nts),
+  ~not_fixpoint(?ts ?nts),
   tock().

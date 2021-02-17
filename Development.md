@@ -281,25 +281,6 @@ q(VARS 0f150).
 q(VARS 0f160).
 ```
 
-## This
-
-The `this` transformation happens just before the TML program optimizations begin. It is essentially a call to the quote transformation applied to the entire TML program with the output relation fixed to the name `this`. (Note that `this` will not contain a `this` relation if the TML program itself does not contain one.) If there are TML quotations or interpreters in the TML program, they too will be captured in the `this` relation. Though this means that a TML program can refer to and partially interpret itself, this mechanism is limited by `eval` 's preconditions.
-
-What follows is a TML program that checks itself for a conjunction:
-```
-has_a_conjunction :- this(AND ?x ?y ?z).
-```
-Gets transformed into:
-```
-has_a_conjunction() :- this(AND ?x ?y ?z).
-this(TERM 0f20 this AND 0f30 0f40 0f50).
-this(TERM 0f60 has_a_conjunction).
-this(RULE 0f70 0f60 0f20).
-this(VARS 0f30).
-this(VARS 0f40).
-this(VARS 0f50).
-```
-
 ## Eval
 
 The `eval` transformation takes a symbol referring to a (defined or undefined) relation containing a quotation and an interpreter size, and creates an interpreter in the relation of the given name. The interpreter derives the same tuples as would have been derived by the quoted rules it evaluates except that each tuple is prepended with a label specifying the name of the deriving quoted rule. That is, if the interpreter is housed in a relation `q` and it is interpreting a quoted rule `r` that would have derived `r(1 2 3)`, then the interpreter derives `q(r 1 2 3)`. The interpreter comprises two parts: one to execute parts of the syntax tree and another to writeback the results into the interpreter relation.

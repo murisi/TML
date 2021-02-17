@@ -112,8 +112,6 @@ class driver {
 	bool transform_quotes(raw_prog &rp, const directive &drt);
 	bool transform_domains(raw_prog &rp, const directive& drt);
 	bool transform_codecs(raw_prog &rp, const directive &drt);
-	void make_domain(raw_prog &rp, const elem &out_rel, std::set<elem> elts,
-		int_t max_size, int_t rest_id, int_t &curr_id);
 	void flatten_associative(const elem::etype &tp,
 		const sprawformtree &tree, std::vector<sprawformtree> &tms);
 	bool is_cq(const raw_rule &rr);

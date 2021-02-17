@@ -813,17 +813,6 @@ void driver::simplify_formulas(raw_prog &rp) {
 	}
 }
 
-void driver::make_domain(raw_prog &rp, const elem &out_rel,
-		std::set<elem> elts, int_t max_size, int_t rest_id, int_t &curr_id) {
-	if(max_size > 0) {
-		for(const elem &elt : elts) {
-			rp.r.push_back(raw_term({ out_rel, elem_openp, elem(curr_id++), elt,
-				elem(rest_id), elem_closep }));
-			make_domain(rp, out_rel, elts, max_size - 1, curr_id - 1, curr_id);
-		}
-	}
-}
-
 /* Make relations mapping list ID's to their heads and tails. Domain's
  * first argument is the relation into which it should put the domain it
  * creates, its second argument is the domain size of of its tuple

@@ -649,7 +649,6 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 				}
 			}
 			raw_rule subbed = freeze_rule(rr1, subs, d);
-			std::set<elem> symbol_set;
 			std::set<raw_term> canonical, canonical_negative;
 			// Separate the positive and negative subgoals. Note the symbols
 			// supplied to the subgoals.
@@ -660,15 +659,6 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 					rt.neg = true;
 				} else {
 					canonical.insert(rt);
-				}
-				for(size_t i = 2; i < rt.e.size() - 1; i++) {
-					symbol_set.insert(rt.e[i]);
-				}
-			}
-			// Note the symbols supplied to the head.
-			for(raw_term &rt : subbed.h) {
-				for(size_t i = 2; i < rt.e.size() - 1; i++) {
-					symbol_set.insert(rt.e[i]);
 				}
 			}
 			// Print the canonical database
@@ -691,18 +681,31 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 					rt.neg = true;
 				}
 			}
+			// Collect the symbols/literals from the freeze map
+			std::set<elem> symbol_set;
+			for(const auto &[elm, sym] : subs) {
+				symbol_set.insert(sym);
+			}
+			// Get all the relations used in both queries
+			std::set<rel_info> rels;
+			for(const raw_term &rt : rr1.b[0]) {
+				rels.insert(get_relation_info(rt));
+			}
+			for(const raw_term &rt : rr2.b[0]) {
+				rels.insert(get_relation_info(rt));
+			}
 			// Now we need to get the largest superset of our canonical
 			// database
 			std::set<raw_term> superset;
-			for(const raw_term &rt : rr2.b[0]) {
+			for(const rel_info &ri : rels) {
 				std::vector<elem> tuple;
-				product_iter(symbol_set, tuple, rt.e.size() - 3,
+				product_iter(symbol_set, tuple, std::get<1>(ri),
 					[&](const std::vector<elem> tuple) -> bool {
-						std::vector<elem> nterm_e = { rt.e[0], rt.e[1] };
+						std::vector<elem> nterm_e = { std::get<0>(ri), elem_openp };
 						for(const elem &e : tuple) {
 							nterm_e.push_back(e);
 						}
-						nterm_e.push_back(rt.e[rt.e.size() - 1]);
+						nterm_e.push_back(elem_closep);
 						raw_term nterm(nterm_e);
 						superset.insert(nterm);
 						return true;
@@ -954,16 +957,12 @@ bool driver::transform_domains(raw_prog &rp, const directive& drt) {
 
 elem driver::quote_elem(const elem &e, std::map<elem, elem> &variables,
 		dict_t &d) {
-	if(e.type == elem::VAR) {
-		if(variables.find(e) != variables.end()) {
-			return variables[e];
-		} else {
-			// Since the current variable lacks a designated substitute,
-			// make one and record the mapping.
-			return variables[e] = elem::fresh_sym(d);
-		}
+	if(variables.find(e) != variables.end()) {
+		return variables[e];
 	} else {
-		return e;
+		// Since the current variable lacks a designated substitute,
+		// make one and record the mapping.
+		return variables[e] = (e.type == elem::VAR ? elem::fresh_sym(d) : e);
 	}
 }
 
@@ -973,16 +972,12 @@ elem driver::quote_elem(const elem &e, std::map<elem, elem> &variables,
 
 elem driver::numeric_quote_elem(const elem &e,
 		std::map<elem, elem> &variables) {
-	if(e.type == elem::VAR) {
-		if(variables.find(e) != variables.end()) {
-			return variables[e];
-		} else {
-			// Since the current variable lacks a designated substitute,
-			// make one and record the mapping.
-			return variables[e] = elem(int_t(variables.size()));
-		}
+	if(variables.find(e) != variables.end()) {
+		return variables[e];
 	} else {
-		return e;
+		// Since the current variable lacks a designated substitute,
+		// make one and record the mapping.
+		return variables[e] = (e.type == elem::VAR ? elem(int_t(variables.size())) : e);
 	}
 }
 
@@ -992,14 +987,18 @@ elem driver::numeric_quote_elem(const elem &e,
 raw_rule driver::freeze_rule(raw_rule rr,
 		std::map<elem, elem> &freeze_map, dict_t &d) {
 	for(raw_term &tm : rr.h) {
-		for(elem &el : tm.e) {
-			el = quote_elem(el, freeze_map, d);
+		if(tm.extype == raw_term::REL) {
+			for(int_t i = 2; i < tm.e.size() - 1; i++) {
+				tm.e[i] = quote_elem(tm.e[i], freeze_map, d);
+			}
 		}
 	}
 	for(std::vector<raw_term> &bodie : rr.b) {
 		for(raw_term &tm : bodie) {
-			for(elem &el : tm.e) {
-				el = quote_elem(el, freeze_map, d);
+			if(tm.extype == raw_term::REL) {
+				for(int_t i = 2; i < tm.e.size() - 1; i++) {
+					tm.e[i] = quote_elem(tm.e[i], freeze_map, d);
+				}
 			}
 		}
 	}

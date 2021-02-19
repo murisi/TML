@@ -512,7 +512,7 @@ basic_ostream<wchar_t>& operator<<(basic_ostream<wchar_t>&, const std::set<raw_t
 template <typename T>
 basic_ostream<T>& operator<<(basic_ostream<T>& os, const std::vector<raw_term>& rts) {
 	os << '[';
-	for(int_t i = 0; i < rts.size(); i++) {
+	for(size_t i = 0; i < rts.size(); i++) {
 		if(i != 0) {
 			os << ", ";
 		}

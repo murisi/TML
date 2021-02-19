@@ -2933,7 +2933,7 @@ bool tables::run_prog(const std::set<raw_term> &edb, raw_prog rp,
 	std::map<elem, elem> freeze_map, unfreeze_map;
 	// Create a duplicate of each rule in the given program under a
 	// generated alias.
-	for(int_t i = ssize(rp.r) - 1; i >= 0; i--) {
+	for(int_t i = rp.r.size() - 1; i >= 0; i--) {
 		for(raw_term &rt : rp.r[i].h) {
 			raw_term rt2 = rt;
 			auto it = freeze_map.find(rt.e[0]);

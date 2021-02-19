@@ -65,16 +65,9 @@ typedef size_t nlevel;
 #define elem_openp elem(elem::OPENP, get_lexeme("("))
 #define elem_closep elem(elem::CLOSEP, get_lexeme(")"))
 #define elem_eq elem(elem::EQ, get_lexeme("="))
-#define ttrue raw_term(raw_term::EQ, {elem(0), elem_eq, elem(0)})
-#define tfalse raw_term(raw_term::EQ, {elem(0), elem_eq, elem(1)})
 #define htrue bdd_handle::T
 #define hfalse bdd_handle::F
 template<typename T> T sort(const T& x){T t=x;return sort(t.begin(),t.end()),t;}
-template <class C> constexpr auto ssize(const C& c) ->
-		std::common_type_t<std::ptrdiff_t, std::make_signed_t<decltype(c.size())>> {
-	using R = std::common_type_t<std::ptrdiff_t, std::make_signed_t<decltype(c.size())>>;
-	return static_cast<R>(c.size());
-}
 template<template<class, class, class ...> class M, typename K, typename V, typename ... Args>
 		V at_default(const M<K, V, Args ...> &m, const K &k, const V &d) {
 	auto it = m.find(k);

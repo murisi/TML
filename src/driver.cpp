@@ -995,7 +995,7 @@ raw_rule driver::freeze_rule(raw_rule rr,
 		std::map<elem, elem> &freeze_map, dict_t &d) {
 	for(raw_term &tm : rr.h) {
 		if(tm.extype == raw_term::REL) {
-			for(int_t i = 2; i < tm.e.size() - 1; i++) {
+			for(size_t i = 2; i < tm.e.size() - 1; i++) {
 				tm.e[i] = quote_elem(tm.e[i], freeze_map, d);
 			}
 		}
@@ -1003,7 +1003,7 @@ raw_rule driver::freeze_rule(raw_rule rr,
 	for(std::vector<raw_term> &bodie : rr.b) {
 		for(raw_term &tm : bodie) {
 			if(tm.extype == raw_term::REL) {
-				for(int_t i = 2; i < tm.e.size() - 1; i++) {
+				for(size_t i = 2; i < tm.e.size() - 1; i++) {
 					tm.e[i] = quote_elem(tm.e[i], freeze_map, d);
 				}
 			}
@@ -1029,7 +1029,7 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
 		elem elems_id = elem::fresh_var(d), tags_id = elem::fresh_var(d),
 			elems_hid = elems_id, tags_hid = tags_id;
 		std::vector<raw_term> params_body, param_types_body;
-		for(int_t param_idx = 2; param_idx < ssize(head.e) - 1; param_idx ++) {
+		for(size_t param_idx = 2; param_idx < head.e.size() - 1; param_idx ++) {
 			elem next_elems_id = elem::fresh_var(d),
 				next_tags_id = elem::fresh_var(d);
 			params_body.push_back(raw_term({concat(domain_name, "_fst"), elem_openp,
@@ -1246,7 +1246,7 @@ std::vector<elem> driver::quote_rule(const raw_rule &rr,
 	std::vector<elem> rule_ids;
 	const elem body_id = quote_formula(rr.get_prft(), rel_name, domain_name,
 		rp, variables, part_count);
-	for(int_t gidx = 0; gidx < ssize(rr.h); gidx++) {
+	for(size_t gidx = 0; gidx < rr.h.size(); gidx++) {
 		const elem head_id = quote_term(rr.h[gidx], rel_name, domain_name, rp,
 			variables, part_count);
 		const elem rule_id = elem(part_count++);
@@ -1267,7 +1267,7 @@ std::vector<elem> driver::quote_rule(const raw_rule &rr,
 void driver::quote_prog(const raw_prog nrp, const elem &rel_name,
 		const elem &domain_name, raw_prog &rp) {
 	int_t part_count = 0;
-	for(int_t ridx = 0; ridx < ssize(nrp.r); ridx++) {
+	for(size_t ridx = 0; ridx < nrp.r.size(); ridx++) {
 		quote_rule(nrp.r[ridx], rel_name, domain_name, rp, part_count);
 	}
 }
@@ -2464,7 +2464,7 @@ void driver::binary_transform(raw_prog &rp) {
 	// containing more than 2 conjuncts into 2. Note that the program size
 	// may increase during this loop as we add ever shorter rules to the
 	// back.
-	for(int_t i = 0; i < rp.r.size(); i++) {
+	for(size_t i = 0; i < rp.r.size(); i++) {
 		// Only tamper with bodies containing more than 2 conjuncts
 		if(rp.r[i].b.size() == 1 && rp.r[i].b[0].size() == 3) {
 			std::vector<raw_term> bodie = rp.r[i].b[0];
@@ -3180,7 +3180,7 @@ bool driver::transform_grammar(raw_prog &rp) {
 	if(tbl->transform_grammar(rp.g, p, tmp_form)) {
 		for(const std::vector<term> &rul : p) {
 			std::vector<raw_term> bodie;
-			for(int_t i = 1; i < rul.size(); i++) {
+			for(size_t i = 1; i < rul.size(); i++) {
 				bodie.push_back(tbl->to_raw_term(rul[i]));
 			}
 			rp.r.push_back(raw_rule(tbl->to_raw_term(rul[0]), bodie));

@@ -2823,7 +2823,9 @@ char tables::fwd() noexcept {
 /* Add a complete and partial level to the given vectors. A complete
  * level contains all the tables whereas a partial level excludes all
  * the tmprels. Return true if the current complete level has already
- * been encountered. */
+ * been encountered. Complete levels are important because computational
+ * progress is not always reflected in the partial levels, and hence
+ * fixpoints would be prematurely detected. */
 
 bool tables::add_level(std::vector<level> &clevels,
 		std::vector<level> &plevels) const {
@@ -2894,7 +2896,7 @@ bool tables::pfp(size_t nsteps, size_t break_on_step) {
 			// the partial levels are constant.
 			for(int_t i = levels.size() - 2; levels[i] != last_level; i--) {
 				if(plevels[i] != last_plevel) {
-					return true || infloop_detected();
+					return infloop_detected();
 				}
 			}
 			return true;

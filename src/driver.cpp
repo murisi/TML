@@ -1226,6 +1226,8 @@ elem driver::concat(const elem &rel, std::string suffix) {
 	dict_t &d = tbl->get_dict();
 	// Make lexeme from concatenating rel's lexeme with the given suffix
 	lexeme subrel_lex = d.get_lexeme(lexeme2str(rel.e) + to_string_t(suffix));
+	// Make this lexeme a tmprel so that its excluded from fixpoint check
+	d.get_temp_sym(subrel_lex);
 	return elem(elem::SYM, subrel_lex);
 }
 
@@ -1236,7 +1238,10 @@ lexeme driver::concat(const lexeme &rel, std::string suffix) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	// Make lexeme from concatenating rel's lexeme with the given suffix
-	return d.get_lexeme(lexeme2str(rel) + to_string_t(suffix));
+	lexeme subrel_lex = d.get_lexeme(lexeme2str(rel) + to_string_t(suffix));
+	// Make this lexeme a tmprel so that its excluded from fixpoint check
+	d.get_temp_sym(subrel_lex);
+	return subrel_lex;
 }
 
 /* Quote the given rule and put its quotation into the given raw_prog

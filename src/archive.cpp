@@ -863,8 +863,6 @@ size_t archive::size(const table& t) {
 archive& archive::operator<<(const tables& tbls) {
 	//POS("tables rules")
 	*this << tbls.rules;
-	//POS("tables fronts")
-	*this << tbls.fronts;
 	//POS("tables levels")
 	*this << tbls.levels;
 	//POS("tables nstep")
@@ -906,8 +904,6 @@ archive& archive::operator>>(tables& tbls) {
 	size_t nsize;
 	//POS("tables rules")
 	*this >> tbls.rules;
-	//POS("tables fronts")
-	*this >> tbls.fronts;
 	//POS("tables levels")
 	*this >> tbls.levels;
 	//POS("tables nstep")
@@ -949,8 +945,6 @@ size_t archive::size(const tables& t) {
 	size_t s = 0;
 	//SPOS("tables rules", t.rules)
 	s += size(t.rules);
-	//SPOS("tables fronts", t.fronts)
-	s += size(t.fronts);
 	//SPOS("tables levels", t.levels)
 	s += size(t.levels);
 	//SPOS("tables nstep", t.nstep)

@@ -604,7 +604,7 @@ struct raw_rule {
 	// prft != nullptr, otherwise it signifies that this rule is a fact.
 	std::vector<std::vector<raw_term>> b;
 	// Contains a tree representing the logical formula.
-	mutable sprawformtree prft = nullptr;
+	sprawformtree prft = nullptr;
 
 	enum etype { NONE, GOAL, TREE };
 	etype type = NONE;
@@ -753,37 +753,6 @@ struct raw_progs {
 	raw_prog p;
 	raw_progs();
 	bool parse(input* in, dict_t& dict);
-};
-
-struct lexeme_hash {
-	std::size_t operator()(lexeme const& s) const noexcept {
-		std::size_t h = 0;
-		for(ccs i = s[0]; i < s[1]; i++) {
-			h = (h << 1) ^ (*i);
-		}
-		return h;
-	}
-};
-
-struct elem_hash {
-	std::size_t operator()(elem const& s) const noexcept {
-		if (s.type == elem::NUM) return s.num;
-		if (s.type == elem::CHR) return s.ch;
-		return lexeme_hash{}(s.e);
-	}
-};
-
-struct raw_term_hash {
-	std::size_t operator()(raw_term const& s) const noexcept {
-		std::size_t h = s.neg ^ (s.extype << 1);
-		for(const int_t &v : s.arity) {
-			h = (h << 1) ^ v;
-		}
-		for(const elem &e : s.e) {
-			h = (h << 1) ^ elem_hash{}(e);
-		}
-		return h;
-	}
 };
 
 bool throw_runtime_error(std::string err, std::string details = "");

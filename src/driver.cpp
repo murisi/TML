@@ -118,6 +118,8 @@ bool driver::is_cq(const raw_rule &rr) {
 	if(rr.h.size() != 1 || rr.b.size() != 1) return false;
 	// Ensure that head is positive
 	if(rr.h[0].neg) return false;
+	// Ensure that this rule is a proper rule
+	if(!rr.is_rule()) return false;
 	// Ensure that each body term is positive and is a relation
 	for(const raw_term &rt : rr.b[0]) {
 		if(rt.neg || rt.extype != raw_term::REL) return false;
@@ -132,6 +134,8 @@ bool driver::is_cqn(const raw_rule &rr) {
 	if(rr.h.size() != 1 || rr.b.size() != 1) return false;
 	// Ensure that head is positive
 	if(rr.h[0].neg) return false;
+	// Ensure that this rule is a proper rule
+	if(!rr.is_rule()) return false;
 	// Ensure that each body term is a relation
 	for(const raw_term &rt : rr.b[0]) {
 		if(rt.extype != raw_term::REL) return false;
@@ -816,7 +820,7 @@ template<typename F>
 
 void driver::simplify_formulas(raw_prog &rp) {
 	for(raw_rule &rr : rp.r) {
-		if(!rr.is_b()) {
+		if(rr.is_form()) {
 			sprawformtree prft = rr.get_prft();
 			rr.set_prft(raw_form_tree::simplify(prft));
 		}
@@ -2528,24 +2532,30 @@ void driver::step_transform(raw_prog &rp,
 	// Separate the internal rules used to execute the parts of the
 	// transformation from the external rules used to expose the results
 	// of computation.
-	std::vector<raw_rule> int_prog;
+	std::vector<raw_rule> int_prog, fact_prog;
 	// Create a duplicate of each rule in the given program under a
 	// generated alias.
 	for(raw_rule rr : rp.r) {
-		for(raw_term &rt : rr.h) {
-			raw_term rt2 = rt;
-			auto it = freeze_map.find(rt.e[0]);
-			if(it != freeze_map.end()) {
-				rt.e[0] = it->second;
-			} else {
-				elem frozen_elem = elem::fresh_temp_sym(d);
-				// Store the mapping so that the derived portion of each
-				// relation is stored in exactly one place
-				unfreeze_map[frozen_elem] = rt.e[0];
-				rt.e[0] = freeze_map[rt.e[0]] = frozen_elem;
+		if(rr.is_fact()) {
+			// Separate out program facts as they need to be in database by
+			// 0th step
+			fact_prog.push_back(rr);
+		} else {
+			for(raw_term &rt : rr.h) {
+				raw_term rt2 = rt;
+				auto it = freeze_map.find(rt.e[0]);
+				if(it != freeze_map.end()) {
+					rt.e[0] = it->second;
+				} else {
+					elem frozen_elem = elem::fresh_temp_sym(d);
+					// Store the mapping so that the derived portion of each
+					// relation is stored in exactly one place
+					unfreeze_map[frozen_elem] = rt.e[0];
+					rt.e[0] = freeze_map[rt.e[0]] = frozen_elem;
+				}
 			}
+			int_prog.push_back(rr);
 		}
-		int_prog.push_back(rr);
 	}
 	// Apply the modifications from the above loop
 	rp.r = int_prog;
@@ -2684,6 +2694,10 @@ void driver::step_transform(raw_prog &rp,
 				}
 			}
 		}
+	}
+	// Add all program facts back
+	for(raw_rule &rr : fact_prog) {
+		rp.r.push_back(rr);
 	}
 }
 
@@ -2836,7 +2850,7 @@ void driver::to_pure_tml(raw_prog &rp) {
 	// Convert all FOL formulas to P-DATALOG
 	for(int_t i = rp.r.size() - 1; i >= 0; i--) {
 		raw_rule rr = rp.r[i];
-		if(!rr.is_b()) {
+		if(rr.is_form()) {
 			std::set<elem> nv;
 			for(const raw_term &rt : rr.h) {
 				collect_vars(rt, nv);
@@ -2888,10 +2902,10 @@ void driver::collect_free_vars(const raw_rule &rr,
 	for(const raw_term &rt : rr.h) {
 		collect_free_vars(rt, bound_vars, free_vars);
 	}
-	if(rr.is_b()) {
-		collect_free_vars(rr.b, bound_vars, free_vars);
-	} else {
+	if(rr.is_form()) {
 		collect_free_vars(rr.get_prft(), bound_vars, free_vars);
+	} else {
+		collect_free_vars(rr.b, bound_vars, free_vars);
 	}
 }
 
@@ -3138,10 +3152,10 @@ string_t driver::generate_cpp(const raw_rule &rr, string_t &prog_constr,
 		prog_constr += tn + to_string_t(", ");
 	}
 	prog_constr += to_string_t("}, ");
-	if(!(rr.is_b() && rr.b.empty())) {
-		prog_constr += prft_name;
-	} else {
+	if(rr.is_fact()) {
 		prog_constr += to_string_t("std::vector<raw_term> {}");
+	} else {
+		prog_constr += prft_name;
 	}
 	prog_constr += to_string_t(");\n");
 	return rule_name;

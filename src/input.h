@@ -635,20 +635,18 @@ struct raw_rule {
 		b = _b;
 		prft = nullptr;
 	}
-	// If prft not set, convert b to prft, then return prft
-	sprawformtree get_prft() const;
-	// Return true iff b not empty or prft represents true or prft is null
-	bool is_b() const;
-	// Returns b in an option type predicated on is_b
-	std::optional<std::vector<std::vector<raw_term>>> get_b() {
-		return is_b() ? std::optional<std::vector<std::vector<raw_term>>>(b) : std::nullopt;
-	}
 	void update_states(std::array<bool, 8>& has) {
 		if (is_form() || is_rule()) has[RULE] = true;
 		else for (auto hi : h) has[hi.neg ? DELS : ADDS] = true;
 	}
-	inline bool is_rule() { return type == NONE && b.size() > 0; }
-	inline bool is_form() { return prft.get(); }
+	inline bool is_rule() const
+		{ return type == NONE && b.size() > 0 && prft.get() == nullptr; }
+	inline bool is_form() const
+		{ return prft.get() != nullptr && b.size() == 0; }
+	inline bool is_fact() const
+		{ return type == NONE && b.size() == 0 && prft.get() == nullptr; }
+	// If prft not set, convert b to prft, then return prft
+	sprawformtree get_prft() const;
 	static raw_rule getdel(const raw_term& t) {
 		raw_rule r(t, t);
 		return r.h[0].neg = true, r;

@@ -685,6 +685,13 @@ bool driver::cqnc(const raw_rule &rr1, const raw_rule &rr2) {
 			std::set<elem> symbol_set;
 			for(const auto &[elm, sym] : subs) {
 				symbol_set.insert(sym);
+				// Finer control over elements in the universe is required to
+				// make this algorithm work with unsafe negations. In
+				// particular, we need need to control over which characters and
+				// numbers are in the domain.
+				if(sym.type == elem::SYM) {
+					d.get_sym(sym.e);
+				}
 			}
 			// Get all the relations used in both queries
 			std::set<rel_info> rels;

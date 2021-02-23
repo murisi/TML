@@ -242,6 +242,20 @@ not_fixpoint(?ts ?nts) :-
 
 in_time(?ts) :- 0 <= ?ts, ?ts < 43210, ?ts + 1 = ?tm.
 
+# Add all the facts into the zeroth database
+
+databases(0 ?name ?out) :-
+  quote_type(?id 0), # FACT
+  quote_fact_term(?id ?qt),
+  quote_type(?qt 2 /*TERM*/),
+  quote_term_relation(?qt ?name),
+  quote_term_params(?qt ?vars),
+  quote_term_param_types(?qt ?chks),
+  list(?out),
+  deselect(?vars ?chks ?syms),
+  deselect(?out ?chks ?syms),
+  tock().
+
 # Add all the derived insertions into the next database
 
 databases(?nts ?name ?out) :-

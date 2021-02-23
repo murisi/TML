@@ -1026,10 +1026,7 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	elem term_id(part_count++);
-	if(head.extype == raw_term::REL && head.is_true()) {
-		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"), elem_openp,
-			term_id, elem(QTRUE), elem_closep })));
-	} else if(head.extype == raw_term::REL) {
+	if(head.extype == raw_term::REL) {
 		elem elems_id = elem::fresh_var(d), tags_id = elem::fresh_var(d),
 			elems_hid = elems_id, tags_hid = tags_id;
 		std::vector<raw_term> params_body, param_types_body;
@@ -1110,7 +1107,8 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
  * For <node type> = EXISTS
  * 	<quote>_exists_var(<node ID> <variable ID>).
  * 	<quote>_exists_body(<node ID> <body node ID>).
- * For <node type> = TRUE
+ * For <node type> = FACT
+ *  <quote>_fact_term(<node ID> <term ID>).
  */
 
 elem driver::quote_formula(const sprawformtree &t, const elem &rel_name,
@@ -1253,19 +1251,36 @@ std::vector<elem> driver::quote_rule(const raw_rule &rr,
 	// Maintain a list of the variable substitutions:
 	std::map<elem, elem> variables;
 	std::vector<elem> rule_ids;
-	const elem body_id = quote_formula(rr.get_prft(), rel_name, domain_name,
-		rp, variables, part_count);
-	for(size_t gidx = 0; gidx < rr.h.size(); gidx++) {
-		const elem head_id = quote_term(rr.h[gidx], rel_name, domain_name, rp,
-			variables, part_count);
-		const elem rule_id = elem(part_count++);
-		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"), elem_openp,
-			rule_id, elem(QRULE), elem_closep })));
-		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_rule_head"), elem_openp,
-			rule_id, head_id, elem_closep })));
-		rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_rule_body"), elem_openp,
-			rule_id, body_id, elem_closep })));
-		rule_ids.push_back(rule_id);
+	
+	// Facts and rules have different representations in quotations. This
+	// is because they are interpreted differently: facts are placed in
+	// the 0th database whilst rules are fired on each iteration.
+	if(rr.is_fact()) {
+		for(size_t gidx = 0; gidx < rr.h.size(); gidx++) {
+			const elem term_id = quote_term(rr.h[gidx], rel_name, domain_name, rp,
+				variables, part_count);
+			const elem rule_id = elem(part_count++);
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"), elem_openp,
+				rule_id, elem(QFACT), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_fact_term"), elem_openp,
+				rule_id, term_id, elem_closep })));
+			rule_ids.push_back(rule_id);
+		}
+	} else {
+		const elem body_id = quote_formula(rr.get_prft(), rel_name, domain_name,
+			rp, variables, part_count);
+		for(size_t gidx = 0; gidx < rr.h.size(); gidx++) {
+			const elem head_id = quote_term(rr.h[gidx], rel_name, domain_name, rp,
+				variables, part_count);
+			const elem rule_id = elem(part_count++);
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_type"), elem_openp,
+				rule_id, elem(QRULE), elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_rule_head"), elem_openp,
+				rule_id, head_id, elem_closep })));
+			rp.r.push_back(raw_rule(raw_term({concat(rel_name, "_rule_body"), elem_openp,
+				rule_id, body_id, elem_closep })));
+			rule_ids.push_back(rule_id);
+		}
 	}
 	return rule_ids;
 }
@@ -2292,101 +2307,145 @@ bool driver::transform_evals(raw_prog &rp, const directive &drt) {
 		sprawformtree ft587 = std::make_shared<raw_form_tree>(elem::NONE, rt589);
 		sprawformtree ft578 = std::make_shared<raw_form_tree>(elem::AND, ft579, ft587);
 		raw_rule rr590({rt577, }, ft578);
-		raw_term rt591(raw_term::REL, t_arith_op::NOP, {e271, e1, e272, e273, e44, e2, });
+		raw_term rt591(raw_term::REL, t_arith_op::NOP, {e271, e1, e55, e273, e44, e2, });
 		rt591.neg = false;
-		raw_term rt596(raw_term::ARITH, t_arith_op::ADD, {e268, e59, e60, e61, e272, });
-		rt596.neg = false;
-		sprawformtree ft595 = std::make_shared<raw_form_tree>(elem::NONE, rt596);
-		raw_term rt598(raw_term::REL, t_arith_op::NOP, {e536, e1, e268, e2, });
-		rt598.neg = false;
-		sprawformtree ft597 = std::make_shared<raw_form_tree>(elem::NONE, rt598);
-		sprawformtree ft594 = std::make_shared<raw_form_tree>(elem::AND, ft595, ft597);
-		raw_term rt600(raw_term::REL, t_arith_op::NOP, {e417, e1, e268, e273, e44, e2, });
-		rt600.neg = false;
-		sprawformtree ft599 = std::make_shared<raw_form_tree>(elem::NONE, rt600);
-		sprawformtree ft593 = std::make_shared<raw_form_tree>(elem::AND, ft594, ft599);
-		raw_term rt602(raw_term::REL, t_arith_op::NOP, {e10, e1, e2, });
+		raw_term rt602(raw_term::REL, t_arith_op::NOP, {e285, e1, e269, e55, e2, });
 		rt602.neg = false;
 		sprawformtree ft601 = std::make_shared<raw_form_tree>(elem::NONE, rt602);
-		sprawformtree ft592 = std::make_shared<raw_form_tree>(elem::AND, ft593, ft601);
-		raw_rule rr603({rt591, }, ft592);
-		raw_term rt604(raw_term::REL, t_arith_op::NOP, {e271, e1, e272, e273, e44, e2, });
-		rt604.neg = false;
-		raw_term rt610(raw_term::ARITH, t_arith_op::ADD, {e268, e59, e60, e61, e272, });
+		elem e604(elem::SYM, t_arith_op::NOP, concat(quote_sym.e, "_fact_term"));
+		elem e605(elem::VAR, t_arith_op::NOP, d.get_lexeme("?qt"));
+		raw_term rt606(raw_term::REL, t_arith_op::NOP, {e604, e1, e269, e605, e2, });
+		rt606.neg = false;
+		sprawformtree ft603 = std::make_shared<raw_form_tree>(elem::NONE, rt606);
+		sprawformtree ft600 = std::make_shared<raw_form_tree>(elem::AND, ft601, ft603);
+		raw_term rt608(raw_term::REL, t_arith_op::NOP, {e285, e1, e605, e385, e2, });
+		rt608.neg = false;
+		sprawformtree ft607 = std::make_shared<raw_form_tree>(elem::NONE, rt608);
+		sprawformtree ft599 = std::make_shared<raw_form_tree>(elem::AND, ft600, ft607);
+		raw_term rt610(raw_term::REL, t_arith_op::NOP, {e388, e1, e605, e273, e2, });
 		rt610.neg = false;
 		sprawformtree ft609 = std::make_shared<raw_form_tree>(elem::NONE, rt610);
-		raw_term rt612(raw_term::REL, t_arith_op::NOP, {e536, e1, e268, e2, });
+		sprawformtree ft598 = std::make_shared<raw_form_tree>(elem::AND, ft599, ft609);
+		raw_term rt612(raw_term::REL, t_arith_op::NOP, {e391, e1, e605, e392, e2, });
 		rt612.neg = false;
 		sprawformtree ft611 = std::make_shared<raw_form_tree>(elem::NONE, rt612);
-		sprawformtree ft608 = std::make_shared<raw_form_tree>(elem::AND, ft609, ft611);
-		raw_term rt615(raw_term::REL, t_arith_op::NOP, {e465, e1, e268, e273, e44, e2, });
-		rt615.neg = false;
-		sprawformtree ft614 = std::make_shared<raw_form_tree>(elem::NONE, rt615);
-		sprawformtree ft613 = std::make_shared<raw_form_tree>(elem::NOT, ft614);
-		sprawformtree ft607 = std::make_shared<raw_form_tree>(elem::AND, ft608, ft613);
-		raw_term rt617(raw_term::REL, t_arith_op::NOP, {e516, e1, e268, e273, e44, e2, });
-		rt617.neg = false;
-		sprawformtree ft616 = std::make_shared<raw_form_tree>(elem::NONE, rt617);
-		sprawformtree ft606 = std::make_shared<raw_form_tree>(elem::AND, ft607, ft616);
-		raw_term rt619(raw_term::REL, t_arith_op::NOP, {e10, e1, e2, });
-		rt619.neg = false;
-		sprawformtree ft618 = std::make_shared<raw_form_tree>(elem::NONE, rt619);
-		sprawformtree ft605 = std::make_shared<raw_form_tree>(elem::AND, ft606, ft618);
-		raw_rule rr620({rt604, }, ft605);
-		raw_term rt621(raw_term::REL, t_arith_op::NOP, {e271, e1, e272, e273, e44, e2, });
-		rt621.neg = true;
-		raw_term rt626(raw_term::ARITH, t_arith_op::ADD, {e268, e59, e60, e61, e272, });
-		rt626.neg = false;
-		sprawformtree ft625 = std::make_shared<raw_form_tree>(elem::NONE, rt626);
-		raw_term rt628(raw_term::REL, t_arith_op::NOP, {e536, e1, e268, e2, });
-		rt628.neg = false;
-		sprawformtree ft627 = std::make_shared<raw_form_tree>(elem::NONE, rt628);
-		sprawformtree ft624 = std::make_shared<raw_form_tree>(elem::AND, ft625, ft627);
-		raw_term rt630(raw_term::REL, t_arith_op::NOP, {e465, e1, e268, e273, e44, e2, });
-		rt630.neg = false;
-		sprawformtree ft629 = std::make_shared<raw_form_tree>(elem::NONE, rt630);
-		sprawformtree ft623 = std::make_shared<raw_form_tree>(elem::AND, ft624, ft629);
-		raw_term rt632(raw_term::REL, t_arith_op::NOP, {e10, e1, e2, });
-		rt632.neg = false;
-		sprawformtree ft631 = std::make_shared<raw_form_tree>(elem::NONE, rt632);
-		sprawformtree ft622 = std::make_shared<raw_form_tree>(elem::AND, ft623, ft631);
-		raw_rule rr633({rt621, }, ft622);
-		raw_term rt634(raw_term::REL, t_arith_op::NOP, {e267, e1, e268, e269, e44, e2, });
-		rt634.neg = false;
-		raw_term rt637(raw_term::REL, t_arith_op::NOP, {e280, e1, e268, e269, e44, e2, });
+		sprawformtree ft597 = std::make_shared<raw_form_tree>(elem::AND, ft598, ft611);
+		raw_term rt614(raw_term::REL, t_arith_op::NOP, {e395, e1, e605, e168, e2, });
+		rt614.neg = false;
+		sprawformtree ft613 = std::make_shared<raw_form_tree>(elem::NONE, rt614);
+		sprawformtree ft596 = std::make_shared<raw_form_tree>(elem::AND, ft597, ft613);
+		raw_term rt616(raw_term::REL, t_arith_op::NOP, {e31, e1, e44, e2, });
+		rt616.neg = false;
+		sprawformtree ft615 = std::make_shared<raw_form_tree>(elem::NONE, rt616);
+		sprawformtree ft595 = std::make_shared<raw_form_tree>(elem::AND, ft596, ft615);
+		raw_term rt618(raw_term::REL, t_arith_op::NOP, {e218, e1, e392, e168, e410, e2, });
+		rt618.neg = false;
+		sprawformtree ft617 = std::make_shared<raw_form_tree>(elem::NONE, rt618);
+		sprawformtree ft594 = std::make_shared<raw_form_tree>(elem::AND, ft595, ft617);
+		raw_term rt620(raw_term::REL, t_arith_op::NOP, {e218, e1, e44, e168, e410, e2, });
+		rt620.neg = false;
+		sprawformtree ft619 = std::make_shared<raw_form_tree>(elem::NONE, rt620);
+		sprawformtree ft593 = std::make_shared<raw_form_tree>(elem::AND, ft594, ft619);
+		raw_term rt622(raw_term::REL, t_arith_op::NOP, {e10, e1, e2, });
+		rt622.neg = false;
+		sprawformtree ft621 = std::make_shared<raw_form_tree>(elem::NONE, rt622);
+		sprawformtree ft592 = std::make_shared<raw_form_tree>(elem::AND, ft593, ft621);
+		raw_rule rr623({rt591, }, ft592);
+		raw_term rt624(raw_term::REL, t_arith_op::NOP, {e271, e1, e272, e273, e44, e2, });
+		rt624.neg = false;
+		raw_term rt629(raw_term::ARITH, t_arith_op::ADD, {e268, e59, e60, e61, e272, });
+		rt629.neg = false;
+		sprawformtree ft628 = std::make_shared<raw_form_tree>(elem::NONE, rt629);
+		raw_term rt631(raw_term::REL, t_arith_op::NOP, {e536, e1, e268, e2, });
+		rt631.neg = false;
+		sprawformtree ft630 = std::make_shared<raw_form_tree>(elem::NONE, rt631);
+		sprawformtree ft627 = std::make_shared<raw_form_tree>(elem::AND, ft628, ft630);
+		raw_term rt633(raw_term::REL, t_arith_op::NOP, {e417, e1, e268, e273, e44, e2, });
+		rt633.neg = false;
+		sprawformtree ft632 = std::make_shared<raw_form_tree>(elem::NONE, rt633);
+		sprawformtree ft626 = std::make_shared<raw_form_tree>(elem::AND, ft627, ft632);
+		raw_term rt635(raw_term::REL, t_arith_op::NOP, {e10, e1, e2, });
+		rt635.neg = false;
+		sprawformtree ft634 = std::make_shared<raw_form_tree>(elem::NONE, rt635);
+		sprawformtree ft625 = std::make_shared<raw_form_tree>(elem::AND, ft626, ft634);
+		raw_rule rr636({rt624, }, ft625);
+		raw_term rt637(raw_term::REL, t_arith_op::NOP, {e271, e1, e272, e273, e44, e2, });
 		rt637.neg = false;
-		sprawformtree ft636 = std::make_shared<raw_form_tree>(elem::NONE, rt637);
-		raw_term rt639(raw_term::REL, t_arith_op::NOP, {e10, e1, e2, });
-		rt639.neg = false;
-		sprawformtree ft638 = std::make_shared<raw_form_tree>(elem::NONE, rt639);
-		sprawformtree ft635 = std::make_shared<raw_form_tree>(elem::AND, ft636, ft638);
-		raw_rule rr640({rt634, }, ft635);
-		raw_term rt641(raw_term::REL, t_arith_op::NOP, {e275, e1, e268, e272, e2, });
-		rt641.neg = false;
-		raw_term rt648(raw_term::LEQ, t_arith_op::NOP, {e272, e533, e268, });
+		raw_term rt643(raw_term::ARITH, t_arith_op::ADD, {e268, e59, e60, e61, e272, });
+		rt643.neg = false;
+		sprawformtree ft642 = std::make_shared<raw_form_tree>(elem::NONE, rt643);
+		raw_term rt645(raw_term::REL, t_arith_op::NOP, {e536, e1, e268, e2, });
+		rt645.neg = false;
+		sprawformtree ft644 = std::make_shared<raw_form_tree>(elem::NONE, rt645);
+		sprawformtree ft641 = std::make_shared<raw_form_tree>(elem::AND, ft642, ft644);
+		raw_term rt648(raw_term::REL, t_arith_op::NOP, {e465, e1, e268, e273, e44, e2, });
 		rt648.neg = false;
 		sprawformtree ft647 = std::make_shared<raw_form_tree>(elem::NONE, rt648);
 		sprawformtree ft646 = std::make_shared<raw_form_tree>(elem::NOT, ft647);
-		raw_term rt650(raw_term::REL, t_arith_op::NOP, {e536, e1, e268, e2, });
+		sprawformtree ft640 = std::make_shared<raw_form_tree>(elem::AND, ft641, ft646);
+		raw_term rt650(raw_term::REL, t_arith_op::NOP, {e516, e1, e268, e273, e44, e2, });
 		rt650.neg = false;
 		sprawformtree ft649 = std::make_shared<raw_form_tree>(elem::NONE, rt650);
-		sprawformtree ft645 = std::make_shared<raw_form_tree>(elem::AND, ft646, ft649);
-		raw_term rt652(raw_term::REL, t_arith_op::NOP, {e536, e1, e272, e2, });
+		sprawformtree ft639 = std::make_shared<raw_form_tree>(elem::AND, ft640, ft649);
+		raw_term rt652(raw_term::REL, t_arith_op::NOP, {e10, e1, e2, });
 		rt652.neg = false;
 		sprawformtree ft651 = std::make_shared<raw_form_tree>(elem::NONE, rt652);
-		sprawformtree ft644 = std::make_shared<raw_form_tree>(elem::AND, ft645, ft651);
-		raw_term rt655(raw_term::REL, t_arith_op::NOP, {e524, e1, e268, e272, e2, });
-		rt655.neg = false;
-		sprawformtree ft654 = std::make_shared<raw_form_tree>(elem::NONE, rt655);
-		sprawformtree ft653 = std::make_shared<raw_form_tree>(elem::NOT, ft654);
-		sprawformtree ft643 = std::make_shared<raw_form_tree>(elem::AND, ft644, ft653);
-		raw_term rt657(raw_term::REL, t_arith_op::NOP, {e10, e1, e2, });
-		rt657.neg = false;
-		sprawformtree ft656 = std::make_shared<raw_form_tree>(elem::NONE, rt657);
-		sprawformtree ft642 = std::make_shared<raw_form_tree>(elem::AND, ft643, ft656);
-		raw_rule rr658({rt641, }, ft642);
-		raw_prog &rp659 = rp;
-		rp659.r.insert(rp659.r.end(), { rr12, rr17, rr22, rr30, rr35, rr40, rr78, rr94, rr119, rr129, rr156, rr166, rr191, rr207, rr217, rr240, rr256, rr266, rr279, rr292, rr312, rr336, rr355, rr371, rr416, rr464, rr515, rr523, rr547, rr568, rr576, rr590, rr603, rr620, rr633, rr640, rr658, });
+		sprawformtree ft638 = std::make_shared<raw_form_tree>(elem::AND, ft639, ft651);
+		raw_rule rr653({rt637, }, ft638);
+		raw_term rt654(raw_term::REL, t_arith_op::NOP, {e271, e1, e272, e273, e44, e2, });
+		rt654.neg = true;
+		raw_term rt659(raw_term::ARITH, t_arith_op::ADD, {e268, e59, e60, e61, e272, });
+		rt659.neg = false;
+		sprawformtree ft658 = std::make_shared<raw_form_tree>(elem::NONE, rt659);
+		raw_term rt661(raw_term::REL, t_arith_op::NOP, {e536, e1, e268, e2, });
+		rt661.neg = false;
+		sprawformtree ft660 = std::make_shared<raw_form_tree>(elem::NONE, rt661);
+		sprawformtree ft657 = std::make_shared<raw_form_tree>(elem::AND, ft658, ft660);
+		raw_term rt663(raw_term::REL, t_arith_op::NOP, {e465, e1, e268, e273, e44, e2, });
+		rt663.neg = false;
+		sprawformtree ft662 = std::make_shared<raw_form_tree>(elem::NONE, rt663);
+		sprawformtree ft656 = std::make_shared<raw_form_tree>(elem::AND, ft657, ft662);
+		raw_term rt665(raw_term::REL, t_arith_op::NOP, {e10, e1, e2, });
+		rt665.neg = false;
+		sprawformtree ft664 = std::make_shared<raw_form_tree>(elem::NONE, rt665);
+		sprawformtree ft655 = std::make_shared<raw_form_tree>(elem::AND, ft656, ft664);
+		raw_rule rr666({rt654, }, ft655);
+		raw_term rt667(raw_term::REL, t_arith_op::NOP, {e267, e1, e268, e269, e44, e2, });
+		rt667.neg = false;
+		raw_term rt670(raw_term::REL, t_arith_op::NOP, {e280, e1, e268, e269, e44, e2, });
+		rt670.neg = false;
+		sprawformtree ft669 = std::make_shared<raw_form_tree>(elem::NONE, rt670);
+		raw_term rt672(raw_term::REL, t_arith_op::NOP, {e10, e1, e2, });
+		rt672.neg = false;
+		sprawformtree ft671 = std::make_shared<raw_form_tree>(elem::NONE, rt672);
+		sprawformtree ft668 = std::make_shared<raw_form_tree>(elem::AND, ft669, ft671);
+		raw_rule rr673({rt667, }, ft668);
+		raw_term rt674(raw_term::REL, t_arith_op::NOP, {e275, e1, e268, e272, e2, });
+		rt674.neg = false;
+		raw_term rt681(raw_term::LEQ, t_arith_op::NOP, {e272, e533, e268, });
+		rt681.neg = false;
+		sprawformtree ft680 = std::make_shared<raw_form_tree>(elem::NONE, rt681);
+		sprawformtree ft679 = std::make_shared<raw_form_tree>(elem::NOT, ft680);
+		raw_term rt683(raw_term::REL, t_arith_op::NOP, {e536, e1, e268, e2, });
+		rt683.neg = false;
+		sprawformtree ft682 = std::make_shared<raw_form_tree>(elem::NONE, rt683);
+		sprawformtree ft678 = std::make_shared<raw_form_tree>(elem::AND, ft679, ft682);
+		raw_term rt685(raw_term::REL, t_arith_op::NOP, {e536, e1, e272, e2, });
+		rt685.neg = false;
+		sprawformtree ft684 = std::make_shared<raw_form_tree>(elem::NONE, rt685);
+		sprawformtree ft677 = std::make_shared<raw_form_tree>(elem::AND, ft678, ft684);
+		raw_term rt688(raw_term::REL, t_arith_op::NOP, {e524, e1, e268, e272, e2, });
+		rt688.neg = false;
+		sprawformtree ft687 = std::make_shared<raw_form_tree>(elem::NONE, rt688);
+		sprawformtree ft686 = std::make_shared<raw_form_tree>(elem::NOT, ft687);
+		sprawformtree ft676 = std::make_shared<raw_form_tree>(elem::AND, ft677, ft686);
+		raw_term rt690(raw_term::REL, t_arith_op::NOP, {e10, e1, e2, });
+		rt690.neg = false;
+		sprawformtree ft689 = std::make_shared<raw_form_tree>(elem::NONE, rt690);
+		sprawformtree ft675 = std::make_shared<raw_form_tree>(elem::AND, ft676, ft689);
+		raw_rule rr691({rt674, }, ft675);
+		raw_prog &rp692 = rp;
+		rp692.r.insert(rp692.r.end(), { rr12, rr17, rr22, rr30, rr35, rr40, rr78, rr94, rr119, rr129, rr156, rr166, rr191, rr207, rr217, rr240, rr256, rr266, rr279, rr292, rr312, rr336, rr355, rr371, rr416, rr464, rr515, rr523, rr547, rr568, rr576, rr590, rr623, rr636, rr653, rr666, rr673, rr691, });
 	}
 	o::dbg() << "Generated eval for: " << drt << std::endl;
 	return true;

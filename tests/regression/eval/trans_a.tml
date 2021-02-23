@@ -1,8 +1,16 @@
 # Testing transitive closure
 
-eval(r q q`
+max(10000).
+
+@domain dom 4 3.
+
+@quote q dom `
+  e(0 1).
   e(1 2).
   e(2 3).
-  e(3 4).
   t(?x ?y) :- e(?x ?y).
-  t(?x ?y) :- t(?x ?z), t(?z ?y).`).
+  t(?x ?y) :- t(?x ?z), t(?z ?y).`.
+
+@eval r dom q 50.
+
+@codec cdc dom r 2.

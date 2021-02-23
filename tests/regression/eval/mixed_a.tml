@@ -1,8 +1,16 @@
 # Testing mixed variables and symbols
 
-eval(r q q`
-  e(1 "2"), e('3' four), e(four 5).
+max(10000).
+
+@domain dom 5 3.
+
+@quote q dom `
+  e(0 1), e(2 3), e(3 4).
   t(?x ?y) :- e(?x ?y).
   t(?x ?y), t(?y ?x) :- t(?x ?z), t(?z ?y).
-  reachable_from_3(?x) :- t('3' ?x).
-  reachable_from(3 ?x) :- t('3' ?x).`).
+  reachable_from_2(?x) :- t(2 ?x).
+  reachable_from(2 ?x) :- t(2 ?x).`.
+
+@eval r dom q 50.
+
+@codec cdc dom r 2.

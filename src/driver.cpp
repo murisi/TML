@@ -1067,7 +1067,7 @@ elem driver::quote_term(const raw_term &head, const elem &rel_name,
 			elem_closep };
 		rp.r.push_back(raw_rule(raw_term(quoted_term_e)));
 	}
-	if(head.neg && !head.is_true()) {
+	if(head.neg) {
 		// If this term is actually negated, then we'll make a parent for
 		// this node and return its id
 		elem neg_id(part_count++);

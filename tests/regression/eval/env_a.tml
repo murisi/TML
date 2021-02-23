@@ -1,9 +1,18 @@
 # Modifying eval environment
 
-r(t ?x ?y) :- r(e ?x ?y).
-r(t ?y ?x) :- r(t ?x ?y).
+cdc_encode(t ?x ?y) :- cdc_decode(e ?x ?y), r_tick().
+cdc_encode(t ?y ?x) :- cdc_decode(t ?x ?y), r_tick().
 
-eval(r q q`
-  e(1 "2"), e("2" '3'), e('3' four), e(four 5).
-  reachable_from_3(?x) :- t('3' ?x).
-  reachable_from(3 ?x) :- t('3' ?x).`).
+max(10000).
+
+@domain dom 5 2.
+
+@quote q dom `
+  e(0 1), e(1 2), e(2 3), e(3 4).
+  reachable_from_3(?x) :- t(3 ?x).
+  reachable_from(3 ?x) :- t(3 ?x).`.
+
+@eval r dom q 50.
+
+@codec cdc dom r 2.
+

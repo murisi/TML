@@ -568,22 +568,27 @@ void form::printnode(int lv, const tables* tb) {
 
 //---------------------------------------------------------
 
+/* Print the relations in the current database. If print_int_rels is
+ * unset, then exclude all the tmprels (the relations generated for
+ * internal use by the interpreter). */
+
 template <typename T>
-void tables::out(basic_ostream<T>& os) const {
-	strs_t::const_iterator it;
+void tables::out(basic_ostream<T>& os, bool print_int_rels) const {
+	//strs_t::const_iterator it;
 	for (ntable tab = 0; (size_t)tab != tbls.size(); ++tab) {
 //		if ((it = strs.find(dict.get_rel(tab))) == strs.end())
 			const lexeme tbl_name = dict.get_rel(get<0>(tbls[tab].s));
-			// Print out only the non-temporary relations
-			if(!dict.is_temp_sym(tbl_name)) {
+			// Print relation if --print-internal-rels flag is enabled or if
+			// it is not temporary
+			if(print_int_rels || !dict.is_temp_sym(tbl_name)) {
 				out(os, tbls[tab].t, tab);
 			}
 //		else os << it->first << " = \"" << it->second << '"' << endl;
 	}
 }
 
-template void tables::out<char>(ostream& os) const;
-template void tables::out<wchar_t>(wostream& os) const;
+template void tables::out<char>(ostream& os, bool print_int_rels) const;
+template void tables::out<wchar_t>(wostream& os, bool print_int_rels) const;
 
 void tables::out(const rt_printer& f) const {
 	for (ntable tab = 0; (size_t)tab != tbls.size(); ++tab)

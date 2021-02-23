@@ -241,7 +241,8 @@ public:
 	bool step(size_t steps = 1, size_t br_on_step=0);
 	size_t nsteps() { return tbl->step(); };
 	template <typename T>
-	void out(std::basic_ostream<T>& os) const { if (tbl) tbl->out(os); }
+	void out(std::basic_ostream<T>& os) const
+		{ if (tbl) tbl->out(os, opts.enabled("print-internal-rels")); }
 	void dump() { out(o::dump()); }
 	void out(const tables::rt_printer& p) const { if (tbl) tbl->out(p); }
 	void set_print_step   (bool val) { tbl->print_steps   = val; }

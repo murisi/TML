@@ -458,7 +458,7 @@ public:
 	bool run_nums(flat_prog m, std::set<term>& r, size_t nsteps);
 	bool pfp(size_t nsteps = 0, size_t break_on_step = 0);
 	template <typename T>
-	void out(std::basic_ostream<T>&) const;
+	void out(std::basic_ostream<T>&, bool print_int_rels = false) const;
 	void out(const rt_printer&) const;
 #ifdef __EMSCRIPTEN__
 	void out(emscripten::val o) const;

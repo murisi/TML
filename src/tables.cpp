@@ -2880,6 +2880,16 @@ bool tables::add_fixed_point_fact() {
 	return !exists;
 }
 
+/* A generalized PFP algorithm. Finds the first repeated database
+ * (taking into account tmprels and non-tmprels) and checks whether the
+ * non-tmprel part of the databases occuring between the repetitions are
+ * fixed. If so, then the fixed part is the fixpoint, otherwise infloop
+ * is returned. Note that in the absense of tmprels, this algorithm is
+ * equivalent to PFP. Note also that a fixpoint in the sequence of non-
+ * tmprel parts of databases is not a sufficient condition for this
+ * algorithm to detect a fixpoint, for there may be "hidden progress" in
+ * the tmprel parts. */
+
 bool tables::pfp(size_t nsteps, size_t break_on_step) {
 	error = false;
 	add_level(levels, plevels);

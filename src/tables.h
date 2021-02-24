@@ -217,7 +217,8 @@ private:
 	std::set<ntable> tmprels;
 	std::map<sig, ntable> smap;
 	std::vector<rule> rules;
-	std::vector<level> levels, plevels;
+	std::vector<level> fronts;
+	std::vector<level> levels;
 	std::map<ntable, std::set<ntable>> deps;
 
 	void get_sym(int_t s, size_t arg, size_t args, spbdd_handle& r) const;
@@ -229,7 +230,7 @@ private:
 	dict_t dict; // dict_t& dict;
 	bool bproof, datalog, optimize, unsat = false, bcqc = true,
 		 bin_transform = false, print_transformed = false,
-		 apply_regexpmatch = false, fp_step = false;
+		 apply_regexpmatch = false, fp_step = false, pfp3 = false;
 
 	size_t max_args = 0;
 	std::map<std::array<int_t, 6>, spbdd_handle> range_memo;
@@ -346,8 +347,7 @@ private:
 	bool contradiction_detected();
 	bool infloop_detected();
 	char fwd() noexcept;
-	bool add_level(std::vector<level> &clevels,
-		std::vector<level> &plevels) const;
+	level get_front() const;
 	std::vector<term> interpolate(std::vector<term> x, std::set<int_t> v);
 	void transform_bin(flat_prog& p);
 	int_t get_factor(raw_term &rt, size_t &n, std::map<size_t, term> &ref, 
@@ -443,7 +443,8 @@ private:
 public:
 	tables(dict_t dict, bool bproof = false, bool optimize = true,
 		bool bin_transform = false, bool print_transformed = false, 
-		bool apply_regxmatch = false, bool fp_step = false);
+		bool apply_regxmatch = false, bool fp_step = false,
+		bool pfp3 = false);
 	~tables();
 	raw_term to_raw_term(const term& t) const;
 	bool transform_grammar(std::vector<struct production> g, flat_prog& p, form *&root);
@@ -458,7 +459,9 @@ public:
 	bool run_nums(flat_prog m, std::set<term>& r, size_t nsteps);
 	bool pfp(size_t nsteps = 0, size_t break_on_step = 0);
 	template <typename T>
-	void out(std::basic_ostream<T>&, bool print_int_rels = false) const;
+	void out(std::basic_ostream<T>&) const;
+	template <typename T>
+	bool out_fixpoint(std::basic_ostream<T>& os);
 	void out(const rt_printer&) const;
 #ifdef __EMSCRIPTEN__
 	void out(emscripten::val o) const;

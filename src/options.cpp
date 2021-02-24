@@ -187,8 +187,8 @@ void options::setup() {
 		"convert FOL formulas into pure TML");
 	add_bool("program-gen",
 		"generate C++ code to generate the given TML code");
-	add_bool("print-internal-rels",
-		"print relations generated for internal use by interpreter");
+	add_bool("3pfp",
+		"run the program under FO(3-PFP) semantics ");
 	add_bool("proof",   "extract proof");
 	add_bool("run",     "run program     (enabled by default)");
 	add_bool("csv",     "save result into CSV files");

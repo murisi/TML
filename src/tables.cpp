@@ -568,27 +568,92 @@ void form::printnode(int lv, const tables* tb) {
 
 //---------------------------------------------------------
 
-/* Print the relations in the current database. If print_int_rels is
- * unset, then exclude all the tmprels (the relations generated for
- * internal use by the interpreter). */
-
 template <typename T>
-void tables::out(basic_ostream<T>& os, bool print_int_rels) const {
+void tables::out(basic_ostream<T>& os) const {
 	//strs_t::const_iterator it;
 	for (ntable tab = 0; (size_t)tab != tbls.size(); ++tab) {
 //		if ((it = strs.find(dict.get_rel(tab))) == strs.end())
-			const lexeme tbl_name = dict.get_rel(get<0>(tbls[tab].s));
-			// Print relation if --print-internal-rels flag is enabled or if
-			// it is not temporary
-			if(print_int_rels || !dict.is_temp_sym(tbl_name)) {
 				out(os, tbls[tab].t, tab);
-			}
 //		else os << it->first << " = \"" << it->second << '"' << endl;
 	}
 }
 
-template void tables::out<char>(ostream& os, bool print_int_rels) const;
-template void tables::out<wchar_t>(wostream& os, bool print_int_rels) const;
+template void tables::out<char>(ostream& os) const;
+template void tables::out<wchar_t>(wostream& os) const;
+
+/* Print out the fixpoint associated with this sequence of databases and
+ * return true. Return false if this sequence of databases contains no
+ * repeats. */
+
+template <typename T>
+bool tables::out_fixpoint(basic_ostream<T>& os) {
+	if(fronts.size() < 2 ||
+			std::find(fronts.begin(), fronts.end()-1, fronts.back()) ==
+			fronts.end()-1) {
+		// There cannot be a fixpoint if there are less than two fronts or
+		// if there do not exist two equal fronts
+		return false;
+	} else if(pfp3) {
+		// If FO(3-PFP) semantics are in effect
+		// Determine which facts are true and which are false
+		level trues(tbls.size(), htrue), falses(tbls.size(), htrue);
+		int_t i = fronts.size() - 1;
+		// Loop back to the first repetition of the last front. It is clear
+		// that the set of intervening fronts are periodic
+		do {
+			for(ntable n = 0; n < (ntable)tbls.size(); n++) {
+				// True facts are those for which there exists an I such that
+				// for all i>=I, the fact is a member of front i
+				trues[n] = trues[n] && fronts[i][n];
+				// False facts are those for which there exists an I such that
+				// for all i>=I, the fact is not a member of front i
+				falses[n] = falses[n] % fronts[i][n];
+			}
+		} while(fronts[--i] != fronts.back());
+		// Determine which facts are undefined
+		level undefineds(tbls.size());
+		for(ntable n = 0; n < (ntable)tbls.size(); n++) {
+			// Undefined facts are those which are neither true nor false
+			undefineds[n] = htrue % (trues[n] || falses[n]);
+		}
+		// Print out the true points separately
+		os << "true points:" << endl;
+		bool exists_trues = false;
+		for(ntable n = 0; n < (ntable)tbls.size(); n++) {
+			decompress(trues[n], n, [&os, &exists_trues, this](const term& r) {
+				os << to_raw_term(r) << '.' << endl;
+				exists_trues = true; });
+		}
+		if(!exists_trues) os << "(none)" << std::endl;
+		
+		// Finally print out the undefined points separately
+		os << endl << "undefined points:" << endl;
+		bool exists_undefineds = false;
+		for(ntable n = 0; n < (ntable)tbls.size(); n++) {
+			decompress(undefineds[n], n, [&os, &exists_undefineds, this](const term& r) {
+				os << to_raw_term(r) << '.' << endl;
+				exists_undefineds = true; });
+		}
+		if(!exists_undefineds) os << "(none)" << std::endl;
+		return true;
+	} else if(fronts.back() == fronts[fronts.size() - 2]) {
+		// If FO(PFP) semantics are in effect and the last two fronts are
+		// equal then print them; this is the fixpoint.
+		level &l = fronts.back();
+		for(ntable n = 0; n < (ntable)tbls.size(); n++) {
+			decompress(l[n], n, [&os, this](const term& r) {
+				os << to_raw_term(r) << '.' << endl; });
+		}
+		return true;
+	} else {
+		// If FO(PFP) semantics are in effect and two equal fronts are
+		// separated by an unequal front; then the fixpoint is empty.
+		return true;
+	}
+}
+
+template bool tables::out_fixpoint<char>(ostream& os);
+template bool tables::out_fixpoint<wchar_t>(wostream& os);
 
 void tables::out(const rt_printer& f) const {
 	for (ntable tab = 0; (size_t)tab != tbls.size(); ++tab)
@@ -2825,29 +2890,10 @@ char tables::fwd() noexcept {
 	return b;*/
 }
 
-/* Add a complete and partial level to the given vectors. A complete
- * level contains all the tables whereas a partial level excludes all
- * the tmprels. Return true if the current complete level has already
- * been encountered. Complete levels are important because computational
- * progress is not always reflected in the partial levels, and hence
- * fixpoints would be prematurely detected. */
-
-bool tables::add_level(std::vector<level> &clevels,
-		std::vector<level> &plevels) const {
-	level r, u;
-	for (ntable n = 0; n != (ntable)tbls.size(); ++n) {
-		const lexeme tbl_name = dict.get_rel(get<0>(tbls[n].s));
-		// Keep only the non-temporary relations in u
-		if(!dict.is_temp_sym(tbl_name)) {
-			u.push_back(tbls.at(n).t);
-		}
-		r.push_back(tbls.at(n).t);
-	}
-	// Check if we have visited this complete front before
-	bool visited = std::find(clevels.begin(), clevels.end(), r) != clevels.end();
-	clevels.push_back(r);
-	plevels.push_back(u);
-	return visited;
+level tables::get_front() const {
+	level r(tbls.size());
+	for (ntable n = 0; n != (ntable)tbls.size(); ++n) r[n] = tbls.at(n).t;
+	return r;
 }
 
 bool tables::contradiction_detected() {
@@ -2880,44 +2926,27 @@ bool tables::add_fixed_point_fact() {
 	return !exists;
 }
 
-/* A generalized PFP algorithm. Finds the first repeated database
- * (taking into account tmprels and non-tmprels) and checks whether the
- * non-tmprel part of the databases occuring between the repetitions are
- * fixed. If so, then the fixed part is the fixpoint, otherwise infloop
- * is returned. Note that in the absense of tmprels, this algorithm is
- * equivalent to PFP. Note also that a fixpoint in the sequence of non-
- * tmprel parts of databases is not a sufficient condition for this
- * algorithm to detect a fixpoint, for there may be "hidden progress" in
- * the tmprel parts. */
-
 bool tables::pfp(size_t nsteps, size_t break_on_step) {
 	error = false;
-	add_level(levels, plevels);
+	if (bproof) levels.emplace_back(get_front());
 	for (;;) {
 		if (print_steps || optimize)
 			o::inf() << "# step: " << nstep << endl;
 		++nstep;
-		if (!fwd()) return fp_step
+		bool fwd_ret = fwd();
+		level l = get_front();
+		fronts.push_back(l);
+		if (!fwd_ret) return fp_step
 			? (add_fixed_point_fact() ? pfp() : true)
 			: true;
 		if (unsat) return contradiction_detected();
 		if ((break_on_step && nstep == break_on_step) ||
 			(nsteps && nstep == nsteps)) return false; // no FP yet
-		if (!datalog && add_level(levels, plevels)) {
-			const level last_level = levels.back(),
-				last_plevel = plevels.back();
-			// Check if we have fixed-point whilst ignoring tmprels by going
-			// back through the levels till the fixpoint and making sure that
-			// the partial levels are constant.
-			for(int_t i = levels.size() - 2; levels[i] != last_level; i--) {
-				if(plevels[i] != last_plevel) {
-					return infloop_detected();
-				}
-			}
-			return fp_step
-				? (add_fixed_point_fact() ? pfp() : true)
-				: true;
-		}
+		bool is_repeat =
+			std::find(fronts.begin(), fronts.end() - 1, l) != fronts.end() - 1;
+		if (!datalog && is_repeat)
+			return pfp3 ? true : infloop_detected();
+		if (bproof) levels.push_back(move(l));
 	}
 	DBGFAIL;
 }
@@ -3025,10 +3054,11 @@ bool tables::run_prog(const raw_prog& p, const strs_t& strs, size_t steps,
 }
 
 tables::tables(dict_t dict, bool bproof, bool optimize, bool bin_transform,
-	bool print_transformed, bool apply_regexpmatch, bool fp_step) :
+	bool print_transformed, bool apply_regexpmatch, bool fp_step,
+	bool pfp3) :
 	dict(move(dict)), bproof(bproof), optimize(optimize),
 	bin_transform(bin_transform), print_transformed(print_transformed),
-	apply_regexpmatch(apply_regexpmatch), fp_step(fp_step) {}
+	apply_regexpmatch(apply_regexpmatch), fp_step(fp_step), pfp3(pfp3) {}
 	// dict(*new dict_t)
 
 tables::~tables() {

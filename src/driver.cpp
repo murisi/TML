@@ -1223,10 +1223,8 @@ elem driver::concat(const elem &rel, std::string suffix) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	// Make lexeme from concatenating rel's lexeme with the given suffix
-	lexeme subrel_lex = d.get_lexeme(lexeme2str(rel.e) + to_string_t(suffix));
-	// Make this lexeme a tmprel so that its excluded from fixpoint check
-	d.get_temp_sym(subrel_lex);
-	return elem(elem::SYM, subrel_lex);
+	return elem(elem::SYM,
+		d.get_lexeme(lexeme2str(rel.e) + to_string_t(suffix)));
 }
 
 /* Returns a lexeme formed by concatenating the given string to the
@@ -1236,10 +1234,7 @@ lexeme driver::concat(const lexeme &rel, std::string suffix) {
 	// Get dictionary for generating fresh symbols
 	dict_t &d = tbl->get_dict();
 	// Make lexeme from concatenating rel's lexeme with the given suffix
-	lexeme subrel_lex = d.get_lexeme(lexeme2str(rel) + to_string_t(suffix));
-	// Make this lexeme a tmprel so that its excluded from fixpoint check
-	d.get_temp_sym(subrel_lex);
-	return subrel_lex;
+	return d.get_lexeme(lexeme2str(rel) + to_string_t(suffix));
 }
 
 /* Quote the given rule and put its quotation into the given raw_prog
@@ -3547,7 +3542,8 @@ driver::driver(string s, const options &o) : rp(), opts(o) {
 	// we don't need the dict any more, tables owns it from now on...
 	tbl = new tables(move(dict), opts.enabled("proof"), 
 		opts.enabled("optimize"), opts.enabled("bin"),
-		opts.enabled("t"), opts.enabled("regex"), opts.enabled("fp"));
+		opts.enabled("t"), opts.enabled("regex"), opts.enabled("fp"),
+		opts.enabled("3pfp"));
 	set_print_step(opts.enabled("ps"));
 	set_print_updates(opts.enabled("pu"));
 	set_populate_tml_update(opts.enabled("tml_update"));

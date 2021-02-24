@@ -2914,7 +2914,9 @@ bool tables::pfp(size_t nsteps, size_t break_on_step) {
 					return infloop_detected();
 				}
 			}
-			return true;
+			return fp_step
+				? (add_fixed_point_fact() ? pfp() : true)
+				: true;
 		}
 	}
 	DBGFAIL;

@@ -1059,9 +1059,16 @@ This directive has the following syntax:
 `@quote <quote_sym> <domain_sym> <quote_str>.` Here `<quote_sym>` is the
 prefix that all relations generated for the quotation should have.
 `<domain_sym>` is the domain over which arbitrary length fragments (like
-terms) in the quotation are defined. (This setup allows us to encode
-arbitrary arity terms without modifications to the schema.)
-`<quote_str>` is a literal TML program surrounded in backquotes to quote.
+terms) in the quotation are defined. Additionally the `<limit_num>` of
+the domain must be more than or equal to the maximum number of distinct
+variables used in a rule of `<quote_str>` because variables are encoded
+as numbers. Also the `<limit_num>` of the domain must be more than the
+largest number occuring in `<quote_str>`. Also, the `<arity_num>` of the
+domain must be more than or equal to the maximum of the term arities
+occuring in `<quote_str>` because term tuples are represented by lists.
+(This setup is what allows us to encode arbitrary arity terms without
+modifications to the schema.) `<quote_str>` is a literal TML program
+surrounded in backquotes to quote.
 
 An example of usage:
 ```
@@ -1070,6 +1077,11 @@ An example of usage:
   d(0).
   c() :- forall ?x {u(?x) -> d(?x)}.`.
 ```
+
+Currently the quote operator only supports TML programs with facts,
+rules, and formulas utilizing only variables and numbers. There are
+plans to extend this to symbols, arithmetic, and eventually the rest of
+TML.
 ## Eval
 The evaluate directive takes a relation containing a quotation and a
 relation containing a domain and creates a relation containing the facts
@@ -1084,7 +1096,10 @@ This directive has the following syntax:
 interpreter should have. `<domain_sym>` is the relation name of the
 domain representing the universe over which the quoted program should be
 interpreted. `<quote_sym>` is the relation containing the quoted program
-to run. `<timeout_num>` is the number of steps of the quoted program
+to run. Additionally, the `<arity_num>` of `<domain_sym>` must be more
+than or equal to the maximum number of variables used by a rule in
+`<quote_sym>` because the value of each variable is stored in a list
+during interpretation. `<timeout_num>` is the number of steps of the quoted program
 that should be simulated.
 
 An example of usage:

@@ -2928,7 +2928,9 @@ bool tables::add_fixed_point_fact() {
 
 bool tables::pfp(size_t nsteps, size_t break_on_step) {
 	error = false;
-	if (bproof) levels.emplace_back(get_front());
+	level l = get_front();
+	fronts.push_back(l);
+	if (bproof) levels.emplace_back(l);
 	for (;;) {
 		if (print_steps || optimize)
 			o::inf() << "# step: " << nstep << endl;
@@ -3033,7 +3035,13 @@ bool tables::run_prog(const raw_prog& p, const strs_t& strs, size_t steps,
 	nlevel begstep = nstep;
 	bool r = true;
 	// run program only if there are any rules
-	if (rules.size()) r = pfp(steps ? nstep + steps : 0, break_on_step);
+	if (rules.size()) {
+		fronts.clear();
+		r = pfp(steps ? nstep + steps : 0, break_on_step);
+	} else {
+		level l = get_front();
+		fronts = {l, l};
+	}
 	size_t went = nstep - begstep;
 	if (r && prog_after_fp.size()) {
 		if (!add_prog(move(prog_after_fp), {}, false)) return false;

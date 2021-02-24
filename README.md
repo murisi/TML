@@ -966,9 +966,11 @@ Type error: "4 exceeds max size for int:2 in predicate night(4)" close to "4).  
 This section lists the optimizations based on CQC tests that have been
 implemented in the interpreter, what exactly they do to TML source code,
 the command line flags required to enable them, and their potential
-drawbacks. Note that the results of a program obtained by applying these
-optimizations to another should be indistinguishable from those of the
-original.
+drawbacks. Note that the flag `--3pfp` should be enabled when using any
+of these optimizations because their internals sometimes cause
+alternating fixpoints. Note also that the results of a program obtained
+by applying these optimizations to another should be indistinguishable
+from those of the original.
 
 ## Subsumption without Negation
 This pair of optimizations is based on the CQC test as described on
@@ -1026,7 +1028,9 @@ This optimization can be enabled using the flag `--cqc-factor`.
 # Self Interpretation
 This section lists the directives provided to support
 self-interpretation, how to invoke them, and what they do at runtime.
-Note that anything that can be achieved using these directives can also
+The flag `--3pfp` should be used in conjunction with these dirrectives
+because their internals sometimes cause alternating fixpoints. Note
+that anything that can be achieved using these directives can also
 be achieved without them in pure TML.
 
 ## Domain
